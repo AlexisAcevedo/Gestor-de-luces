@@ -9,7 +9,7 @@ description = "Hexagonal desktop light manager for Philips WiZ smart bulbs over 
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"

@@ -1,0 +1,273 @@
+# Gestor de Luces
+
+[English](README.md) | [Español](README.es.md)
+
+Centro de control de escritorio para sistemas de iluminación inteligente Philips WiZ sobre redes de área local (LAN). Diseñado con Python, Arquitectura Hexagonal (Puertos y Adaptadores) y Microsoft WebView2 (PyWebView), operando de manera exclusiva mediante paquetes UDP locales sin dependencias de la nube, puentes externos ni necesidad de conexión a Internet.
+
+---
+
+## Aspectos Destacados de la Arquitectura
+
+- Cero Dependencia de la Nube: Comunicación local directa con los focos WiZ mediante el puerto UDP 38899.
+- Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
+- Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
+- Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
+- Pruebas 100% Fuera de Línea: Suite de 37 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+
+---
+
+## Características Principales
+
+1. Control Fotométrico Completo:
+   - Encendido y apagado en tiempo real, ajuste de curva de atenuación (10% a 100%) y sondeo de estado.
+   - Regulación de Temperatura de Color Correlacionada (CCT) desde 2.200 K (Blanco Cálido Incandescente) hasta 6.500 K (Luz Día Fría).
+   - Selección de color RGB con previsualización en vivo e ingreso hexadecimal.
+
+2. Catálogo de Escenas Nativas y Presets Personalizados:
+   - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (20% a 200%).
+   - Presets de iluminación personalizados por el usuario, almacenados localmente con recuperación y eliminación en un clic.
+
+3. Sincronización Ambiental de Pantalla (Ambilight):
+   - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).
+   - Múltiples algoritmos de muestreo: color promedio general, color dominante de bordes o centroide de alta luminosidad.
+   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA).
+
+4. Sincronización Musical Reactiva por WASAPI Loopback:
+   - Captura de audio del sistema en tiempo real mediante loopback de Windows Audio Session API (WASAPI) (`PyAudioWPatch`).
+   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`.
+   - Mapeo de frecuencias a color con sensibilidad de ganancia configurable y caída suavizada.
+
+5. Bandeja del Sistema y Ejecución en Segundo Plano:
+   - Ejecución silenciosa en el Área de Notificación de Windows mediante `pystray`.
+   - Menú de presets rápidos, alternancia de encendido general y minimización elegante a la bandeja al cerrar la ventana.
+   - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
+
+6. Temporizador de Apagado Progresivo (Sleep Timer):
+   - Cuenta regresiva configurable (1 a 120 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
+
+7. Consola de Escritorio Bilingüe:
+   - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo y dinámico en la UI y el menú de la bandeja.
+
+---
+
+## Diagrama de Arquitectura
+
+```
+                      +---------------------------------------+
+                      |       Interfaz Gráfica (WebView2)     |
+                      |       Bandeja del Sistema (pystray)   |
+                      |       Utilidad de Diagnóstico CLI     |
+                      +-------------------+-------------------+
+                                          |
+                              (Puertos Primarios / Driving)
+                                          |
+                                          v
++-----------------------------------------------------------------------------------+
+| CAPA DE APLICACIÓN                                                                |
+|   LightControlService  - Orquesta casos de uso y multidifusión a focos            |
+|   StreamRateLimiter    - Asegura la tasa de 10 Hz para flujos UDP continuos       |
+|   AmbilightStream      - Gestiona la captura de pantalla y el suavizado de color  |
+|   MusicSyncStream      - Coordina WASAPI loopback, análisis FFT y mapeo de color   |
+|   SleepTimerManager    - Controla el desvanecimiento progresivo del brillo        |
++-----------------------------------------+-----------------------------------------+
+                                          |
+                              (Puertos Secundarios / Driven)
+                                          |
+                                          v
++-----------------------------------------------------------------------------------+
+| CAPA DE DOMINIO                                                                   |
+|   Entidades: Bulb, LightState, CustomScene, BuiltInScene                          |
+|   Value Objects: Color, Brightness, ColorTemperature, LightMode, SceneSpeed       |
++-----------------------------------------+-----------------------------------------+
+                                          |
+                                          v
++-----------------------------------------------------------------------------------+
+| ADAPTADORES E INFRAESTRUCTURA                                                     |
+|   WizUdpController   - Comunicación por sockets UDP 38899 vía pywizlight          |
+|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/GestorLuces           |
+|   MssScreenSampler   - Capturador de fotogramas de pantalla de Windows            |
+|   WasapiAudioSampler - Muestreador de audio del sistema mediante WASAPI loopback  |
++-----------------------------------------------------------------------------------+
+```
+
+Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y prevención de bloqueos, consultá [docs/architecture.es.md](docs/architecture.es.md).
+
+---
+
+## Pila Tecnológica
+
+| Capa | Componente | Versión | Descripción |
+|---|---|---|---|
+| Entorno de Ejecución | Python | >= 3.11 (verificado en 3.14) | Plataforma base del lenguaje |
+| Red | `pywizlight` | 0.6.6 | Transporte por sockets UDP en puerto 38899 |
+| Contenedor de Escritorio | `pywebview` | 6.2.1 | Ventana nativa sobre Microsoft Edge WebView2 |
+| Bandeja del Sistema | `pystray` / `Pillow` | 0.19.5 / 13.0.0 | Icono y menú en el Área de Notificaciones de Windows |
+| Captura de Pantalla | `mss` | 10.2.0 | Captura eficiente del búfer GDI de Win32 |
+| Captura de Audio | `PyAudioWPatch` | 0.2.12.9 | Captura de la salida del sistema vía WASAPI loopback |
+| Procesamiento de Señal | `numpy` | 2.5.4 | Transformada Discreta de Fourier y análisis espectral en tiempo real |
+| Testing | `pytest` / `pytest-asyncio` | 9.0.3 / 1.3.0 | Entorno de pruebas unitarias y de integración |
+
+---
+
+## Estructura del Proyecto
+
+```
+.
+├── .gitignore
+├── pyproject.toml               # Metadatos del proyecto y configuración de pytest
+├── requirements.txt             # Dependencias fijadas para producción y pruebas
+├── README.md                    # Documentación principal en inglés
+├── README.es.md                 # Traducción de la documentación al español
+├── docs/
+│   ├── architecture.md          # Especificación técnica de arquitectura y concurrencia (EN)
+│   ├── architecture.es.md       # Especificación técnica de arquitectura y concurrencia (ES)
+│   ├── wiz_protocol.md          # Protocolo WiZ UDP y esquemas RPC (EN)
+│   └── wiz_protocol.es.md       # Protocolo WiZ UDP y esquemas RPC (ES)
+├── src/
+│   └── gestor_luces/
+│       ├── __init__.py
+│       ├── main.py              # Raíz de composición y punto de entrada de la app
+│       ├── cli.py               # Herramienta de sondeo y diagnóstico de red por CLI
+│       ├── domain/              # Lógica pura del dominio y entidades
+│       │   ├── models.py        # Entidades Bulb, LightState y Group
+│       │   ├── scenes.py        # Catálogo nativo de WiZ y modelo de presets personalizados
+│       │   └── value_objects.py # Validación de Color, Brillo, Kelvin y Modos
+│       ├── ports/               # Contratos (interfaces typing.Protocol)
+│       │   ├── interfaces.py    # Exportación centralizada de puertos
+│       │   └── repositories.py  # Protocolos de controladores, persistencia y muestreo
+│       ├── application/         # Casos de uso y gestores de streaming
+│       │   ├── service.py       # Servicio principal de orquestación
+│       │   ├── rate_limiter.py  # Limitador de tasa UDP a 10 Hz
+│       │   ├── sleep_timer.py   # Temporizador de apagado progresivo
+│       │   ├── ambilight_stream.py # Gestor de streaming de captura de pantalla
+│       │   └── music_stream.py  # Gestor de streaming reactivo a música por WASAPI
+│       └── adapters/            # Implementaciones de infraestructura
+│           ├── wiz/             # Controlador UDP mediante pywizlight
+│           ├── storage/         # Repositorios en disco JSON (%LOCALAPPDATA%)
+│           ├── ambilight/       # Muestreador de pantalla MSS
+│           ├── audio/           # Muestreador de audio WASAPI loopback
+│           ├── tray/            # Controlador de la bandeja del sistema con pystray
+│           └── ui_webview/      # Puente seguro para comunicación bidireccional JS-Python
+├── tests/                       # Suite de pruebas automatizadas (37 tests)
+│   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
+│   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
+│   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
+│   ├── test_persistence_and_scenes.py # Pruebas de persistencia JSON y presets
+│   ├── test_wiz_integration.py  # Pruebas de integración UDP contra el simulador
+│   ├── test_ui_bridge.py        # Pruebas del puente asíncrono con la interfaz gráfica
+│   ├── test_tray.py             # Pruebas de la bandeja del sistema y sincronización
+│   ├── test_ambilight.py        # Pruebas de captura de pantalla y suavizado EMA
+│   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
+│   └── test_i18n.py             # Pruebas de localización bilingüe
+└── ui/                          # Frontend web embebido en WebView2
+    ├── index.html               # Estructura visual de la consola
+    ├── styles.css               # Estilos de consola fotométrica oscura
+    ├── app.js                   # Controlador de estado reactivo de la interfaz
+    └── i18n.js                  # Diccionarios de localización en inglés y español
+```
+
+---
+
+## Instalación y Configuración
+
+### Requisitos Previos
+
+- Sistema Operativo: Windows 10 (Compilación 1809 o superior) o Windows 11.
+- Python: Versión 3.11 o posterior (probado y verificado en Python 3.14).
+- Runtime de WebView2: Microsoft Edge WebView2 Evergreen Runtime (incluido por defecto en Windows 10/11).
+- Red: Red de área local con los focos Philips WiZ conectados a la misma subred (habitualmente Wi-Fi de 2.4 GHz enlazado a la PC host por Ethernet o Wi-Fi).
+
+### Proceso de Instalación
+
+1. Ubicarse en el directorio del proyecto:
+   ```bash
+   cd "d:\Programacion\proyectos\Gestor de luces"
+   ```
+
+2. Crear y activar el entorno virtual de Python:
+   ```bash
+   python -m venv .venv
+   # En Command Prompt (CMD):
+   .venv\Scripts\activate.bat
+   # En PowerShell:
+   .venv\Scripts\Activate.ps1
+   # En Git Bash:
+   source .venv/Scripts/activate
+   ```
+
+3. Instalar las dependencias de producción y pruebas:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+## Ejecución de la Aplicación
+
+### 1. Modo Interfaz Gráfica (GUI)
+
+Inicia la consola de escritorio completa:
+
+```bash
+python -m gestor_luces.main
+```
+
+Parámetros opcionales aceptados por `main.py`:
+- `--data-dir <RUTA>`: Especifica una carpeta alternativa para guardar `bulbs.json`, `scenes.json` y `settings.json` (por defecto se utiliza `%LOCALAPPDATA%\GestorLuces`).
+- `--debug`: Habilita registros de diagnóstico detallados (nivel `DEBUG`) en todos los hilos del sistema.
+- `--smoke-test`: Construye la raíz de composición, inicializa los adaptadores sin abrir ventanas del sistema operativo, verifica la integridad y finaliza con código de salida 0.
+
+### 2. Modo Diagnóstico por Consola (CLI)
+
+El módulo `gestor_luces.cli` permite realizar descubrimientos de red, consultas de estado y pruebas de control por línea de comandos sin inicializar la interfaz gráfica:
+
+```bash
+# Descubrir todos los focos presentes en la subred local:
+python -m gestor_luces.cli discover
+
+# Consultar el estado en tiempo real de un foco específico:
+python -m gestor_luces.cli status 192.168.100.6
+
+# Encender el foco con un 80% de brillo:
+python -m gestor_luces.cli on 192.168.100.6 --brightness 80
+
+# Establecer un color RGB:
+python -m gestor_luces.cli color 192.168.100.6 255 120 0 --brightness 100
+
+# Ajustar la temperatura de color (CCT en Kelvin):
+python -m gestor_luces.cli temp 192.168.100.6 2700
+
+# Activar una escena de fábrica por su número de ID:
+python -m gestor_luces.cli scene 192.168.100.6 5 --speed 120
+
+# Apagar el foco:
+python -m gestor_luces.cli off 192.168.100.6
+```
+
+---
+
+## Verificación y Pruebas Automatizadas
+
+La suite de pruebas valida exhaustivamente las reglas de negocio, la persistencia en formato JSON, los límites de frecuencia, el puente asíncrono de PyWebView, la sincronización de la bandeja del sistema, los algoritmos de captura de pantalla y el procesamiento de señales de audio.
+
+Las pruebas se ejecutan de forma 100% independiente de la red real gracias a un servidor simulador UDP en memoria (`FakeWizBulbServer`) que responde a las peticiones JSON-RPC (`getPilot`, `setPilot`, `getSystemConfig`).
+
+Para correr las pruebas:
+
+```bash
+pytest
+```
+
+Resultado esperado:
+```
+37 passed in ~2.0s
+```
+
+---
+
+## Documentación Técnica Detallada
+
+- [Arquitectura y Concurrencia](docs/architecture.es.md): Análisis detallado del diseño hexagonal, ciclo de vida de los hilos y prevención de condiciones de carrera.
+- [Protocolo WiZ UDP y Modos de Streaming](docs/wiz_protocol.es.md): Especificación técnica de los paquetes JSON-RPC, regulación a 10 Hz y catálogo de escenas.
+- [English Documentation](README.md): Full documentation in English.
+
