@@ -1,0 +1,40 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build and packaging (PyInstaller)
+build/
+dist/
+*.spec
+*.egg-info/
+
+# Local user data and secrets
+data/
+*.local.json
+.env
+
+# AI agent configuration (local only)
+.agent/
+.agents/
+_agent/
+_agents/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+
