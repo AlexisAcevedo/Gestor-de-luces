@@ -94,6 +94,19 @@ class SceneRepository(Protocol):
 
 
 @runtime_checkable
+class SettingsRepository(Protocol):
+    """Puerto para persistir las preferencias globales del usuario (como el idioma de la consola)."""
+
+    def load_settings(self) -> dict[str, Any]:
+        """Carga el diccionario de preferencias almacenadas."""
+        ...
+
+    def save_settings(self, settings: dict[str, Any]) -> None:
+        """Persiste el diccionario de preferencias globales."""
+        ...
+
+
+@runtime_checkable
 class ScreenSampler(Protocol):
     """Puerto para muestrear el color predominante de la pantalla (modo Ambilight)."""
 

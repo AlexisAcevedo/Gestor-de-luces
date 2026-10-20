@@ -31,7 +31,10 @@ from gestor_luces.ports.repositories import (
     LightController,
     SceneRepository,
     ScreenSampler,
+    SettingsRepository,
 )
+
+SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
 
 
 class LightControlService:
@@ -48,10 +51,12 @@ class LightControlService:
         ambilight_manager: AmbilightStreamManager | None = None,
         audio_sampler: AudioSampler | None = None,
         music_manager: MusicSyncStreamManager | None = None,
+        settings_repository: SettingsRepository | None = None,
     ) -> None:
         self._controller = controller
         self._bulb_repo = bulb_repository
         self._scene_repo = scene_repository
+        self._settings_repo = settings_repository
         self._rate_limiter = rate_limiter or StreamRateLimiter()
         self._sleep_timer = sleep_timer or SleepTimerManager()
         self._screen_sampler = screen_sampler
@@ -61,6 +66,7 @@ class LightControlService:
         self._bulbs: dict[str, Bulb] = {}
         self._selected_ips: list[str] = []
         self._custom_scenes: dict[str, CustomScene] = {}
+        self._language: str = "en"
 
         if self._bulb_repo is not None:
             for saved_bulb in self._bulb_repo.load_bulbs():
@@ -70,6 +76,25 @@ class LightControlService:
         if self._scene_repo is not None:
             for saved_scene in self._scene_repo.load_scenes():
                 self._custom_scenes[saved_scene.id] = saved_scene
+
+        if self._settings_repo is not None:
+            loaded_settings = self._settings_repo.load_settings()
+            candidate_lang = str(loaded_settings.get("language", "en")).strip().lower()
+            if candidate_lang in SUPPORTED_LANGUAGES:
+                self._language = candidate_lang
+
+    def get_language(self) -> str:
+        """Devuelve el codigo de idioma activo (`en` o `es`) de la consola."""
+        return self._language
+
+    def set_language(self, language: str) -> str:
+        """Valida, actualiza y persiste el idioma activo de la interfaz y la bandeja."""
+        cleaned = str(language or "").strip().lower()
+        if cleaned not in SUPPORTED_LANGUAGES:
+            raise ValueError(f"Unsupported language '{language}'. Must be one of {SUPPORTED_LANGUAGES}.")
+        self._language = cleaned
+        self._persist_settings()
+        return self._language
 
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
@@ -608,6 +633,7 @@ class LightControlService:
         brightness: int = 85,
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
+        min_brightness: int = 10,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
         # Exclusion mutua: iniciar Ambilight detiene automaticamente la sincronizacion musical.
@@ -634,6 +660,7 @@ class LightControlService:
             auto_brightness=bool(auto_brightness),
             brightness=int(brightness),
             smoothing_alpha=parsed_alpha,
+            min_brightness=int(min_brightness),
         )
 
     def stop_ambilight(self) -> AwaitableStatusDict:
@@ -754,3 +781,9 @@ class LightControlService:
         """Delega el guardado de escenas personalizadas si hay un repositorio configurado."""
         if self._scene_repo is not None:
             self._scene_repo.save_scenes(self.list_custom_scenes())
+
+    def _persist_settings(self) -> None:
+        """Delega el guardado de preferencias globales si hay un repositorio configurado."""
+        if self._settings_repo is not None:
+            self._settings_repo.save_settings({"language": self._language})
+

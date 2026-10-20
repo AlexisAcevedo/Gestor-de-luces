@@ -6,6 +6,7 @@ from gestor_luces.ports.repositories import (
     LightController,
     SceneRepository,
     ScreenSampler,
+    SettingsRepository,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "LightController",
     "SceneRepository",
     "ScreenSampler",
+    "SettingsRepository",
 ]

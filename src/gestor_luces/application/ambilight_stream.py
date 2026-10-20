@@ -41,6 +41,7 @@ class AmbilightStreamManager:
         self._monitor_index: int = 1
         self._color_mode: str = "vibrant"
         self._auto_brightness: bool = True
+        self._min_brightness: int = 10
         self._fixed_brightness: int = 85
         self._smoothing_alpha: float = 0.38
         self._last_color: Color | None = None
@@ -63,6 +64,7 @@ class AmbilightStreamManager:
         auto_brightness: bool = True,
         brightness: int = 85,
         smoothing_alpha: float = 0.38,
+        min_brightness: int = 10,
     ) -> AwaitableStatusDict:
         """Inicia o reinicia el bucle continuo de muestreo de pantalla hacia los focos objetivo."""
         normalized_mode = str(color_mode).strip().lower()
@@ -75,6 +77,7 @@ class AmbilightStreamManager:
             raise ValueError("Smoothing alpha must be between 0.05 and 1.0.")
 
         validated_brightness = Brightness(int(brightness)).percent
+        clamped_min_brightness = max(5, min(20, int(min_brightness)))
 
         self.stop()
 
@@ -82,6 +85,7 @@ class AmbilightStreamManager:
         self._monitor_index = int(monitor_index)
         self._color_mode = normalized_mode
         self._auto_brightness = bool(auto_brightness)
+        self._min_brightness = clamped_min_brightness
         self._fixed_brightness = validated_brightness
         self._last_brightness = validated_brightness
         self._smoothing_alpha = parsed_alpha
@@ -133,6 +137,7 @@ class AmbilightStreamManager:
                 "monitor_index": self._monitor_index,
                 "color_mode": self._color_mode,
                 "auto_brightness": self._auto_brightness,
+                "min_brightness": self._min_brightness,
                 "brightness": (
                     self._last_brightness if self._auto_brightness else self._fixed_brightness
                 ),
@@ -183,8 +188,10 @@ class AmbilightStreamManager:
                         self._monitor_index,
                         self._color_mode,
                     )
+                    # En escenas oscuras de cine, respetamos el piso elegido por el usuario
+                    # y aseguramos el minimo fisico de 10% exigido por el protocolo UDP WiZ.
                     effective_brightness = (
-                        suggested_brightness
+                        max(10, max(self._min_brightness, suggested_brightness))
                         if self._auto_brightness
                         else self._fixed_brightness
                     )

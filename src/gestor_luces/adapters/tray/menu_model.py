@@ -74,6 +74,38 @@ def select_tray_presets(presets: Sequence[TrayPreset]) -> list[TrayPreset]:
     return list(presets[:FALLBACK_PRESET_LIMIT])
 
 
+_TRAY_STRINGS: dict[str, dict[str, str]] = {
+    "en": {
+        "hide_window": "Hide window",
+        "show_window": "Show window",
+        "turn_off": "Turn off",
+        "turn_on": "Turn on",
+        "brightness": "Brightness",
+        "favorite_presets": "Favorite presets",
+        "no_saved_presets": "No saved presets",
+        "cancel_sleep_timer": "Cancel sleep timer",
+        "quit": "Quit",
+    },
+    "es": {
+        "hide_window": "Ocultar ventana",
+        "show_window": "Mostrar ventana",
+        "turn_off": "Apagar",
+        "turn_on": "Encender",
+        "brightness": "Brillo",
+        "favorite_presets": "Escenas favoritas",
+        "no_saved_presets": "Sin escenas guardadas",
+        "cancel_sleep_timer": "Cancelar temporizador",
+        "quit": "Salir",
+    },
+}
+
+
+def _resolve_tray_strings(language: str) -> dict[str, str]:
+    """Obtiene el diccionario de etiquetas localizado con respaldo seguro al ingles."""
+    normalized = str(language or "en").strip().lower()
+    return _TRAY_STRINGS.get(normalized, _TRAY_STRINGS["en"])
+
+
 def build_tray_menu_spec(
     *,
     is_on: bool,
@@ -81,27 +113,38 @@ def build_tray_menu_spec(
     presets: Sequence[TrayPreset],
     window_visible: bool,
     sleep_timer_active: bool,
+    language: str = "en",
 ) -> list[TrayMenuEntry]:
-    """Construye la estructura completa del menu a partir del estado actual."""
+    """Construye la estructura completa del menu a partir del estado e idioma actuales."""
+    strings = _resolve_tray_strings(language)
     entries: list[TrayMenuEntry] = [
         TrayMenuEntry(
-            label="Hide window" if window_visible else "Show window",
+            label=strings["hide_window"] if window_visible else strings["show_window"],
             action_id=ACTION_HIDE_WINDOW if window_visible else ACTION_SHOW_WINDOW,
             is_default=True,
         ),
         SEPARATOR,
         TrayMenuEntry(
-            label="Turn off" if is_on else "Turn on",
+            label=strings["turn_off"] if is_on else strings["turn_on"],
             action_id=ACTION_TURN_OFF if is_on else ACTION_TURN_ON,
         ),
-        TrayMenuEntry(label="Brightness", children=_build_brightness_entries(brightness)),
-        TrayMenuEntry(label="Favorite presets", children=_build_preset_entries(presets)),
+        TrayMenuEntry(
+            label=strings["brightness"],
+            children=_build_brightness_entries(brightness),
+        ),
+        TrayMenuEntry(
+            label=strings["favorite_presets"],
+            children=_build_preset_entries(presets, no_presets_label=strings["no_saved_presets"]),
+        ),
     ]
     if sleep_timer_active:
         entries.append(
-            TrayMenuEntry(label="Cancel sleep timer", action_id=ACTION_CANCEL_SLEEP_TIMER)
+            TrayMenuEntry(
+                label=strings["cancel_sleep_timer"],
+                action_id=ACTION_CANCEL_SLEEP_TIMER,
+            )
         )
-    entries.extend([SEPARATOR, TrayMenuEntry(label="Quit", action_id=ACTION_QUIT)])
+    entries.extend([SEPARATOR, TrayMenuEntry(label=strings["quit"], action_id=ACTION_QUIT)])
     return entries
 
 
@@ -120,19 +163,27 @@ def _build_brightness_entries(brightness: int) -> tuple[TrayMenuEntry, ...]:
     )
 
 
-def _build_preset_entries(presets: Sequence[TrayPreset]) -> tuple[TrayMenuEntry, ...]:
+def _build_preset_entries(
+    presets: Sequence[TrayPreset],
+    no_presets_label: str = "No saved presets",
+) -> tuple[TrayMenuEntry, ...]:
     """Genera las entradas de presets o un marcador deshabilitado si no existen."""
     selected = select_tray_presets(presets)
     if not selected:
-        return (TrayMenuEntry(label="No saved presets", enabled=False),)
+        return (TrayMenuEntry(label=no_presets_label, enabled=False),)
     return tuple(
         TrayMenuEntry(label=preset.name, action_id=ACTION_APPLY_PRESET, payload=preset.id)
         for preset in selected
     )
 
 
-def build_tray_title(is_on: bool, brightness: int) -> str:
+def build_tray_title(is_on: bool, brightness: int, language: str = "en") -> str:
     """Texto del tooltip del icono, visible al pasar el cursor sobre la bandeja."""
+    normalized = str(language or "en").strip().lower()
+    if normalized == "es":
+        if is_on:
+            return f"Iluminación WiZ - Encendido {brightness}%"
+        return "Iluminación WiZ - Apagado"
     if is_on:
         return f"WiZ Lighting - On {brightness}%"
     return "WiZ Lighting - Off"

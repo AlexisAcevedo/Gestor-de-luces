@@ -58,11 +58,92 @@
     holiday: "#F43F5E"
   };
 
+  /* Mapa cromatico curado para las 36 escenas nativas de WiZ (barra lateral y punto de color) */
+  const SCENE_CHROMATIC_MAP = {
+    1: { accent: "#00b4d8", gradient: "linear-gradient(135deg, #00b4d8, #0077b6)" },
+    2: { accent: "#ff4d6d", gradient: "linear-gradient(135deg, #ff4d6d, #c9184a)" },
+    3: { accent: "#ff7b00", gradient: "linear-gradient(135deg, #ff9e00, #e85d04)" },
+    4: { accent: "#f72585", gradient: "linear-gradient(135deg, #f72585, #7209b7, #4cc9f0)" },
+    5: { accent: "#ff5400", gradient: "linear-gradient(135deg, #ff5400, #d00000)" },
+    6: { accent: "#ffb703", gradient: "linear-gradient(135deg, #ffb703, #fb8500)" },
+    7: { accent: "#2dc653", gradient: "linear-gradient(135deg, #2d6a4f, #52b788)" },
+    8: { accent: "#b8c0ff", gradient: "linear-gradient(135deg, #ffcad4, #b8c0ff, #bde0fe)" },
+    9: { accent: "#ffbf69", gradient: "linear-gradient(135deg, #ff9f1c, #ffbf69, #cbf3f0)" },
+    10: { accent: "#e07a5f", gradient: "linear-gradient(135deg, #e07a5f, #81b29a)" },
+    11: { accent: "#ffd6aa", gradient: "#ffd6aa" },
+    12: { accent: "#fff4e6", gradient: "#fff4e6" },
+    13: { accent: "#cce6ff", gradient: "#cce6ff" },
+    14: { accent: "#ff9e44", gradient: "#ff9e44" },
+    15: { accent: "#e2f1ff", gradient: "#e2f1ff" },
+    16: { accent: "#ffc899", gradient: "#ffc899" },
+    17: { accent: "#fff9f2", gradient: "#fff9f2" },
+    18: { accent: "#a3bffa", gradient: "#a3bffa" },
+    19: { accent: "#d65db1", gradient: "linear-gradient(135deg, #ff6bcb, #845ec2)" },
+    20: { accent: "#80ed99", gradient: "linear-gradient(135deg, #80ed99, #f9c74f)" },
+    21: { accent: "#f9c74f", gradient: "linear-gradient(135deg, #f9c74f, #4cc9f0)" },
+    22: { accent: "#f3722c", gradient: "linear-gradient(135deg, #f3722c, #f8961e)" },
+    23: { accent: "#0096c7", gradient: "linear-gradient(135deg, #03045e, #0077b6, #00b4d8)" },
+    24: { accent: "#10b981", gradient: "linear-gradient(135deg, #1b4332, #2dc653)" },
+    25: { accent: "#80b918", gradient: "linear-gradient(135deg, #55a630, #aacc00)" },
+    26: { accent: "#b5179e", gradient: "linear-gradient(135deg, #7209b7, #3a0ca3, #f72585)" },
+    27: { accent: "#ef233c", gradient: "linear-gradient(135deg, #d90429, #2b9348)" },
+    28: { accent: "#ff6d00", gradient: "linear-gradient(135deg, #ff6d00, #7b2cbf)" },
+    29: { accent: "#ff9f1c", gradient: "linear-gradient(135deg, #ff9f1c, #e76f51)" },
+    30: { accent: "#ffe1a8", gradient: "#ffe1a8" },
+    31: { accent: "#4cc9f0", gradient: "linear-gradient(135deg, #4361ee, #f72585)" },
+    32: { accent: "#ee9b00", gradient: "linear-gradient(135deg, #ca6702, #bb3e03)" },
+    33: { accent: "#ffbe0b", gradient: "linear-gradient(135deg, #ffbe0b, #fb5607, #ff006e)" },
+    34: { accent: "#ffffff", gradient: "#ffffff" },
+    35: { accent: "#ef233c", gradient: "linear-gradient(135deg, #ef233c, #ffb703)" },
+    36: { accent: "#90e0ef", gradient: "linear-gradient(135deg, #90e0ef, #caf0f8)" }
+  };
+
+  const FAV_SCENES_STORAGE_KEY = "gestor_luces_fav_scenes";
+
+  function loadFavoriteSceneIds() {
+    try {
+      const raw = window.localStorage.getItem(FAV_SCENES_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id >= 1 && id <= 36);
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  function saveFavoriteSceneIds(ids) {
+    try {
+      window.localStorage.setItem(FAV_SCENES_STORAGE_KEY, JSON.stringify(ids));
+    } catch (_err) {
+      /* Ignora errores de cuota en entornos restringidos */
+    }
+  }
+
+  /* Helper de traduccion que delega en window.I18N con respaldo directo */
+  function t(key, vars) {
+    if (window.I18N && typeof window.I18N.t === "function") {
+      return window.I18N.t(key, vars);
+    }
+    return key;
+  }
+
+  /* Formatea el nombre visible de la escena #19 manteniendo compatibilidad con pywizlight */
+  function formatSceneDisplayName(scene) {
+    if (!scene) return "";
+    if (scene.scene_id === 19 || scene.name === "Plantgrowth") {
+      return t("scenes.plantGrowth");
+    }
+    return scene.name;
+  }
+
   /* Estado reactivo local de la interfaz */
   const appState = {
+    language: "en",
     bulbs: [],
     selectedIps: [],
     scenes: FALLBACK_SCENES.slice(),
+    favoriteSceneIds: loadFavoriteSceneIds(),
     customScenes: [],
     sleepTimer: {
       active: false,
@@ -75,12 +156,18 @@
       monitor_index: 1,
       color_mode: "vibrant",
       auto_brightness: true,
+      min_brightness: 10,
       brightness: 85,
       fixed_brightness: 85,
       smoothing_alpha: 0.38,
       last_color: null,
       target_ips: [],
       frames_sent: 0
+    },
+    ambiTelemetry: {
+      lastFrames: 0,
+      lastTs: 0,
+      fps: 0
     },
     monitors: [
       { index: 1, label: "Display 1 (1920x1080)", width: 1920, height: 1080 }
@@ -102,6 +189,11 @@
       target_ips: [],
       frames_sent: 0
     },
+    musicTelemetry: {
+      lastFrames: 0,
+      lastTs: 0,
+      fps: 0
+    },
     audioDevices: [
       {
         index: -1,
@@ -118,11 +210,14 @@
     sleepPollTimer: null,
     ambilightPollTimer: null,
     musicPollTimer: null,
-    isDraggingWheel: false
+    isDraggingWheel: false,
+    lastWheelSendMs: 0,
+    wheelThrottleTimer: null
   };
 
   /* Simulador en memoria cuando no existe el contenedor nativo de PyWebView */
   function createBrowserMockApi() {
+    let mockLanguage = "en";
     let mockBulbs = [
       {
         ip: "192.168.0.34",
@@ -241,6 +336,7 @@
       syncMockTimer();
       return Promise.resolve({
         ok: true,
+        language: mockLanguage,
         bulbs: JSON.parse(JSON.stringify(mockBulbs)),
         selected_ips: mockSelected.slice(),
         scenes: FALLBACK_SCENES.slice(),
@@ -267,6 +363,11 @@
 
     return {
       get_initial_state: () => buildMockEnvelope(),
+      set_language: (lang) => {
+        const cleaned = String(lang || "en").trim().toLowerCase();
+        mockLanguage = cleaned === "es" ? "es" : "en";
+        return buildMockEnvelope();
+      },
       discover_bulbs: () => buildMockEnvelope(),
       refresh_states: () => buildMockEnvelope(),
       select_targets: (ips) => {
@@ -464,7 +565,7 @@
         return buildMockEnvelope();
       },
       get_sleep_timer_status: () => buildMockEnvelope(),
-      start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips) => {
+      start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips, minBrightness) => {
         const targets = resolveTargets(ips);
         const sampled = { r: 56, g: 189, b: 248, hex: "#38bdf8" };
         mockMusicSync.active = false;
@@ -474,6 +575,7 @@
           monitor_index: Number(monitorIndex || 1),
           color_mode: String(colorMode || "vibrant"),
           auto_brightness: Boolean(autoBrightness),
+          min_brightness: clampInt(minBrightness != null ? minBrightness : 10, 5, 20),
           brightness: Number(brightness || 85),
           fixed_brightness: Number(brightness || 85),
           smoothing_alpha: Number(smoothingAlpha || 0.38),
@@ -733,9 +835,85 @@
     }
   }
 
+  /* Sincroniza el progreso visual de un deslizador (<input type="range">) y sus botones de escala */
+  function updateSliderFill(inputEl) {
+    if (!inputEl) return;
+    const min = parseFloat(inputEl.min);
+    const max = parseFloat(inputEl.max);
+    const val = parseFloat(inputEl.value);
+    const safeMin = Number.isNaN(min) ? 0 : min;
+    const safeMax = Number.isNaN(max) ? 100 : max;
+    const safeVal = Number.isNaN(val) ? safeMin : Math.max(safeMin, Math.min(safeMax, val));
+    const pct = safeMax > safeMin ? ((safeVal - safeMin) / (safeMax - safeMin)) * 100 : 0;
+
+    inputEl.style.setProperty("--attr-min", String(safeMin));
+    inputEl.style.setProperty("--attr-max", String(safeMax));
+    inputEl.style.setProperty("--control-value", String(safeVal));
+    inputEl.style.setProperty("--slider-progress", `${pct.toFixed(2)}%`);
+
+    if (inputEl.id) {
+      document
+        .querySelectorAll(`.scale-preset-btn[data-target-slider="${inputEl.id}"]`)
+        .forEach((btn) => {
+          const targetVal = parseFloat(btn.getAttribute("data-value") || "");
+          const isMatch = !Number.isNaN(targetVal) && Math.abs(targetVal - safeVal) < 0.009;
+          btn.classList.toggle("active", isMatch);
+        });
+    }
+  }
+
+  function updateAllSlidersFill() {
+    document.querySelectorAll('input[type="range"]').forEach((slider) => {
+      updateSliderFill(slider);
+    });
+  }
+
+  /* Calcula la tasa instantanea o promedio de FPS a partir del contador acumulado de fotogramas */
+  function computeLiveFps(telemetrySlot, isActive, currentFrames, nominalFps) {
+    const now = Date.now();
+    const frames = Number(currentFrames) || 0;
+    if (!isActive) {
+      telemetrySlot.lastFrames = frames;
+      telemetrySlot.lastTs = now;
+      telemetrySlot.fps = 0;
+      return 0;
+    }
+    if (telemetrySlot.lastTs > 0 && frames > telemetrySlot.lastFrames) {
+      const elapsedSec = (now - telemetrySlot.lastTs) / 1000;
+      if (elapsedSec >= 0.15) {
+        const measured = (frames - telemetrySlot.lastFrames) / elapsedSec;
+        telemetrySlot.fps = Math.min(30, Math.max(1, Math.round(measured)));
+        telemetrySlot.lastFrames = frames;
+        telemetrySlot.lastTs = now;
+      }
+    } else if (telemetrySlot.lastTs === 0) {
+      telemetrySlot.lastFrames = frames;
+      telemetrySlot.lastTs = now;
+      telemetrySlot.fps = nominalFps;
+    }
+    return telemetrySlot.fps || nominalFps;
+  }
+
+  /* Sincroniza el selector visual de idioma (EN | ES) y traduce el arbol DOM estatico */
+  function syncLanguageUi(lang) {
+    const normalized = String(lang || "en").trim().toLowerCase() === "es" ? "es" : "en";
+    appState.language = normalized;
+    if (window.I18N) {
+      window.I18N.setLanguage(normalized);
+      window.I18N.translateDom();
+    }
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      const isMatch = btn.getAttribute("data-lang") === normalized;
+      btn.setAttribute("aria-pressed", String(isMatch));
+    });
+  }
+
   /* Actualiza la variable CSS `--beam-color` y toda la interfaz a partir del sobre del backend */
   function applyBackendEnvelope(envelope, statusText) {
     if (!envelope) return;
+    if (typeof envelope.language === "string") {
+      syncLanguageUi(envelope.language);
+    }
     if (Array.isArray(envelope.bulbs)) {
       appState.bulbs = envelope.bulbs;
     }
@@ -765,7 +943,9 @@
     }
 
     if (!envelope.ok && envelope.error) {
-      setStatusMessage(`Warning: ${envelope.error}`);
+      setStatusMessage(t("status.warning", { error: envelope.error }));
+    } else if (typeof statusText === "function") {
+      setStatusMessage(statusText());
     } else if (statusText) {
       setStatusMessage(statusText);
     }
@@ -791,7 +971,10 @@
 
     const onlineCount = appState.bulbs.filter((b) => b.is_online).length;
     if (badge) {
-      badge.textContent = `${onlineCount} / ${appState.bulbs.length} online`;
+      badge.textContent = t("rail.onlineCount", {
+        online: onlineCount,
+        total: appState.bulbs.length
+      });
     }
 
     if (selectAllCheckbox) {
@@ -806,9 +989,9 @@
       const empty = document.createElement("div");
       empty.className = "empty-fixtures-state";
       const p1 = document.createElement("p");
-      p1.textContent = "No WiZ fixtures registered yet.";
+      p1.textContent = t("rail.emptyTitle");
       const p2 = document.createElement("p");
-      p2.textContent = "Use Scan network or Add by IP to connect.";
+      p2.textContent = t("rail.emptySubtitle");
       empty.append(p1, p2);
       container.appendChild(empty);
       return;
@@ -828,7 +1011,7 @@
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = isSelected;
-      checkbox.setAttribute("aria-label", `Select ${bulb.name}`);
+      checkbox.setAttribute("aria-label", t("rail.selectFixtureAria", { name: bulb.name }));
       checkbox.addEventListener("change", () => {
         let nextIps = appState.selectedIps.slice();
         if (checkbox.checked) {
@@ -836,21 +1019,56 @@
         } else {
           nextIps = nextIps.filter((ip) => ip !== bulb.ip);
         }
-        invokeApi(() => backendApi.select_targets(nextIps), "Updated target selection.");
+        invokeApi(() => backendApi.select_targets(nextIps), () => t("status.selectionUpdated"));
       });
 
       const metaDiv = document.createElement("div");
       metaDiv.className = "fixture-meta";
 
+      const titleRow = document.createElement("div");
+      titleRow.className = "fixture-title-row";
+
       const nameHeading = document.createElement("h3");
       nameHeading.className = "fixture-name";
       nameHeading.textContent = bulb.name;
+
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "btn-icon-rename";
+      const renameTooltip = t("rail.renameAria", { name: bulb.name });
+      renameBtn.title = renameTooltip;
+      renameBtn.setAttribute("aria-label", renameTooltip);
+
+      const pencilSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      pencilSvg.setAttribute("class", "icon");
+      pencilSvg.setAttribute("viewBox", "0 0 20 20");
+      pencilSvg.setAttribute("fill", "none");
+      pencilSvg.setAttribute("aria-hidden", "true");
+      const pencilPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      pencilPath.setAttribute(
+        "d",
+        "M13.58 3.58a2 2 0 0 1 2.84 2.84l-8.5 8.5-3.67.83.83-3.67 8.5-8.5ZM12.17 5l2.83 2.83"
+      );
+      pencilPath.setAttribute("stroke", "currentColor");
+      pencilPath.setAttribute("stroke-width", "1.5");
+      pencilPath.setAttribute("stroke-linecap", "round");
+      pencilPath.setAttribute("stroke-linejoin", "round");
+      pencilSvg.appendChild(pencilPath);
+      renameBtn.appendChild(pencilSvg);
+
+      renameBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openRenameDialog(bulb);
+      });
+
+      titleRow.append(nameHeading, renameBtn);
 
       const addressLine = document.createElement("p");
       addressLine.className = "fixture-address";
       addressLine.textContent = `${bulb.ip} · ${bulb.mac}`;
 
-      metaDiv.append(nameHeading, addressLine);
+      metaDiv.append(titleRow, addressLine);
       selectLabel.append(checkbox, metaDiv);
       topRow.appendChild(selectLabel);
 
@@ -863,32 +1081,49 @@
       dot.className = "status-dot";
       dot.setAttribute("aria-hidden", "true");
       const statusText = document.createElement("span");
-      statusText.textContent = bulb.is_online ? "Online" : "Offline";
+      statusText.textContent = bulb.is_online ? t("rail.statusOnline") : t("rail.statusOffline");
       statusSpan.append(dot, statusText);
 
       const actionsDiv = document.createElement("div");
       actionsDiv.className = "fixture-card-actions";
 
-      const renameBtn = document.createElement("button");
-      renameBtn.type = "button";
-      renameBtn.className = "btn btn-compact btn-ghost";
-      renameBtn.textContent = "Rename";
-      renameBtn.addEventListener("click", () => openRenameDialog(bulb));
-
+      const isBulbOn = Boolean(bulb.state.is_on);
       const powerBtn = document.createElement("button");
       powerBtn.type = "button";
-      powerBtn.className = `btn btn-compact ${bulb.state.is_on ? "btn-primary" : "btn-secondary"}`;
-      powerBtn.setAttribute("aria-pressed", String(Boolean(bulb.state.is_on)));
-      powerBtn.textContent = bulb.state.is_on ? "ON" : "OFF";
+      powerBtn.className = "btn-fixture-power";
+      powerBtn.setAttribute("aria-pressed", String(isBulbOn));
+      const powerLabel = t(
+        isBulbOn ? "rail.powerToggleOnAria" : "rail.powerToggleOffAria",
+        { name: bulb.name }
+      );
+      powerBtn.title = powerLabel;
+      powerBtn.setAttribute("aria-label", powerLabel);
+
+      const powerSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      powerSvg.setAttribute("class", "icon");
+      powerSvg.setAttribute("viewBox", "0 0 20 20");
+      powerSvg.setAttribute("fill", "none");
+      powerSvg.setAttribute("aria-hidden", "true");
+      const powerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      powerPath.setAttribute("d", "M10 2.75v6.5M6.1 4.85a6.5 6.5 0 1 0 7.8 0");
+      powerPath.setAttribute("stroke", "currentColor");
+      powerPath.setAttribute("stroke-width", "1.75");
+      powerPath.setAttribute("stroke-linecap", "round");
+      powerSvg.appendChild(powerPath);
+      powerBtn.appendChild(powerSvg);
+
       powerBtn.addEventListener("click", () => {
         const nextPower = !bulb.state.is_on;
         invokeApi(
           () => backendApi.set_power(nextPower, null, [bulb.ip]),
-          `${bulb.name} turned ${nextPower ? "ON" : "OFF"}.`
+          () =>
+            t(nextPower ? "status.bulbTurnedOn" : "status.bulbTurnedOff", {
+              name: bulb.name
+            })
         );
       });
 
-      actionsDiv.append(renameBtn, powerBtn);
+      actionsDiv.appendChild(powerBtn);
       bottomRow.append(statusSpan, actionsDiv);
 
       card.append(topRow, bottomRow);
@@ -908,11 +1143,17 @@
     const brightnessOutput = document.getElementById("brightness-output");
 
     const primary = getPrimaryBulb();
+    const aperture = document.getElementById("photometric-aperture");
     if (!primary) {
       if (shell) shell.setAttribute("data-power", "off");
       document.documentElement.style.setProperty("--beam-color", "#2A303C");
-      if (targetSummary) targetSummary.textContent = "No fixture selected";
-      if (statePill) statePill.textContent = "OFFLINE";
+      if (aperture) {
+        aperture.style.backgroundColor = "#232832";
+        aperture.style.boxShadow = "none";
+      }
+      if (targetSummary) targetSummary.textContent = t("stage.noFixture");
+      if (statePill) statePill.textContent = t("stage.stateOffline");
+      updateAllSlidersFill();
       return;
     }
 
@@ -920,8 +1161,8 @@
     if (targetSummary) {
       targetSummary.textContent =
         selectedCount === 1
-          ? `Controlling 1 fixture: ${primary.name}`
-          : `Controlling ${selectedCount} fixtures (${primary.name} primary)`;
+          ? t("stage.controllingOne", { name: primary.name })
+          : t("stage.controllingMany", { count: selectedCount, name: primary.name });
     }
 
     const st = primary.state;
@@ -932,12 +1173,13 @@
 
     if (masterPowerBtn && masterPowerLabel) {
       masterPowerBtn.setAttribute("aria-pressed", String(isOn));
-      masterPowerLabel.textContent = isOn ? "Turn OFF" : "Turn ON";
+      masterPowerLabel.textContent = isOn ? t("stage.turnOff") : t("stage.turnOn");
     }
 
     if (brightnessSlider && brightnessOutput) {
       brightnessSlider.value = String(st.brightness);
       brightnessOutput.textContent = `${st.brightness}%`;
+      updateSliderFill(brightnessSlider);
     }
 
     document.querySelectorAll(".brightness-preset").forEach((btn) => {
@@ -946,28 +1188,54 @@
 
     /* Calculo del color fotometrico (`--beam-color`) segun el modo activo */
     let beamCss = "#2A303C";
-    let modeReadout = "OFF";
+    let modeReadout = t("stage.stateOff");
 
     if (isOn) {
       if (st.mode === "rgb" && st.color) {
         beamCss = `rgb(${st.color.r}, ${st.color.g}, ${st.color.b})`;
-        modeReadout = `ON · RGB (${st.color.r}, ${st.color.g}, ${st.color.b}) · ${st.brightness}%`;
+        modeReadout = t("stage.stateOnRgb", {
+          r: st.color.r,
+          g: st.color.g,
+          b: st.color.b,
+          brightness: st.brightness
+        });
       } else if (st.mode === "scene" && st.scene_id) {
         const sceneObj = appState.scenes.find((s) => s.scene_id === st.scene_id);
+        const sceneTheme = SCENE_CHROMATIC_MAP[st.scene_id];
         const category = sceneObj ? sceneObj.category : "dynamic";
-        beamCss = SCENE_CATEGORY_COLORS[category] || "#C084FC";
-        const sceneTitle = st.scene_name || (sceneObj ? sceneObj.name : `Scene ${st.scene_id}`);
-        modeReadout = `ON · Scene: ${sceneTitle} · ${st.brightness}%`;
+        beamCss = (sceneTheme && sceneTheme.accent) || SCENE_CATEGORY_COLORS[category] || "#C084FC";
+        const sceneTitle = sceneObj
+          ? formatSceneDisplayName(sceneObj)
+          : (st.scene_name || `#${st.scene_id}`);
+        modeReadout = t("stage.stateOnScene", {
+          scene: sceneTitle,
+          brightness: st.brightness
+        });
       } else {
         const kelvin = st.temperature || 4200;
         beamCss = kelvinToCssColor(kelvin);
-        modeReadout = `ON · ${kelvin} K · ${st.brightness}%`;
+        modeReadout = t("stage.stateOnKelvin", {
+          kelvin,
+          brightness: st.brightness
+        });
       }
     } else {
-      modeReadout = `OFF · Standby (${st.brightness}%)`;
+      modeReadout = t("stage.stateOffStandby", { brightness: st.brightness });
     }
 
     document.documentElement.style.setProperty("--beam-color", beamCss);
+    if (aperture) {
+      if (isOn) {
+        const briNorm = Math.max(0, Math.min(1, ((Number(st.brightness) || 100) - 10) / 90));
+        const glowRadius = Math.round(12 + briNorm * 24);
+        const glowAlpha = Math.round(28 + briNorm * 52);
+        aperture.style.backgroundColor = beamCss;
+        aperture.style.boxShadow = `0 0 ${glowRadius}px color-mix(in oklab, ${beamCss} ${glowAlpha}%, transparent)`;
+      } else {
+        aperture.style.backgroundColor = "#232832";
+        aperture.style.boxShadow = "none";
+      }
+    }
     if (statePill) statePill.textContent = modeReadout;
     if (telemetryMeta) telemetryMeta.textContent = `${primary.ip} · ${primary.module_name}`;
 
@@ -991,6 +1259,7 @@
     if (kelvinSlider && kelvinOutput) {
       kelvinSlider.value = String(activeKelvin);
       kelvinOutput.textContent = `${activeKelvin} K`;
+      updateSliderFill(kelvinSlider);
     }
     document.querySelectorAll(".kelvin-card").forEach((card) => {
       card.classList.toggle(
@@ -999,65 +1268,232 @@
       );
     });
 
-    /* Sincronizacion del deslizador de velocidad de escena */
+    /* Sincronizacion contextual del deslizador de velocidad de escena */
+    const speedContainer = document.getElementById("scene-speed-container");
     const speedSlider = document.getElementById("scene-speed-slider");
     const speedOutput = document.getElementById("scene-speed-output");
     const activeSceneObj = appState.scenes.find((s) => s.scene_id === st.scene_id);
+    const isDynamicSpeedSupported = Boolean(
+      st.mode === "scene" &&
+      activeSceneObj &&
+      activeSceneObj.supports_speed &&
+      appState.sceneCategory !== "white"
+    );
+    if (speedContainer) {
+      speedContainer.classList.toggle("is-disabled", !isDynamicSpeedSupported);
+    }
     if (speedSlider && speedOutput) {
       speedSlider.value = String(st.speed || 100);
       speedOutput.textContent = String(st.speed || 100);
-      speedSlider.disabled = !(st.mode === "scene" && activeSceneObj && activeSceneObj.supports_speed);
+      speedSlider.disabled = !isDynamicSpeedSupported;
+      updateSliderFill(speedSlider);
     }
   }
 
-  /* Renderiza la cuadricula de las 36 escenas nativas de WiZ */
+  /* Actualiza los contadores en cada pildora de filtro de categoria de escenas */
+  function updateSceneCategoryCounts() {
+    const countByCat = (cat) => appState.scenes.filter((s) => s.category === cat).length;
+    const favCount = appState.favoriteSceneIds.length;
+
+    const favLabel = document.getElementById("scene-cat-favorites-label");
+    if (favLabel) {
+      favLabel.textContent = t("scenes.catFavoritesCount", { count: favCount });
+    }
+
+    const catKeyMap = {
+      all: { key: "scenes.catAllCount", count: appState.scenes.length },
+      white: { key: "scenes.catWhiteCount", count: countByCat("white") },
+      ambient: { key: "scenes.catAmbientCount", count: countByCat("ambient") },
+      nature: { key: "scenes.catNatureCount", count: countByCat("nature") },
+      dynamic: { key: "scenes.catDynamicCount", count: countByCat("dynamic") },
+      holiday: { key: "scenes.catHolidayCount", count: countByCat("holiday") }
+    };
+
+    document.querySelectorAll("#scene-category-bar .scene-filter").forEach((btn) => {
+      const cat = btn.dataset.category;
+      if (cat && catKeyMap[cat]) {
+        btn.textContent = t(catKeyMap[cat].key, { count: catKeyMap[cat].count });
+      }
+    });
+  }
+
+  /* Renderiza la cuadricula de las 36 escenas nativas de WiZ con indicadores cromaticos y favoritos */
   function renderScenesGrid() {
     const grid = document.getElementById("scenes-grid");
+    updateSceneCategoryCounts();
     if (!grid) return;
 
     const primary = getPrimaryBulb();
     const activeSceneId =
       primary && primary.state.mode === "scene" ? primary.state.scene_id : null;
 
-    const filtered = appState.scenes.filter((scene) =>
-      appState.sceneCategory === "all" ? true : scene.category === appState.sceneCategory
+    /* Sincroniza tambien el estado contextual del contenedor de velocidad al cambiar de filtro */
+    const speedContainer = document.getElementById("scene-speed-container");
+    const speedSlider = document.getElementById("scene-speed-slider");
+    const activeSceneObj = appState.scenes.find((s) => s.scene_id === activeSceneId);
+    const isDynamicSpeedSupported = Boolean(
+      activeSceneObj &&
+      activeSceneObj.supports_speed &&
+      appState.sceneCategory !== "white"
     );
+    if (speedContainer) {
+      speedContainer.classList.toggle("is-disabled", !isDynamicSpeedSupported);
+    }
+    if (speedSlider) {
+      speedSlider.disabled = !isDynamicSpeedSupported;
+    }
+
+    let filtered = [];
+    if (appState.sceneCategory === "favorites") {
+      filtered = appState.scenes.filter((scene) =>
+        appState.favoriteSceneIds.includes(scene.scene_id)
+      );
+    } else if (appState.sceneCategory === "all") {
+      /* En la vista Todas (36), las escenas favoritas fijadas aparecen primero */
+      filtered = appState.scenes.slice().sort((a, b) => {
+        const aFav = appState.favoriteSceneIds.includes(a.scene_id) ? 0 : 1;
+        const bFav = appState.favoriteSceneIds.includes(b.scene_id) ? 0 : 1;
+        if (aFav !== bFav) return aFav - bFav;
+        return a.scene_id - b.scene_id;
+      });
+    } else {
+      filtered = appState.scenes.filter((scene) => scene.category === appState.sceneCategory);
+    }
 
     grid.replaceChildren();
 
+    if (filtered.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-fixtures-state";
+      const p = document.createElement("p");
+      p.textContent = t("scenes.emptyFavorites");
+      empty.appendChild(p);
+      grid.appendChild(empty);
+      return;
+    }
+
     filtered.forEach((scene) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `scene-card${activeSceneId === scene.scene_id ? " active" : ""}`;
+      const isSceneActive = activeSceneId === scene.scene_id;
+      const isFav = appState.favoriteSceneIds.includes(scene.scene_id);
+      const displayName = formatSceneDisplayName(scene);
+      const chroma = SCENE_CHROMATIC_MAP[scene.scene_id] || {
+        accent: SCENE_CATEGORY_COLORS[scene.category] || "#38bdf8",
+        gradient: SCENE_CATEGORY_COLORS[scene.category] || "#38bdf8"
+      };
+
+      const card = document.createElement("article");
+      card.className = `scene-card${isSceneActive ? " active" : ""}`;
+      card.setAttribute("role", "button");
+      card.tabIndex = 0;
+      card.style.setProperty("--scene-accent", chroma.accent);
+      card.style.setProperty("--scene-gradient", chroma.gradient);
 
       const top = document.createElement("div");
       top.className = "scene-card-top";
+
+      const idGroup = document.createElement("div");
+      idGroup.className = "scene-card-id-group";
+
+      const colorDot = document.createElement("span");
+      colorDot.className = "scene-color-dot";
+      colorDot.setAttribute("aria-hidden", "true");
 
       const idBadge = document.createElement("span");
       idBadge.className = "scene-id-badge";
       idBadge.textContent = `#${String(scene.scene_id).padStart(2, "0")}`;
 
+      idGroup.append(colorDot, idBadge);
+
+      const badgesGroup = document.createElement("div");
+      badgesGroup.className = "scene-card-badges";
+
+      if (isSceneActive) {
+        const activeBadge = document.createElement("span");
+        activeBadge.className = "scene-active-badge";
+        activeBadge.textContent = t("scenes.badgeActive");
+        badgesGroup.appendChild(activeBadge);
+      }
+
       const tag = document.createElement("span");
       tag.className = "scene-tag";
-      tag.textContent = scene.supports_speed ? "Dynamic" : "Static";
+      tag.textContent = scene.supports_speed ? t("scenes.tagDynamic") : t("scenes.tagStatic");
+      badgesGroup.appendChild(tag);
 
-      top.append(idBadge, tag);
+      top.append(idGroup, badgesGroup);
+
+      const bottom = document.createElement("div");
+      bottom.className = "scene-card-bottom";
 
       const title = document.createElement("p");
       title.className = "scene-name";
-      title.textContent = scene.name;
+      title.textContent = displayName;
 
-      btn.append(top, title);
-      btn.addEventListener("click", () => {
-        const speedSlider = document.getElementById("scene-speed-slider");
-        const speedVal = scene.supports_speed && speedSlider ? Number(speedSlider.value) : null;
-        invokeApi(
-          () => backendApi.set_builtin_scene(scene.scene_id, speedVal, null, null),
-          `Activated scene #${scene.scene_id}: ${scene.name}.`
+      const favBtn = document.createElement("button");
+      favBtn.type = "button";
+      favBtn.className = `scene-fav-btn${isFav ? " is-fav" : ""}`;
+      favBtn.setAttribute("aria-pressed", String(isFav));
+      const favLabel = t(isFav ? "scenes.favRemoveAria" : "scenes.favAddAria", {
+        name: displayName
+      });
+      favBtn.title = favLabel;
+      favBtn.setAttribute("aria-label", favLabel);
+
+      const starSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      starSvg.setAttribute("class", "icon");
+      starSvg.setAttribute("viewBox", "0 0 20 20");
+      starSvg.setAttribute("fill", isFav ? "currentColor" : "none");
+      starSvg.setAttribute("aria-hidden", "true");
+      const starPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      starPath.setAttribute(
+        "d",
+        "M10 2.75l2.18 4.42 4.88.71-3.53 3.44.83 4.86L10 13.88l-4.36 2.3.83-4.86-3.53-3.44 4.88-.71L10 2.75Z"
+      );
+      starPath.setAttribute("stroke", "currentColor");
+      starPath.setAttribute("stroke-width", "1.5");
+      starPath.setAttribute("stroke-linejoin", "round");
+      starSvg.appendChild(starPath);
+      favBtn.appendChild(starSvg);
+
+      favBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const exists = appState.favoriteSceneIds.includes(scene.scene_id);
+        if (exists) {
+          appState.favoriteSceneIds = appState.favoriteSceneIds.filter(
+            (id) => id !== scene.scene_id
+          );
+        } else {
+          appState.favoriteSceneIds.push(scene.scene_id);
+        }
+        saveFavoriteSceneIds(appState.favoriteSceneIds);
+        renderScenesGrid();
+        setStatusMessage(
+          t(exists ? "status.sceneFavRemoved" : "status.sceneFavAdded", { name: displayName })
         );
       });
 
-      grid.appendChild(btn);
+      bottom.append(title, favBtn);
+      card.append(top, bottom);
+
+      const activateScene = () => {
+        const speedInput = document.getElementById("scene-speed-slider");
+        const speedVal = scene.supports_speed && speedInput ? Number(speedInput.value) : null;
+        invokeApi(
+          () => backendApi.set_builtin_scene(scene.scene_id, speedVal, null, null),
+          () => t("status.sceneActivated", { id: scene.scene_id, name: displayName })
+        );
+      };
+
+      card.addEventListener("click", activateScene);
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          activateScene();
+        }
+      });
+
+      grid.appendChild(card);
     });
   }
 
@@ -1082,26 +1518,39 @@
     }
   }
 
-  /* Actualiza la barra visual del Sleep Timer y el estado del boton Cancelar */
+  /* Actualiza la barra visual colapsable del Sleep Timer y el estado contextual del boton Cancelar */
   function renderSleepTimer() {
+    const detailsEl = document.getElementById("sleep-timer-details");
     const badge = document.getElementById("sleep-timer-badge");
     const cancelBtn = document.getElementById("cancel-sleep-timer-btn");
     const timer = appState.sleepTimer || { active: false, remaining_seconds: 0, total_seconds: 0 };
 
+    if (detailsEl && timer.active) {
+      detailsEl.open = true;
+    }
+
     if (badge) {
       badge.setAttribute("data-active", String(Boolean(timer.active)));
+      badge.setAttribute("data-live", String(Boolean(timer.active)));
       if (timer.active) {
         const fadeThreshold = Math.ceil((timer.total_seconds || 0) * 0.3);
         const inFadePhase = timer.remaining_seconds <= fadeThreshold;
-        const phaseLabel = inFadePhase ? "Progressive fade active" : "Steady countdown";
-        badge.textContent = `Sleep timer: ${formatCountdown(timer.remaining_seconds)} remaining · ${phaseLabel}`;
+        const phaseLabel = inFadePhase ? t("sleep.phaseFade") : t("sleep.phaseSteady");
+        badge.textContent = t("sleep.badgeActive", {
+          countdown: formatCountdown(timer.remaining_seconds),
+          phase: phaseLabel
+        });
       } else {
-        badge.textContent = "Timer inactive";
+        badge.textContent = t("sleep.badgeInactive");
       }
     }
 
     if (cancelBtn) {
       cancelBtn.disabled = !timer.active;
+      cancelBtn.classList.toggle("is-active-alert", Boolean(timer.active));
+      cancelBtn.textContent = timer.active
+        ? t("sleep.cancelBtnActive", { countdown: formatCountdown(timer.remaining_seconds) })
+        : t("sleep.cancelBtn");
     }
   }
 
@@ -1125,11 +1574,17 @@
       monitor_index: 1,
       color_mode: "vibrant",
       auto_brightness: true,
+      min_brightness: 10,
       brightness: 85,
       smoothing_alpha: 0.38,
       last_color: null,
       frames_sent: 0
     };
+
+    const tabDot = document.getElementById("tab-ambilight-dot");
+    if (tabDot) {
+      tabDot.hidden = !ambi.active;
+    }
 
     const monitorSelect = document.getElementById("ambilight-monitor-select");
     if (monitorSelect && Array.isArray(appState.monitors) && appState.monitors.length > 0) {
@@ -1150,12 +1605,17 @@
     const badge = document.getElementById("ambilight-status-badge");
     if (badge) {
       badge.setAttribute("data-active", String(Boolean(ambi.active)));
-      badge.textContent = ambi.active ? "STREAMING 10 HZ" : "STANDBY";
+      badge.setAttribute("data-live", String(Boolean(ambi.active)));
+      badge.textContent = ambi.active ? t("ambi.statusLive") : t("ambi.statusStandby");
     }
 
     const framesEl = document.getElementById("ambilight-frames-readout");
     if (framesEl) {
-      framesEl.textContent = `${ambi.frames_sent || 0} frames sent`;
+      const fps = computeLiveFps(appState.ambiTelemetry, Boolean(ambi.active), ambi.frames_sent, 10);
+      framesEl.textContent = t("ambi.telemetryFpsFrames", {
+        fps,
+        count: ambi.frames_sent || 0
+      });
     }
 
     const swatch = document.getElementById("ambilight-preview-swatch");
@@ -1179,7 +1639,7 @@
     const toggleLabel = document.getElementById("toggle-ambilight-label");
     if (toggleBtn && toggleLabel) {
       toggleBtn.setAttribute("aria-pressed", String(Boolean(ambi.active)));
-      toggleLabel.textContent = ambi.active ? "Stop Ambilight" : "Start Ambilight";
+      toggleLabel.textContent = ambi.active ? t("ambi.stopBtn") : t("ambi.startBtn");
     }
 
     document.querySelectorAll(".ambilight-mode-btn").forEach((btn) => {
@@ -1191,11 +1651,27 @@
     if (alphaSlider && alphaOutput && typeof ambi.smoothing_alpha === "number") {
       alphaSlider.value = String(ambi.smoothing_alpha);
       alphaOutput.textContent = Number(ambi.smoothing_alpha).toFixed(2);
+      updateSliderFill(alphaSlider);
     }
 
     const autoBrightnessCheckbox = document.getElementById("ambilight-auto-brightness");
     if (autoBrightnessCheckbox && typeof ambi.auto_brightness === "boolean") {
       autoBrightnessCheckbox.checked = ambi.auto_brightness;
+    }
+
+    const minBriRow = document.getElementById("ambilight-min-brightness-row");
+    const minBriSlider = document.getElementById("ambilight-min-brightness-slider");
+    const minBriOutput = document.getElementById("ambilight-min-brightness-output");
+    const isAutoBri = Boolean(ambi.auto_brightness ?? true);
+    const floorVal = clampInt(ambi.min_brightness != null ? ambi.min_brightness : 10, 5, 20);
+    if (minBriRow) {
+      minBriRow.classList.toggle("is-disabled", !isAutoBri);
+    }
+    if (minBriSlider && minBriOutput) {
+      minBriSlider.value = String(floorVal);
+      minBriSlider.disabled = !isAutoBri;
+      minBriOutput.textContent = `${floorVal}%`;
+      updateSliderFill(minBriSlider);
     }
   }
 
@@ -1230,6 +1706,11 @@
       frames_sent: 0
     };
 
+    const tabDot = document.getElementById("tab-music-dot");
+    if (tabDot) {
+      tabDot.hidden = !music.active;
+    }
+
     const devSelect = document.getElementById("music-device-select");
     if (devSelect && Array.isArray(appState.audioDevices) && appState.audioDevices.length > 0) {
       const currentOpts = Array.from(devSelect.options)
@@ -1253,12 +1734,17 @@
     const badge = document.getElementById("music-status-badge");
     if (badge) {
       badge.setAttribute("data-active", String(Boolean(music.active)));
-      badge.textContent = music.active ? "WASAPI 10.5 HZ" : "STANDBY";
+      badge.setAttribute("data-live", String(Boolean(music.active)));
+      badge.textContent = music.active ? t("music.statusLive") : t("music.statusStandby");
     }
 
     const framesEl = document.getElementById("music-frames-readout");
     if (framesEl) {
-      framesEl.textContent = `${music.frames_sent || 0} frames sent`;
+      const fps = computeLiveFps(appState.musicTelemetry, Boolean(music.active), music.frames_sent, 11);
+      framesEl.textContent = t("music.telemetryFpsFrames", {
+        fps,
+        count: music.frames_sent || 0
+      });
     }
 
     const swatch = document.getElementById("music-preview-swatch");
@@ -1278,6 +1764,13 @@
       }
     }
 
+    if (swatch) {
+      const peak = Math.max(Number(music.bass) || 0, Number(music.mid) || 0, Number(music.rms) || 0);
+      const sens = Math.max(0.4, Number(music.sensitivity) || 1.0);
+      const beatThreshold = Math.max(0.22, Math.min(0.85, 0.62 / sens));
+      swatch.classList.toggle("is-beat-peak", Boolean(music.active && peak >= beatThreshold));
+    }
+
     const setMeter = (bandName, ratio) => {
       const pct = clampInt(Math.round((Number(ratio) || 0) * 100), 0, 100);
       const fill = document.getElementById(`music-meter-${bandName}-fill`);
@@ -1295,7 +1788,7 @@
     const toggleLabel = document.getElementById("toggle-music-label");
     if (toggleBtn && toggleLabel) {
       toggleBtn.setAttribute("aria-pressed", String(Boolean(music.active)));
-      toggleLabel.textContent = music.active ? "Stop Music Sync" : "Start Music Sync";
+      toggleLabel.textContent = music.active ? t("music.stopBtn") : t("music.startBtn");
     }
 
     document.querySelectorAll(".music-palette-btn").forEach((btn) => {
@@ -1307,6 +1800,7 @@
     if (sensSlider && sensOutput && typeof music.sensitivity === "number") {
       sensSlider.value = String(music.sensitivity);
       sensOutput.textContent = `${Number(music.sensitivity).toFixed(1)}x`;
+      updateSliderFill(sensSlider);
     }
 
     const alphaSlider = document.getElementById("music-smoothing-slider");
@@ -1314,6 +1808,7 @@
     if (alphaSlider && alphaOutput && typeof music.smoothing_alpha === "number") {
       alphaSlider.value = String(music.smoothing_alpha);
       alphaOutput.textContent = Number(music.smoothing_alpha).toFixed(2);
+      updateSliderFill(alphaSlider);
     }
 
     const audioBriCheckbox = document.getElementById("music-audio-brightness");
@@ -1327,7 +1822,7 @@
     const grid = document.getElementById("custom-scenes-grid");
     const tabLabel = document.getElementById("custom-tab-label");
     if (tabLabel) {
-      tabLabel.textContent = `Custom Presets (${appState.customScenes.length})`;
+      tabLabel.textContent = t("tabs.customWithCount", { count: appState.customScenes.length });
     }
     if (!grid) return;
 
@@ -1337,9 +1832,9 @@
       const empty = document.createElement("div");
       empty.className = "empty-fixtures-state";
       const p1 = document.createElement("p");
-      p1.textContent = "No custom presets saved yet.";
+      p1.textContent = t("custom.emptyTitle");
       const p2 = document.createElement("p");
-      p2.textContent = "Configure any color, Kelvin temperature, or scene and click Save current state.";
+      p2.textContent = t("custom.emptySubtitle");
       empty.append(p1, p2);
       grid.appendChild(empty);
       return;
@@ -1360,8 +1855,11 @@
         const bScene = appState.scenes.find((s) => s.scene_id === preset.built_in_scene_id);
         const cat = bScene ? bScene.category : "dynamic";
         swatchCss = SCENE_CATEGORY_COLORS[cat] || "#C084FC";
-        const sName = bScene ? bScene.name : `Scene #${preset.built_in_scene_id}`;
-        summaryText = `Scene: ${sName} · ${preset.brightness}%`;
+        const sName = bScene ? bScene.name : `#${preset.built_in_scene_id}`;
+        summaryText = t("custom.summaryScene", {
+          scene: sName,
+          brightness: preset.brightness
+        });
       } else {
         const k = preset.temperature || 4200;
         swatchCss = kelvinToCssColor(k);
@@ -1372,7 +1870,7 @@
       topArea.className = "custom-scene-top";
       topArea.setAttribute("role", "button");
       topArea.tabIndex = 0;
-      topArea.setAttribute("aria-label", `Apply preset ${preset.name}`);
+      topArea.setAttribute("aria-label", t("custom.applyAria", { name: preset.name }));
 
       const swatch = document.createElement("span");
       swatch.className = "custom-scene-swatch";
@@ -1396,7 +1894,7 @@
       const triggerApply = () => {
         invokeApi(
           () => backendApi.apply_custom_scene(preset.id, null),
-          `Applied custom preset "${preset.name}".`
+          () => t("status.presetApplied", { name: preset.name })
         );
       };
 
@@ -1417,8 +1915,8 @@
       favoriteBtn.className = `btn btn-compact btn-favorite${isFavorite ? " is-favorite" : ""}`;
       favoriteBtn.setAttribute("aria-pressed", String(isFavorite));
       favoriteBtn.title = isFavorite
-        ? "Remove from system tray Favorite presets"
-        : "Add to system tray Favorite presets";
+        ? t("custom.favoriteRemoveTitle")
+        : t("custom.favoriteAddTitle");
 
       const starSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       starSvg.setAttribute("class", "icon");
@@ -1436,38 +1934,39 @@
       starSvg.appendChild(starPath);
 
       const favoriteLabel = document.createElement("span");
-      favoriteLabel.textContent = isFavorite ? "Favorited" : "Favorite";
+      favoriteLabel.textContent = isFavorite ? t("custom.favoritedBtn") : t("custom.favoriteBtn");
       favoriteBtn.append(starSvg, favoriteLabel);
       favoriteBtn.addEventListener("click", () => {
         const nextFavorite = !isFavorite;
         invokeApi(
           () => backendApi.set_custom_scene_favorite(preset.id, nextFavorite),
-          nextFavorite
-            ? `Added "${preset.name}" to tray favorite presets.`
-            : `Removed "${preset.name}" from tray favorite presets.`
+          () =>
+            t(nextFavorite ? "status.favoriteAdded" : "status.favoriteRemoved", {
+              name: preset.name
+            })
         );
       });
 
       const applyBtn = document.createElement("button");
       applyBtn.type = "button";
       applyBtn.className = "btn btn-compact btn-primary";
-      applyBtn.textContent = "Apply";
+      applyBtn.textContent = t("custom.applyBtn");
       applyBtn.addEventListener("click", triggerApply);
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "btn btn-compact btn-secondary";
-      editBtn.textContent = "Edit";
+      editBtn.textContent = t("custom.editBtn");
       editBtn.addEventListener("click", () => openCustomSceneDialog(preset));
 
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "btn btn-compact btn-ghost";
-      deleteBtn.textContent = "Delete";
+      deleteBtn.textContent = t("custom.deleteBtn");
       deleteBtn.addEventListener("click", () => {
         invokeApi(
           () => backendApi.delete_custom_scene(preset.id),
-          `Deleted preset "${preset.name}".`
+          () => t("status.presetDeleted", { name: preset.name })
         );
       });
 
@@ -1493,19 +1992,19 @@
     if (existingPreset) {
       idInput.value = existingPreset.id;
       nameInput.value = existingPreset.name;
-      if (titleEl) titleEl.textContent = "Edit Custom Preset";
-      if (subtitleEl) subtitleEl.textContent = "Rename this preset or overwrite its parameters with the current fixture state.";
+      if (titleEl) titleEl.textContent = t("dialog.presetEditTitle");
+      if (subtitleEl) subtitleEl.textContent = t("dialog.presetEditSubtitle");
       if (overwriteRow) overwriteRow.hidden = false;
       if (overwriteCheckbox) overwriteCheckbox.checked = false;
-      if (submitBtn) submitBtn.textContent = "Update Preset";
+      if (submitBtn) submitBtn.textContent = t("dialog.presetUpdateSubmit");
     } else {
       idInput.value = "";
       nameInput.value = "";
-      if (titleEl) titleEl.textContent = "Save Custom Preset";
-      if (subtitleEl) subtitleEl.textContent = "Snapshots the active fixture state into local persistent storage.";
+      if (titleEl) titleEl.textContent = t("dialog.presetSaveTitle");
+      if (subtitleEl) subtitleEl.textContent = t("dialog.presetSaveSubtitle");
       if (overwriteRow) overwriteRow.hidden = true;
       if (overwriteCheckbox) overwriteCheckbox.checked = false;
-      if (submitBtn) submitBtn.textContent = "Save Preset";
+      if (submitBtn) submitBtn.textContent = t("dialog.presetSaveSubmit");
     }
 
     dialog.showModal();
@@ -1520,7 +2019,9 @@
       const response = await callFn();
       applyBackendEnvelope(response, successMessage);
     } catch (err) {
-      setStatusMessage(`Communication error: ${err && err.message ? err.message : String(err)}`);
+      setStatusMessage(
+        t("status.commError", { error: err && err.message ? err.message : String(err) })
+      );
     }
   }
 
@@ -1528,7 +2029,7 @@
   function refreshStates(statusMessage) {
     return invokeApi(
       () => backendApi.refresh_states(),
-      statusMessage || "Synchronized state from system tray."
+      statusMessage || (() => t("status.syncedTray"))
     );
   }
 
@@ -1565,7 +2066,9 @@
 
     ipInput.value = bulb.ip;
     nameInput.value = bulb.name;
-    if (ipDisplay) ipDisplay.textContent = `Fixture IP: ${bulb.ip} (${bulb.mac})`;
+    if (ipDisplay) {
+      ipDisplay.textContent = t("dialog.renameIpDisplay", { ip: bulb.ip, mac: bulb.mac });
+    }
     dialog.showModal();
     nameInput.focus();
     nameInput.select();
@@ -1602,21 +2105,44 @@
     });
   }
 
-  /* Vincula eventos de la rueda de color, deslizadores y formularios */
+  /* Vincula eventos de la rueda de color, deslizadores, selector de idioma y formularios */
   function bindEvents() {
     setupDialogLightDismissFallbacks();
+
+    /* Selector segmentado de idioma (EN | ES) */
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetLang = btn.getAttribute("data-lang") || "en";
+        if (backendApi && typeof backendApi.set_language === "function") {
+          invokeApi(
+            () => backendApi.set_language(targetLang),
+            () => t("status.languageChanged")
+          );
+        } else {
+          syncLanguageUi(targetLang);
+          renderFixtureList();
+          renderStageHeaderAndControls();
+          renderSleepTimer();
+          renderScenesGrid();
+          renderCustomScenesGrid();
+          renderAmbilightPanel();
+          renderMusicPanel();
+          setStatusMessage(t("status.languageChanged"));
+        }
+      });
+    });
 
     /* Escaneo de red y dialogo de alta por IP */
     const scanBtn = document.getElementById("scan-network-btn");
     const scanLabel = document.getElementById("scan-btn-label");
     if (scanBtn) {
       scanBtn.addEventListener("click", async () => {
-        if (scanLabel) scanLabel.textContent = "Scanning...";
+        if (scanLabel) scanLabel.textContent = t("rail.scanningBtn");
         scanBtn.disabled = true;
         try {
-          await invokeApi(() => backendApi.discover_bulbs(), "Network scan completed.");
+          await invokeApi(() => backendApi.discover_bulbs(), () => t("status.scanDone"));
         } finally {
-          if (scanLabel) scanLabel.textContent = "Scan network";
+          if (scanLabel) scanLabel.textContent = t("rail.scanBtn");
           scanBtn.disabled = false;
         }
       });
@@ -1644,7 +2170,10 @@
         addDialog.close();
         if (ipInput) ipInput.value = "";
         if (nameInput) nameInput.value = "";
-        invokeApi(() => backendApi.add_manual_bulb(ip, name), `Registered fixture at ${ip}.`);
+        invokeApi(
+          () => backendApi.add_manual_bulb(ip, name),
+          () => t("status.registeredIp", { ip })
+        );
       });
     }
 
@@ -1659,7 +2188,10 @@
         const newName = nameInput ? nameInput.value.trim() : "";
         if (!ip || !newName) return;
         renameDialog.close();
-        invokeApi(() => backendApi.rename_bulb(ip, newName), `Renamed ${ip} to "${newName}".`);
+        invokeApi(
+          () => backendApi.rename_bulb(ip, newName),
+          () => t("status.renamedBulb", { ip, name: newName })
+        );
       });
     }
 
@@ -1668,7 +2200,10 @@
     if (selectAll) {
       selectAll.addEventListener("change", () => {
         const nextIps = selectAll.checked ? appState.bulbs.map((b) => b.ip) : [];
-        invokeApi(() => backendApi.select_targets(nextIps), "Updated multi-fixture selection.");
+        invokeApi(
+          () => backendApi.select_targets(nextIps),
+          () => t("status.multiSelectionUpdated")
+        );
       });
     }
 
@@ -1676,7 +2211,7 @@
     const syncNowBtn = document.getElementById("sync-now-btn");
     if (syncNowBtn) {
       syncNowBtn.addEventListener("click", () => {
-        invokeApi(() => backendApi.refresh_states(), "Synchronized live state from UDP getPilot.");
+        invokeApi(() => backendApi.refresh_states(), () => t("status.syncedLive"));
       });
     }
 
@@ -1689,11 +2224,11 @@
         }
         if (autoSyncToggle.checked) {
           appState.autoSyncTimer = setInterval(() => {
-            invokeApi(() => backendApi.refresh_states(), "Auto-synced live bulb telemetry.");
+            invokeApi(() => backendApi.refresh_states(), () => t("status.autoSyncStep"));
           }, 3000);
-          setStatusMessage("Auto-sync enabled (polling UDP getPilot every 3s).");
+          setStatusMessage(t("status.autoSyncEnabled"));
         } else {
-          setStatusMessage("Auto-sync paused.");
+          setStatusMessage(t("status.autoSyncPaused"));
         }
       });
     }
@@ -1706,7 +2241,7 @@
         const nextPower = primary ? !primary.state.is_on : true;
         invokeApi(
           () => backendApi.set_power(nextPower, null, null),
-          `Master power turned ${nextPower ? "ON" : "OFF"}.`
+          () => t(nextPower ? "status.masterTurnedOn" : "status.masterTurnedOff")
         );
       });
     }
@@ -1717,19 +2252,30 @@
     if (brightnessSlider && brightnessOutput) {
       brightnessSlider.addEventListener("input", () => {
         brightnessOutput.textContent = `${brightnessSlider.value}%`;
+        updateSliderFill(brightnessSlider);
       });
       brightnessSlider.addEventListener("change", () => {
         const val = clampInt(brightnessSlider.value, 10, 100);
-        invokeApi(() => backendApi.set_brightness(val, null), `Set brightness to ${val}%.`);
+        updateSliderFill(brightnessSlider);
+        invokeApi(
+          () => backendApi.set_brightness(val, null),
+          () => t("status.brightnessSet", { brightness: val })
+        );
       });
     }
 
     document.querySelectorAll(".brightness-preset").forEach((btn) => {
       btn.addEventListener("click", () => {
         const val = clampInt(btn.dataset.brightness, 10, 100);
-        if (brightnessSlider) brightnessSlider.value = String(val);
+        if (brightnessSlider) {
+          brightnessSlider.value = String(val);
+          updateSliderFill(brightnessSlider);
+        }
         if (brightnessOutput) brightnessOutput.textContent = `${val}%`;
-        invokeApi(() => backendApi.set_brightness(val, null), `Set brightness to ${val}%.`);
+        invokeApi(
+          () => backendApi.set_brightness(val, null),
+          () => t("status.brightnessSet", { brightness: val })
+        );
       });
     });
 
@@ -1747,10 +2293,19 @@
       });
     });
 
-    /* Interaccion con la rueda de color HSV */
+    /* Interaccion con la rueda de color HSV con envio en tiempo real (~70ms throttle) */
+    const WHEEL_THROTTLE_MS = 70;
     const canvas = document.getElementById("color-wheel-canvas");
     if (canvas) {
-      const pickColorFromPointer = (clientX, clientY, commitToBulb) => {
+      const dispatchWheelRgb = (rgb, isFinalCommit) => {
+        if (!backendApi) return;
+        invokeApi(
+          () => backendApi.set_color(rgb.r, rgb.g, rgb.b, null, null),
+          isFinalCommit ? () => t("status.rgbApplied", { r: rgb.r, g: rgb.g, b: rgb.b }) : null
+        );
+      };
+
+      const pickColorFromPointer = (clientX, clientY, commitImmediate) => {
         const rect = canvas.getBoundingClientRect();
         const radius = rect.width / 2;
         const dx = clientX - (rect.left + radius);
@@ -1771,16 +2326,41 @@
         if (hexIn) hexIn.value = rgbToHex(rgb.r, rgb.g, rgb.b);
 
         positionReticleFromRgb(rgb.r, rgb.g, rgb.b);
-        document.documentElement.style.setProperty(
-          "--beam-color",
-          `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
-        );
+        const beamCss = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+        document.documentElement.style.setProperty("--beam-color", beamCss);
+        const aperture = document.getElementById("photometric-aperture");
+        if (aperture) {
+          aperture.style.backgroundColor = beamCss;
+        }
 
-        if (commitToBulb) {
-          invokeApi(
-            () => backendApi.set_color(rgb.r, rgb.g, rgb.b, null, null),
-            `Applied RGB (${rgb.r}, ${rgb.g}, ${rgb.b}).`
-          );
+        if (commitImmediate) {
+          if (appState.wheelThrottleTimer) {
+            clearTimeout(appState.wheelThrottleTimer);
+            appState.wheelThrottleTimer = null;
+          }
+          appState.lastWheelSendMs = Date.now();
+          dispatchWheelRgb(rgb, true);
+          return;
+        }
+
+        const now = Date.now();
+        const elapsed = now - appState.lastWheelSendMs;
+        if (elapsed >= WHEEL_THROTTLE_MS) {
+          if (appState.wheelThrottleTimer) {
+            clearTimeout(appState.wheelThrottleTimer);
+            appState.wheelThrottleTimer = null;
+          }
+          appState.lastWheelSendMs = now;
+          dispatchWheelRgb(rgb, false);
+        } else {
+          if (appState.wheelThrottleTimer) {
+            clearTimeout(appState.wheelThrottleTimer);
+          }
+          appState.wheelThrottleTimer = setTimeout(() => {
+            appState.wheelThrottleTimer = null;
+            appState.lastWheelSendMs = Date.now();
+            dispatchWheelRgb(rgb, false);
+          }, WHEEL_THROTTLE_MS - elapsed);
         }
       };
 
@@ -1800,6 +2380,14 @@
         appState.isDraggingWheel = false;
         pickColorFromPointer(event.clientX, event.clientY, true);
       });
+
+      canvas.addEventListener("pointercancel", () => {
+        if (appState.wheelThrottleTimer) {
+          clearTimeout(appState.wheelThrottleTimer);
+          appState.wheelThrottleTimer = null;
+        }
+        appState.isDraggingWheel = false;
+      });
     }
 
     /* Entradas numericas RGB y codigo Hex */
@@ -1812,7 +2400,7 @@
       positionReticleFromRgb(r, g, b);
       invokeApi(
         () => backendApi.set_color(r, g, b, null, null),
-        `Applied RGB (${r}, ${g}, ${b}).`
+        () => t("status.rgbApplied", { r, g, b })
       );
     };
 
@@ -1842,7 +2430,7 @@
         const b = clampInt(swatch.dataset.b, 0, 255);
         invokeApi(
           () => backendApi.set_color(r, g, b, null, null),
-          `Applied swatch RGB (${r}, ${g}, ${b}).`
+          () => t("status.swatchApplied", { r, g, b })
         );
       });
     });
@@ -1854,18 +2442,26 @@
       kelvinSlider.addEventListener("input", () => {
         const k = clampInt(kelvinSlider.value, 2200, 6500);
         kelvinOutput.textContent = `${k} K`;
+        updateSliderFill(kelvinSlider);
         document.documentElement.style.setProperty("--beam-color", kelvinToCssColor(k));
       });
       kelvinSlider.addEventListener("change", () => {
         const k = clampInt(kelvinSlider.value, 2200, 6500);
-        invokeApi(() => backendApi.set_temperature(k, null, null), `Set white balance to ${k} K.`);
+        updateSliderFill(kelvinSlider);
+        invokeApi(
+          () => backendApi.set_temperature(k, null, null),
+          () => t("status.kelvinSet", { kelvin: k })
+        );
       });
     }
 
     document.querySelectorAll(".kelvin-card").forEach((card) => {
       card.addEventListener("click", () => {
         const k = clampInt(card.dataset.kelvin, 2200, 6500);
-        invokeApi(() => backendApi.set_temperature(k, null, null), `Set white balance to ${k} K.`);
+        invokeApi(
+          () => backendApi.set_temperature(k, null, null),
+          () => t("status.kelvinSet", { kelvin: k })
+        );
       });
     });
 
@@ -1885,14 +2481,16 @@
     if (speedSlider && speedOutput) {
       speedSlider.addEventListener("input", () => {
         speedOutput.textContent = speedSlider.value;
+        updateSliderFill(speedSlider);
       });
       speedSlider.addEventListener("change", () => {
+        updateSliderFill(speedSlider);
         const primary = getPrimaryBulb();
         if (!primary || primary.state.mode !== "scene" || !primary.state.scene_id) return;
         const speed = clampInt(speedSlider.value, 10, 200);
         invokeApi(
           () => backendApi.set_builtin_scene(primary.state.scene_id, speed, null, null),
-          `Updated scene #${primary.state.scene_id} speed to ${speed}.`
+          () => t("status.sceneSpeedUpdated", { id: primary.state.scene_id, speed })
         );
       });
     }
@@ -1908,7 +2506,7 @@
         });
         invokeApi(
           () => backendApi.start_sleep_timer(mins, null),
-          `Sleep timer started for ${mins} min with progressive fade.`
+          () => t("status.sleepStarted", { minutes: mins })
         );
       });
     });
@@ -1920,7 +2518,7 @@
         if (sleepMinutesInput) sleepMinutesInput.value = String(mins);
         invokeApi(
           () => backendApi.start_sleep_timer(mins, null),
-          `Sleep timer started for ${mins} min with progressive fade.`
+          () => t("status.sleepStarted", { minutes: mins })
         );
       });
     }
@@ -1929,7 +2527,7 @@
     if (cancelTimerBtn) {
       cancelTimerBtn.addEventListener("click", () => {
         document.querySelectorAll(".sleep-preset-btn").forEach((b) => b.classList.remove("active"));
-        invokeApi(() => backendApi.cancel_sleep_timer(), "Sleep timer cancelled.");
+        invokeApi(() => backendApi.cancel_sleep_timer(), () => t("status.sleepCancelled"));
       });
     }
 
@@ -1962,13 +2560,13 @@
         if (sceneId) {
           invokeApi(
             () => backendApi.update_custom_scene(sceneId, name, captureCurrent),
-            `Updated custom preset "${name}".`
+            () => t("status.presetUpdated", { name })
           );
         } else {
           const primary = getPrimaryBulb();
           invokeApi(
             () => backendApi.save_custom_scene(name, primary ? primary.ip : null),
-            `Saved custom preset "${name}".`
+            () => t("status.presetSaved", { name })
           );
           activateTab("custom", false);
         }
@@ -1981,6 +2579,7 @@
       const activeModeBtn = document.querySelector(".ambilight-mode-btn.active");
       const alphaSlider = document.getElementById("ambilight-smoothing-slider");
       const autoBriCheckbox = document.getElementById("ambilight-auto-brightness");
+      const minBriSlider = document.getElementById("ambilight-min-brightness-slider");
       const briSlider = document.getElementById("brightness-slider");
 
       return {
@@ -1988,6 +2587,7 @@
         colorMode: activeModeBtn ? activeModeBtn.dataset.colorMode : "vibrant",
         smoothingAlpha: Number(alphaSlider ? alphaSlider.value : 0.38),
         autoBrightness: Boolean(autoBriCheckbox ? autoBriCheckbox.checked : true),
+        minBrightness: clampInt(minBriSlider ? minBriSlider.value : 10, 5, 20),
         brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100)
       };
     };
@@ -2002,7 +2602,8 @@
             p.autoBrightness,
             p.brightness,
             p.smoothingAlpha,
-            null
+            null,
+            p.minBrightness
           ),
         statusMsg
       );
@@ -2012,9 +2613,9 @@
     if (toggleAmbilightBtn) {
       toggleAmbilightBtn.addEventListener("click", () => {
         if (appState.ambilight && appState.ambilight.active) {
-          invokeApi(() => backendApi.stop_ambilight(), "Ambilight screen sync stopped.");
+          invokeApi(() => backendApi.stop_ambilight(), () => t("status.ambiStopped"));
         } else {
-          startOrUpdateAmbilight("Ambilight screen sync active (10 Hz).");
+          startOrUpdateAmbilight(() => t("status.ambiStarted"));
         }
       });
     }
@@ -2024,7 +2625,9 @@
       monitorSelect.addEventListener("change", () => {
         appState.ambilight.monitor_index = Number(monitorSelect.value);
         if (appState.ambilight.active) {
-          startOrUpdateAmbilight(`Ambilight switched to Display ${monitorSelect.value}.`);
+          startOrUpdateAmbilight(() =>
+            t("status.ambiDisplaySwitched", { display: monitorSelect.value })
+          );
         }
       });
     }
@@ -2036,7 +2639,9 @@
         });
         appState.ambilight.color_mode = btn.dataset.colorMode || "vibrant";
         if (appState.ambilight.active) {
-          startOrUpdateAmbilight(`Ambilight extraction mode set to ${appState.ambilight.color_mode}.`);
+          startOrUpdateAmbilight(() =>
+            t("status.ambiModeChanged", { mode: appState.ambilight.color_mode })
+          );
         }
       });
     });
@@ -2046,25 +2651,53 @@
     if (alphaSlider && alphaOutput) {
       alphaSlider.addEventListener("input", () => {
         alphaOutput.textContent = Number(alphaSlider.value).toFixed(2);
+        updateSliderFill(alphaSlider);
       });
       alphaSlider.addEventListener("change", () => {
+        updateSliderFill(alphaSlider);
         appState.ambilight.smoothing_alpha = Number(alphaSlider.value);
         if (appState.ambilight.active) {
-          startOrUpdateAmbilight(`Ambilight EMA smoothing set to ${Number(alphaSlider.value).toFixed(2)}.`);
+          startOrUpdateAmbilight(() =>
+            t("status.ambiSmoothingChanged", {
+              alpha: Number(alphaSlider.value).toFixed(2)
+            })
+          );
         }
       });
     }
 
     const autoBrightnessCheckbox = document.getElementById("ambilight-auto-brightness");
+    const minBriRow = document.getElementById("ambilight-min-brightness-row");
+    const minBriSlider = document.getElementById("ambilight-min-brightness-slider");
+    const minBriOutput = document.getElementById("ambilight-min-brightness-output");
     if (autoBrightnessCheckbox) {
       autoBrightnessCheckbox.addEventListener("change", () => {
-        appState.ambilight.auto_brightness = autoBrightnessCheckbox.checked;
+        const isChecked = autoBrightnessCheckbox.checked;
+        appState.ambilight.auto_brightness = isChecked;
+        if (minBriRow) minBriRow.classList.toggle("is-disabled", !isChecked);
+        if (minBriSlider) minBriSlider.disabled = !isChecked;
         if (appState.ambilight.active) {
-          startOrUpdateAmbilight(
-            autoBrightnessCheckbox.checked
-              ? "Ambilight automatic screen luminance enabled."
-              : "Ambilight using manual brightness ceiling."
+          startOrUpdateAmbilight(() =>
+            t(isChecked ? "status.ambiAutoBriOn" : "status.ambiAutoBriOff")
           );
+        }
+      });
+    }
+
+    if (minBriSlider && minBriOutput) {
+      minBriSlider.addEventListener("input", () => {
+        const val = clampInt(minBriSlider.value, 5, 20);
+        minBriOutput.textContent = `${val}%`;
+        updateSliderFill(minBriSlider);
+      });
+      minBriSlider.addEventListener("change", () => {
+        const val = clampInt(minBriSlider.value, 5, 20);
+        updateSliderFill(minBriSlider);
+        appState.ambilight.min_brightness = val;
+        if (appState.ambilight.active) {
+          startOrUpdateAmbilight(() => t("status.ambiMinBriChanged", { floor: val }));
+        } else {
+          setStatusMessage(t("status.ambiMinBriChanged", { floor: val }));
         }
       });
     }
@@ -2110,9 +2743,9 @@
     if (toggleMusicBtn) {
       toggleMusicBtn.addEventListener("click", () => {
         if (appState.musicSync && appState.musicSync.active) {
-          invokeApi(() => backendApi.stop_music_sync(), "Music sync stopped.");
+          invokeApi(() => backendApi.stop_music_sync(), () => t("status.musicStopped"));
         } else {
-          startOrUpdateMusicSync("Music sync active (WASAPI Loopback 10.5 Hz).");
+          startOrUpdateMusicSync(() => t("status.musicStarted"));
         }
       });
     }
@@ -2123,7 +2756,7 @@
         const val = Number(musicDevSelect.value);
         appState.musicSync.device_index = val >= 0 ? val : null;
         if (appState.musicSync.active) {
-          startOrUpdateMusicSync("Switched WASAPI loopback audio device.");
+          startOrUpdateMusicSync(() => t("status.musicDeviceSwitched"));
         }
       });
     }
@@ -2135,7 +2768,9 @@
         });
         appState.musicSync.palette_mode = btn.dataset.paletteMode || "spectrum";
         if (appState.musicSync.active) {
-          startOrUpdateMusicSync(`Music palette set to ${appState.musicSync.palette_mode}.`);
+          startOrUpdateMusicSync(() =>
+            t("status.musicPaletteChanged", { palette: appState.musicSync.palette_mode })
+          );
         }
       });
     });
@@ -2145,11 +2780,17 @@
     if (musicSensSlider && musicSensOutput) {
       musicSensSlider.addEventListener("input", () => {
         musicSensOutput.textContent = `${Number(musicSensSlider.value).toFixed(1)}x`;
+        updateSliderFill(musicSensSlider);
       });
       musicSensSlider.addEventListener("change", () => {
+        updateSliderFill(musicSensSlider);
         appState.musicSync.sensitivity = Number(musicSensSlider.value);
         if (appState.musicSync.active) {
-          startOrUpdateMusicSync(`Beat sensitivity set to ${Number(musicSensSlider.value).toFixed(1)}x.`);
+          startOrUpdateMusicSync(() =>
+            t("status.musicSensitivityChanged", {
+              sensitivity: Number(musicSensSlider.value).toFixed(1)
+            })
+          );
         }
       });
     }
@@ -2159,24 +2800,41 @@
     if (musicAlphaSlider && musicAlphaOutput) {
       musicAlphaSlider.addEventListener("input", () => {
         musicAlphaOutput.textContent = Number(musicAlphaSlider.value).toFixed(2);
+        updateSliderFill(musicAlphaSlider);
       });
       musicAlphaSlider.addEventListener("change", () => {
+        updateSliderFill(musicAlphaSlider);
         appState.musicSync.smoothing_alpha = Number(musicAlphaSlider.value);
         if (appState.musicSync.active) {
-          startOrUpdateMusicSync(`Music EMA smoothing set to ${Number(musicAlphaSlider.value).toFixed(2)}.`);
+          startOrUpdateMusicSync(() =>
+            t("status.musicSmoothingChanged", {
+              alpha: Number(musicAlphaSlider.value).toFixed(2)
+            })
+          );
         }
       });
     }
+
+    /* Botones de preajuste alineados matematicamente bajo los sliders de Ambilight y Music Sync */
+    document.querySelectorAll(".scale-preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.dataset.sliderTarget;
+        const presetValue = btn.dataset.presetValue;
+        const slider = targetId ? document.getElementById(targetId) : null;
+        if (!slider || presetValue === undefined) return;
+        slider.value = presetValue;
+        slider.dispatchEvent(new Event("input", { bubbles: true }));
+        slider.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
 
     const musicAudioBriCheckbox = document.getElementById("music-audio-brightness");
     if (musicAudioBriCheckbox) {
       musicAudioBriCheckbox.addEventListener("change", () => {
         appState.musicSync.audio_brightness = musicAudioBriCheckbox.checked;
         if (appState.musicSync.active) {
-          startOrUpdateMusicSync(
-            musicAudioBriCheckbox.checked
-              ? "Dynamic beat brightness modulation enabled."
-              : "Music sync using fixed brightness ceiling."
+          startOrUpdateMusicSync(() =>
+            t(musicAudioBriCheckbox.checked ? "status.musicAudioBriOn" : "status.musicAudioBriOff")
           );
         }
       });
@@ -2185,12 +2843,14 @@
 
   /* Inicializacion principal al cargar el DOM */
   document.addEventListener("DOMContentLoaded", async () => {
+    syncLanguageUi("en");
     drawColorWheel();
+    updateAllSlidersFill();
     bindEvents();
     backendApi = await resolveBackendApi();
     await invokeApi(
       () => backendApi.get_initial_state(),
-      "Connected to local UDP lighting service."
+      () => t("status.connected")
     );
   });
 })();

@@ -129,3 +129,54 @@ class JsonSceneRepository:
         """Persiste atomicamente la lista de escenas personalizadas."""
         payload = [scene.to_dict() for scene in scenes]
         _atomic_write_json(self._file_path, payload)
+
+
+SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
+DEFAULT_SETTINGS: dict[str, Any] = {"language": "en"}
+
+
+class JsonSettingsRepository:
+    """Persiste las preferencias globales de la consola (como el idioma) en `settings.json`."""
+
+    def __init__(self, data_dir: Path | None = None, filename: str = "settings.json") -> None:
+        self._data_dir = data_dir if data_dir is not None else resolve_default_data_dir()
+        self._file_path = self._data_dir / filename
+
+    @property
+    def file_path(self) -> Path:
+        """Expone la ruta del archivo JSON subyacente para diagnostico y pruebas."""
+        return self._file_path
+
+    def load_settings(self) -> dict[str, Any]:
+        """Recupera las preferencias guardadas tolerando archivos inexistentes o corruptos.
+
+        Si el archivo no existe, contiene sintaxis JSON invalida o un codigo de idioma
+        desconocido, retorna el idioma por defecto (`en`) para garantizar un arranque seguro.
+        """
+        if not self._file_path.is_file():
+            return dict(DEFAULT_SETTINGS)
+        try:
+            raw_text = self._file_path.read_text(encoding="utf-8")
+            parsed = json.loads(raw_text)
+        except (OSError, json.JSONDecodeError, ValueError):
+            return dict(DEFAULT_SETTINGS)
+
+        if not isinstance(parsed, dict):
+            return dict(DEFAULT_SETTINGS)
+
+        raw_lang = str(parsed.get("language", "en")).strip().lower()
+        language = raw_lang if raw_lang in SUPPORTED_LANGUAGES else "en"
+        merged = dict(DEFAULT_SETTINGS)
+        merged.update(parsed)
+        merged["language"] = language
+        return merged
+
+    def save_settings(self, settings: dict[str, Any]) -> None:
+        """Valida y persiste atomicamente el diccionario de preferencias."""
+        raw_lang = str(settings.get("language", "en")).strip().lower()
+        language = raw_lang if raw_lang in SUPPORTED_LANGUAGES else "en"
+        payload = dict(DEFAULT_SETTINGS)
+        payload.update(settings)
+        payload["language"] = language
+        _atomic_write_json(self._file_path, payload)
+

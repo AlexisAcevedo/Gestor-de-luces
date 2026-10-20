@@ -86,8 +86,10 @@ class WebviewBridge:
         monitors = self._service.list_monitors()
         music_sync = self._service.get_music_sync_status()
         audio_devices = self._service.list_audio_devices()
+        language = self._service.get_language()
         return {
             "ok": ok,
+            "language": language,
             "bulbs": bulbs,
             "selected_ips": selected_ips,
             "scenes": scenes,
@@ -180,6 +182,7 @@ class WebviewBridge:
                 for scene in self._service.list_custom_scenes()
             ],
             "sleep_timer_active": bool(self._service.get_sleep_timer_status().get("active")),
+            "language": self._service.get_language(),
         }
 
     def get_initial_state(self) -> dict[str, Any]:
@@ -193,6 +196,14 @@ class WebviewBridge:
                 self._run_async(self._service.discover_bulbs(wait_time=1.8), timeout=15.0)
             else:
                 self._run_async(self._service.refresh_states(), timeout=6.0)
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def set_language(self, language: str) -> dict[str, Any]:
+        """Cambia y persiste el idioma activo (`en` o `es`), refrescando tambien la bandeja."""
+        try:
+            self._service.set_language(str(language))
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -473,6 +484,7 @@ class WebviewBridge:
         brightness: int = 85,
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
+        min_brightness: int = 10,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion Ambilight de pantalla en el bucle de eventos asincrono."""
         try:
@@ -486,6 +498,7 @@ class WebviewBridge:
                     brightness=int(brightness),
                     smoothing_alpha=float(smoothing_alpha),
                     ips=target_ips,
+                    min_brightness=int(min_brightness),
                 )
 
             self._run_async(_start())

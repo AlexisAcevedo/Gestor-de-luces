@@ -19,6 +19,7 @@ from gestor_luces.adapters.audio import WasapiLoopbackSampler
 from gestor_luces.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
+    JsonSettingsRepository,
     resolve_default_data_dir,
 )
 from gestor_luces.adapters.tray import TrayController
@@ -60,6 +61,7 @@ def build_application(
     storage_dir = data_dir if data_dir is not None else resolve_default_data_dir()
     bulb_repo = JsonBulbRepository(data_dir=storage_dir)
     scene_repo = JsonSceneRepository(data_dir=storage_dir)
+    settings_repo = JsonSettingsRepository(data_dir=storage_dir)
     controller = WizUdpController()
     screen_sampler = MssScreenSampler()
     audio_sampler = WasapiLoopbackSampler()
@@ -69,6 +71,7 @@ def build_application(
         scene_repository=scene_repo,
         screen_sampler=screen_sampler,
         audio_sampler=audio_sampler,
+        settings_repository=settings_repo,
     )
     bridge = WebviewBridge(service=service)
     return service, bridge
@@ -99,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     ui_dir = resolve_ui_directory()
     index_path = ui_dir / "index.html"
     styles_path = ui_dir / "styles.css"
+    i18n_path = ui_dir / "i18n.js"
     script_path = ui_dir / "app.js"
 
     _, bridge = build_application()
@@ -118,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             missing = [
                 str(p)
-                for p in (index_path, styles_path, script_path)
+                for p in (index_path, styles_path, i18n_path, script_path)
                 if not p.is_file()
             ]
             if missing:
@@ -150,6 +154,29 @@ def main(argv: list[str] | None = None) -> int:
         background_color="#0D0F12",
     )
 
+    def _apply_windows_dark_titlebar() -> None:
+        """Activa el atributo DWMWA_USE_IMMERSIVE_DARK_MODE (20) en Windows 10/11.
+
+        Garantiza que la barra de titulo nativa de Win32/WinForms se pinte en modo
+        oscuro para integrarse visualmente con el chasis #0D0F12 de la consola.
+        """
+        if sys.platform != "win32":
+            return
+        try:
+            native_form = getattr(window, "native", None)
+            if native_form is not None:
+                import ctypes
+
+                hwnd = native_form.Handle.ToInt32()
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd,
+                    20,
+                    ctypes.byref(ctypes.c_int(1)),
+                    ctypes.sizeof(ctypes.c_int),
+                )
+        except Exception:
+            _LOGGER.debug("Windows dark titlebar attribute skipped.")
+
     def show_window() -> None:
         """Restaura la ventana desde la bandeja y la trae al frente en Windows."""
         nonlocal is_window_visible
@@ -159,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
             window.restore()
         except Exception:
             _LOGGER.debug("Window restore skipped because window was not minimized.")
+        _apply_windows_dark_titlebar()
         try:
             native_form = getattr(window, "native", None)
             if native_form is not None:
@@ -245,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         notify_ui=notify_ui,
     )
     bridge.set_state_change_listener(tray.request_refresh)
+    window.events.shown += _apply_windows_dark_titlebar
     window.events.closing += on_closing
     window.events.minimized += on_minimized
     window.events.closed += on_closed

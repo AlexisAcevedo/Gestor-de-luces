@@ -225,6 +225,7 @@ class TrayController:
             return
         is_on = bool(snapshot.get("is_on"))
         brightness = int(snapshot.get("brightness") or 100)
+        lang = str(snapshot.get("language") or "en")
         presets = [
             TrayPreset(
                 id=str(raw.get("id")),
@@ -239,8 +240,9 @@ class TrayController:
             presets=presets,
             window_visible=self._safe_window_visible(),
             sleep_timer_active=bool(snapshot.get("sleep_timer_active")),
+            language=lang,
         )
-        title = build_tray_title(is_on, brightness)
+        title = build_tray_title(is_on, brightness, language=lang)
         rgb = resolve_icon_rgb(
             is_on=is_on,
             mode=snapshot.get("mode"),

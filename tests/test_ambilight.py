@@ -236,11 +236,14 @@ async def test_webview_bridge_ambilight_lifecycle() -> None:
                 False,
                 70,
                 0.45,
+                None,
+                16,
             )
             assert started["ok"] is True
             assert started["ambilight"]["active"] is True
             assert started["ambilight"]["auto_brightness"] is False
             assert started["ambilight"]["brightness"] == 70
+            assert started["ambilight"]["min_brightness"] == 16
 
             await asyncio.sleep(0.09)
 
@@ -248,6 +251,7 @@ async def test_webview_bridge_ambilight_lifecycle() -> None:
             assert polled["ok"] is True
             assert polled["ambilight"]["active"] is True
             assert polled["ambilight"]["frames_sent"] >= 1
+            assert polled["ambilight"]["min_brightness"] == 16
             assert server.pilot_state["dimming"] == 70
 
             stopped = await asyncio.to_thread(bridge.stop_ambilight)
@@ -255,3 +259,37 @@ async def test_webview_bridge_ambilight_lifecycle() -> None:
             assert stopped["ambilight"]["active"] is False
         finally:
             bridge.shutdown()
+
+
+async def test_ambilight_auto_brightness_respects_min_brightness_floor() -> None:
+    """Verifica que el piso de brillo minimo (min_brightness) eleve escenas oscuras con auto_brightness=True."""
+    async with FakeWizBulbServer(mac="a8bb50998877") as server:
+        controller = WizUdpController(probe_candidates=[server.endpoint])
+        # Cuadro muy oscuro con luminancia sugerida del 10%
+        sampler = CyclingScreenSampler(frames=[(Color(15, 10, 20), 10)])
+        limiter = StreamRateLimiter(max_hz=40.0, alpha=1.0, min_color_delta=1)
+        ambi_mgr = AmbilightStreamManager(sampler=sampler, interval_seconds=0.025)
+        service = LightControlService(
+            controller=controller,
+            rate_limiter=limiter,
+            screen_sampler=sampler,
+            ambilight_manager=ambi_mgr,
+        )
+
+        await service.discover_bulbs()
+        status = service.start_ambilight(
+            monitor_index=1,
+            color_mode="vibrant",
+            auto_brightness=True,
+            brightness=85,
+            smoothing_alpha=1.0,
+            min_brightness=18,
+        )
+        assert status["min_brightness"] == 18
+
+        await asyncio.sleep(0.08)
+        await service.stop_ambilight()
+
+        # Aunque el sampler sugiera 10%, el piso configurado de 18% debe imponerse
+        assert server.pilot_state["dimming"] == 18
+

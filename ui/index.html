@@ -9,13 +9,41 @@
 <body>
   <div class="console-shell" id="console-shell" data-power="off">
     <!-- Left Fixture Rail: Network discovery, manual IP entry, and multi-bulb selection -->
-    <aside class="fixture-rail" aria-label="Lighting fixtures">
+    <aside class="fixture-rail" aria-label="Lighting fixtures" data-i18n-aria-label="rail.ariaLabel">
       <header class="rail-header">
-        <div class="brand-lockup">
-          <span class="aperture-dot" aria-hidden="true"></span>
-          <div>
-            <h1 class="console-title">Photometric Console</h1>
-            <p class="console-subtitle">Local UDP 38899 Direct Control</p>
+        <div class="rail-header-top">
+          <div class="brand-lockup">
+            <span class="aperture-dot" aria-hidden="true"></span>
+            <div>
+              <h1 class="console-title" data-i18n="rail.title">Photometric Console</h1>
+              <p class="console-subtitle" data-i18n="rail.subtitle">Local UDP 38899 Direct Control</p>
+            </div>
+          </div>
+
+          <div
+            class="lang-switcher"
+            role="group"
+            aria-label="Interface language"
+            data-i18n-aria-label="rail.langGroupAria"
+          >
+            <button
+              type="button"
+              class="lang-btn"
+              id="lang-btn-en"
+              data-lang="en"
+              aria-pressed="true"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              class="lang-btn"
+              id="lang-btn-es"
+              data-lang="es"
+              aria-pressed="false"
+            >
+              ES
+            </button>
           </div>
         </div>
 
@@ -25,61 +53,73 @@
               <path d="M3.5 10a6.5 6.5 0 0 1 11.28-4.42M16.5 10a6.5 6.5 0 0 1-11.28 4.42" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
               <path d="M15 3v3h-3M5 17v-3h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <span id="scan-btn-label">Scan network</span>
+            <span id="scan-btn-label" data-i18n="rail.scanBtn">Scan network</span>
           </button>
 
           <button type="button" class="btn btn-ghost" id="open-add-dialog-btn">
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
-            <span>Add by IP</span>
+            <span data-i18n="rail.addByIpBtn">Add by IP</span>
           </button>
         </div>
 
         <div class="selection-bar">
           <label class="checkbox-control" for="select-all-fixtures">
             <input type="checkbox" id="select-all-fixtures" checked>
-            <span>Select all fixtures</span>
+            <span data-i18n="rail.selectAll">Select all fixtures</span>
           </label>
-          <span class="fixture-count-badge" id="fixture-count-badge">0 online</span>
+          <span class="fixture-count-badge" id="fixture-count-badge" data-i18n="rail.onlineZero">0 online</span>
         </div>
       </header>
 
-      <div class="fixture-list" id="fixture-list" role="region" aria-label="Registered fixtures">
+      <div
+        class="fixture-list"
+        id="fixture-list"
+        role="region"
+        aria-label="Registered fixtures"
+        data-i18n-aria-label="rail.fixtureListAria"
+      >
         <!-- Populated dynamically by ui/app.js -->
       </div>
 
       <footer class="rail-footer">
         <div class="sync-controls">
-          <button type="button" class="btn btn-compact" id="sync-now-btn" title="Query getPilot state from all bulbs">
+          <button
+            type="button"
+            class="btn btn-compact"
+            id="sync-now-btn"
+            title="Query getPilot state from all bulbs"
+            data-i18n-title="rail.syncNowTitle"
+          >
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M10 3.5a6.5 6.5 0 1 0 6.13 4.33" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
               <path d="M16.5 3.5v4.3h-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <span>Sync now</span>
+            <span data-i18n="rail.syncNowBtn">Sync now</span>
           </button>
 
           <label class="toggle-pill" for="auto-sync-toggle">
             <input type="checkbox" id="auto-sync-toggle">
-            <span>Auto-sync (3s)</span>
+            <span data-i18n="rail.autoSync">Auto-sync (3s)</span>
           </label>
         </div>
-        <p class="status-banner" id="status-banner" role="status" aria-live="polite">
+        <p class="status-banner" id="status-banner" role="status" aria-live="polite" data-i18n="rail.statusReady">
           Ready for local UDP telemetry.
         </p>
       </footer>
     </aside>
 
     <!-- Central Photometric Stage: Live state readout, dimming, and mode panels -->
-    <main class="photometric-stage" aria-label="Light parameter controls">
+    <main class="photometric-stage" aria-label="Light parameter controls" data-i18n-aria-label="stage.ariaLabel">
       <!-- Live Photometric Header -->
       <header class="stage-header">
         <div class="stage-identity">
           <div class="photometric-aperture" id="photometric-aperture" aria-hidden="true"></div>
           <div>
-            <p class="target-summary" id="target-summary">No fixture selected</p>
+            <p class="target-summary" id="target-summary" data-i18n="stage.noFixture">No fixture selected</p>
             <div class="readout-row">
-              <span class="state-pill" id="live-state-pill">OFF</span>
+              <span class="state-pill" id="live-state-pill" data-i18n="stage.stateOff">OFF</span>
               <span class="telemetry-meta" id="telemetry-meta">UDP 38899</span>
             </div>
           </div>
@@ -91,11 +131,12 @@
             class="btn btn-secondary"
             id="quick-save-preset-btn"
             title="Save current bulb state as a custom preset"
+            data-i18n-title="stage.saveStateTitle"
           >
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v11.5L10 13.25 3.5 16.5V5A1.5 1.5 0 0 1 5 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
             </svg>
-            <span>Save current state</span>
+            <span data-i18n="stage.saveStateBtn">Save current state</span>
           </button>
 
           <button
@@ -107,56 +148,12 @@
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M10 2.75v6.5M6.1 4.85a6.5 6.5 0 1 0 7.8 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
             </svg>
-            <span id="master-power-label">Turn ON</span>
+            <span id="master-power-label" data-i18n="stage.turnOn">Turn ON</span>
           </button>
         </div>
       </header>
 
-      <!-- Sleep Timer Bar with Progressive Fade -->
-      <section class="control-well sleep-timer-well" aria-labelledby="sleep-timer-heading">
-        <div class="well-header sleep-timer-header">
-          <div class="well-title-group">
-            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <circle cx="10" cy="11" r="6.25" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M10 7.75v3.5l2.25 1.5M7.75 2.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <div>
-              <h2 id="sleep-timer-heading" class="well-title">Sleep Timer (Progressive Fade)</h2>
-              <p class="well-description">Gradually dims fixtures during the final 30% of the countdown before powering off.</p>
-            </div>
-          </div>
-          <span class="timer-status-badge" id="sleep-timer-badge" data-active="false">Timer inactive</span>
-        </div>
-
-        <div class="sleep-timer-controls">
-          <div class="preset-strip" role="group" aria-label="Sleep timer quick durations">
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="15">15 min</button>
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="30">30 min</button>
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="45">45 min</button>
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="60">60 min</button>
-          </div>
-
-          <div class="sleep-custom-actions">
-            <label class="sr-only" for="sleep-minutes-input">Timer duration in minutes (1 to 240)</label>
-            <div class="minutes-input-group">
-              <input
-                type="number"
-                id="sleep-minutes-input"
-                min="1"
-                max="240"
-                step="1"
-                value="30"
-                aria-label="Custom sleep timer minutes"
-              >
-              <span class="unit-suffix">min</span>
-            </div>
-            <button type="button" class="btn btn-primary" id="start-sleep-timer-btn">Start Timer</button>
-            <button type="button" class="btn btn-ghost" id="cancel-sleep-timer-btn" disabled>Cancel Timer</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Master Dimming Well -->
+      <!-- Master Dimming Well (Primary Stage Control) -->
       <section class="control-well dimming-well" aria-labelledby="dimming-heading">
         <div class="well-header">
           <div class="well-title-group">
@@ -164,7 +161,7 @@
               <circle cx="10" cy="10" r="3.4" stroke="currentColor" stroke-width="1.5"/>
               <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
-            <h2 id="dimming-heading" class="well-title">Luminous Flux (Dimming)</h2>
+            <h2 id="dimming-heading" class="well-title" data-i18n="dimming.title">Luminous Flux (Dimming)</h2>
           </div>
           <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
         </div>
@@ -179,10 +176,11 @@
             step="1"
             value="100"
             aria-label="Master brightness percentage"
+            data-i18n-aria-label="dimming.sliderAria"
           >
         </div>
 
-        <div class="preset-strip" role="group" aria-label="Quick dimming presets">
+        <div class="preset-strip" role="group" aria-label="Quick dimming presets" data-i18n-aria-label="dimming.presetsAria">
           <button type="button" class="chip-btn brightness-preset" data-brightness="10">10%</button>
           <button type="button" class="chip-btn brightness-preset" data-brightness="25">25%</button>
           <button type="button" class="chip-btn brightness-preset" data-brightness="50">50%</button>
@@ -192,7 +190,7 @@
       </section>
 
       <!-- Mode Switcher Tabs -->
-      <div class="mode-tabs" role="tablist" aria-label="Lighting emission mode">
+      <div class="mode-tabs" role="tablist" aria-label="Lighting emission mode" data-i18n-aria-label="tabs.ariaLabel">
         <button
           type="button"
           role="tab"
@@ -207,7 +205,7 @@
             <circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5"/>
             <circle cx="10" cy="10" r="2.2" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          <span>Chromatic (RGB)</span>
+          <span data-i18n="tabs.rgb">Chromatic (RGB)</span>
         </button>
 
         <button
@@ -224,7 +222,7 @@
             <path d="M10 3v10.5M7 6.5h6M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <circle cx="10" cy="15" r="2.5" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          <span>White Spectrum (Kelvin)</span>
+          <span data-i18n="tabs.temperature">White (Kelvin)</span>
         </button>
 
         <button
@@ -243,7 +241,7 @@
             <rect x="3" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
             <rect x="11" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          <span>WiZ Scenes (36)</span>
+          <span data-i18n="tabs.scene">WiZ Scenes (36)</span>
         </button>
 
         <button
@@ -259,7 +257,7 @@
           <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v11.5L10 13.25 3.5 16.5V5A1.5 1.5 0 0 1 5 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
           </svg>
-          <span id="custom-tab-label">Custom Presets</span>
+          <span id="custom-tab-label" data-i18n="tabs.custom">Custom Presets</span>
         </button>
 
         <button
@@ -276,7 +274,8 @@
             <rect x="2.5" y="3.5" width="15" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
             <path d="M7 16.5h6M10 13.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          <span>Ambilight</span>
+          <span data-i18n="tabs.ambilight">Ambilight</span>
+          <span class="tab-stream-dot" id="tab-ambilight-dot" hidden aria-hidden="true"></span>
         </button>
 
         <button
@@ -292,7 +291,8 @@
           <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M3.5 12.5v-5M7.5 15.5v-11M11.5 13.5v-7M15.5 16.5v-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           </svg>
-          <span>Music Sync</span>
+          <span data-i18n="tabs.music">Music Sync</span>
+          <span class="tab-stream-dot" id="tab-music-dot" hidden aria-hidden="true"></span>
         </button>
       </div>
 
@@ -311,6 +311,7 @@
                 width="240"
                 height="240"
                 aria-label="Interactive HSV color wheel"
+                data-i18n-aria-label="rgb.wheelAria"
               ></canvas>
               <div id="wheel-reticle" class="wheel-reticle" aria-hidden="true"></div>
             </div>
@@ -319,52 +320,52 @@
           <div class="rgb-controls-column">
             <div class="channel-grid">
               <div class="field-group">
-                <label for="input-r">Red (0-255)</label>
+                <label for="input-r" data-i18n="rgb.redLabel">Red (0-255)</label>
                 <input type="number" id="input-r" min="0" max="255" value="255">
               </div>
               <div class="field-group">
-                <label for="input-g">Green (0-255)</label>
+                <label for="input-g" data-i18n="rgb.greenLabel">Green (0-255)</label>
                 <input type="number" id="input-g" min="0" max="255" value="140">
               </div>
               <div class="field-group">
-                <label for="input-b">Blue (0-255)</label>
+                <label for="input-b" data-i18n="rgb.blueLabel">Blue (0-255)</label>
                 <input type="number" id="input-b" min="0" max="255" value="66">
               </div>
               <div class="field-group">
-                <label for="input-hex">Hex Code</label>
+                <label for="input-hex" data-i18n="rgb.hexLabel">Hex Code</label>
                 <div class="hex-input-row">
                   <input type="text" id="input-hex" value="#ff8c42" maxlength="7" spellcheck="false">
-                  <button type="button" class="btn btn-primary" id="apply-rgb-btn">Apply RGB</button>
+                  <button type="button" class="btn btn-primary" id="apply-rgb-btn" data-i18n="rgb.applyBtn">Apply RGB</button>
                 </div>
               </div>
             </div>
 
             <div class="swatch-section">
-              <p class="section-caption">Reference Chromatic Swatches</p>
-              <div class="swatch-grid" id="swatch-grid" role="group" aria-label="Curated RGB swatches">
+              <p class="section-caption" data-i18n="rgb.swatchesCaption">Reference Chromatic Swatches</p>
+              <div class="swatch-grid" id="swatch-grid" role="group" aria-label="Curated RGB swatches" data-i18n-aria-label="rgb.swatchesAria">
                 <button type="button" class="color-swatch" data-r="255" data-g="94" data-b="58" style="--swatch-rgb: rgb(255, 94, 58)">
                   <span class="swatch-dot" aria-hidden="true"></span>
-                  <span>Sodium Amber</span>
+                  <span data-i18n="rgb.swatchSodium">Sodium Amber</span>
                 </button>
                 <button type="button" class="color-swatch" data-r="255" data-g="36" data-b="82" style="--swatch-rgb: rgb(255, 36, 82)">
                   <span class="swatch-dot" aria-hidden="true"></span>
-                  <span>Crimson Laser</span>
+                  <span data-i18n="rgb.swatchCrimson">Crimson Laser</span>
                 </button>
                 <button type="button" class="color-swatch" data-r="168" data-g="85" data-b="247" style="--swatch-rgb: rgb(168, 85, 247)">
                   <span class="swatch-dot" aria-hidden="true"></span>
-                  <span>Ultraviolet</span>
+                  <span data-i18n="rgb.swatchUltraviolet">Ultraviolet</span>
                 </button>
                 <button type="button" class="color-swatch" data-r="56" data-g="189" data-b="248" style="--swatch-rgb: rgb(56, 189, 248)">
                   <span class="swatch-dot" aria-hidden="true"></span>
-                  <span>Cerulean Sky</span>
+                  <span data-i18n="rgb.swatchCerulean">Cerulean Sky</span>
                 </button>
                 <button type="button" class="color-swatch" data-r="16" data-g="185" data-b="129" style="--swatch-rgb: rgb(16, 185, 129)">
                   <span class="swatch-dot" aria-hidden="true"></span>
-                  <span>Phosphor Mint</span>
+                  <span data-i18n="rgb.swatchMint">Phosphor Mint</span>
                 </button>
                 <button type="button" class="color-swatch" data-r="250" data-g="204" data-b="21" style="--swatch-rgb: rgb(250, 204, 21)">
                   <span class="swatch-dot" aria-hidden="true"></span>
-                  <span>Halogen Gold</span>
+                  <span data-i18n="rgb.swatchHalogen">Halogen Gold</span>
                 </button>
               </div>
             </div>
@@ -383,8 +384,8 @@
         <div class="control-well kelvin-well">
           <div class="well-header">
             <div>
-              <h3 class="well-title">Correlated Color Temperature (CCT)</h3>
-              <p class="well-description">Continuous blackbody locus from 2200 K warm filament to 6500 K overcast daylight.</p>
+              <h3 class="well-title" data-i18n="kelvin.title">Correlated Color Temperature (CCT)</h3>
+              <p class="well-description" data-i18n="kelvin.description">Continuous blackbody locus from 2200 K warm filament to 6500 K overcast daylight.</p>
             </div>
             <output class="numeric-readout" id="kelvin-output" for="kelvin-slider">4200 K</output>
           </div>
@@ -399,38 +400,39 @@
               step="50"
               value="4200"
               aria-label="Color temperature in Kelvin"
+              data-i18n-aria-label="kelvin.sliderAria"
             >
             <div class="kelvin-scale-labels" aria-hidden="true">
-              <span>2200 K Warm Amber</span>
-              <span>4200 K Neutral</span>
-              <span>6500 K Cool Daylight</span>
+              <span data-i18n="kelvin.scaleWarm">2200 K Warm Amber</span>
+              <span data-i18n="kelvin.scaleNeutral">4200 K Neutral</span>
+              <span data-i18n="kelvin.scaleCool">6500 K Cool Daylight</span>
             </div>
           </div>
 
-          <div class="kelvin-presets-grid" role="group" aria-label="Architectural white presets">
+          <div class="kelvin-presets-grid" role="group" aria-label="Architectural white presets" data-i18n-aria-label="kelvin.presetsAria">
             <button type="button" class="kelvin-card" data-kelvin="2200">
               <span class="kelvin-value">2200 K</span>
-              <span class="kelvin-name">Candlelight</span>
+              <span class="kelvin-name" data-i18n="kelvin.preset2200">Candlelight</span>
             </button>
             <button type="button" class="kelvin-card" data-kelvin="2700">
               <span class="kelvin-value">2700 K</span>
-              <span class="kelvin-name">Warm White</span>
+              <span class="kelvin-name" data-i18n="kelvin.preset2700">Warm White</span>
             </button>
             <button type="button" class="kelvin-card" data-kelvin="3500">
               <span class="kelvin-value">3500 K</span>
-              <span class="kelvin-name">Neutral Halogen</span>
+              <span class="kelvin-name" data-i18n="kelvin.preset3500">Neutral Halogen</span>
             </button>
             <button type="button" class="kelvin-card" data-kelvin="4200">
               <span class="kelvin-value">4200 K</span>
-              <span class="kelvin-name">Daylight</span>
+              <span class="kelvin-name" data-i18n="kelvin.preset4200">Daylight</span>
             </button>
             <button type="button" class="kelvin-card" data-kelvin="5000">
               <span class="kelvin-value">5000 K</span>
-              <span class="kelvin-name">Studio Gallery</span>
+              <span class="kelvin-name" data-i18n="kelvin.preset5000">Studio Gallery</span>
             </button>
             <button type="button" class="kelvin-card" data-kelvin="6500">
               <span class="kelvin-value">6500 K</span>
-              <span class="kelvin-name">Cool Daylight</span>
+              <span class="kelvin-name" data-i18n="kelvin.preset6500">Cool Daylight</span>
             </button>
           </div>
         </div>
@@ -445,18 +447,24 @@
         hidden
       >
         <div class="scenes-toolbar">
-          <div class="category-pills" role="group" aria-label="Filter scenes by category">
-            <button type="button" class="chip-btn scene-filter active" data-category="all">All (36)</button>
-            <button type="button" class="chip-btn scene-filter" data-category="white">White</button>
-            <button type="button" class="chip-btn scene-filter" data-category="ambient">Ambient</button>
-            <button type="button" class="chip-btn scene-filter" data-category="nature">Nature</button>
-            <button type="button" class="chip-btn scene-filter" data-category="dynamic">Dynamic</button>
-            <button type="button" class="chip-btn scene-filter" data-category="holiday">Holiday</button>
+          <div class="category-pills" id="scene-category-bar" role="group" aria-label="Filter scenes by category" data-i18n-aria-label="scenes.filterAria">
+            <button type="button" class="chip-btn scene-filter" data-category="favorites" id="scene-filter-favorites">
+              <svg class="icon icon-star" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 2.75l2.18 4.42 4.88.71-3.53 3.44.83 4.86L10 13.88l-4.36 2.3.83-4.86-3.53-3.44 4.88-.71L10 2.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+              <span id="scene-cat-favorites-label" data-i18n="scenes.catFavorites">Favorites</span>
+            </button>
+            <button type="button" class="chip-btn scene-filter active" data-category="all" data-i18n="scenes.catAll">All (36)</button>
+            <button type="button" class="chip-btn scene-filter" data-category="white" data-i18n="scenes.catWhite">White</button>
+            <button type="button" class="chip-btn scene-filter" data-category="ambient" data-i18n="scenes.catAmbient">Ambient</button>
+            <button type="button" class="chip-btn scene-filter" data-category="nature" data-i18n="scenes.catNature">Nature</button>
+            <button type="button" class="chip-btn scene-filter" data-category="dynamic" data-i18n="scenes.catDynamic">Dynamic</button>
+            <button type="button" class="chip-btn scene-filter" data-category="holiday" data-i18n="scenes.catHoliday">Holiday</button>
           </div>
 
           <div class="speed-control-box" id="scene-speed-container">
             <div class="speed-label-row">
-              <label for="scene-speed-slider">Transition Speed</label>
+              <label for="scene-speed-slider" data-i18n="scenes.speedLabel">Transition Speed</label>
               <output id="scene-speed-output" for="scene-speed-slider">100</output>
             </div>
             <input
@@ -472,7 +480,7 @@
           </div>
         </div>
 
-        <div class="scenes-grid" id="scenes-grid" role="region" aria-label="WiZ firmware scenes">
+        <div class="scenes-grid" id="scenes-grid" role="region" aria-label="WiZ firmware scenes" data-i18n-aria-label="scenes.gridAria">
           <!-- Populated dynamically by ui/app.js -->
         </div>
       </section>
@@ -487,18 +495,18 @@
       >
         <div class="scenes-toolbar custom-scenes-toolbar">
           <div>
-            <h3 class="well-title">Saved Custom Presets</h3>
-            <p class="well-description">Capture any RGB color, Kelvin temperature, or dynamic scene with brightness into local JSON storage.</p>
+            <h3 class="well-title" data-i18n="custom.title">Saved Custom Presets</h3>
+            <p class="well-description" data-i18n="custom.description">Capture any RGB color, Kelvin temperature, or dynamic scene with brightness into local JSON storage.</p>
           </div>
           <button type="button" class="btn btn-primary" id="open-save-scene-dialog-btn">
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
-            <span>Save current state</span>
+            <span data-i18n="stage.saveStateBtn">Save current state</span>
           </button>
         </div>
 
-        <div class="custom-scenes-grid" id="custom-scenes-grid" role="region" aria-label="Saved custom lighting presets">
+        <div class="custom-scenes-grid" id="custom-scenes-grid" role="region" aria-label="Saved custom lighting presets" data-i18n-aria-label="custom.gridAria">
           <!-- Populated dynamically by ui/app.js -->
         </div>
       </section>
@@ -515,7 +523,7 @@
           <!-- Left: Live Screen Telemetry & Stream Control -->
           <div class="ambilight-preview-card">
             <div class="ambilight-preview-header">
-              <span class="timer-status-badge" id="ambilight-status-badge" data-active="false">STANDBY</span>
+              <span class="timer-status-badge" id="ambilight-status-badge" data-active="false" data-i18n="ambi.statusStandby">STANDBY</span>
               <span class="telemetry-meta" id="ambilight-frames-readout">0 frames sent</span>
             </div>
 
@@ -526,7 +534,7 @@
                 aria-hidden="true"
               ></div>
               <div class="ambilight-readout-block">
-                <p class="ambilight-swatch-title">Sampled Screen Chromaticity</p>
+                <p class="ambilight-swatch-title" data-i18n="ambi.swatchTitle">Sampled Screen Chromaticity</p>
                 <p class="ambilight-color-readout" id="ambilight-color-readout">RGB (0, 0, 0) · #000000</p>
               </div>
             </div>
@@ -541,26 +549,27 @@
                 <rect x="2.5" y="3.5" width="15" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
                 <path d="M7 16.5h6M10 13.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
               </svg>
-              <span id="toggle-ambilight-label">Start Ambilight</span>
+              <span id="toggle-ambilight-label" data-i18n="ambi.startBtn">Start Ambilight</span>
             </button>
           </div>
 
           <!-- Right: Display & Algorithm Configuration -->
           <div class="ambilight-config-column">
             <div class="field-group">
-              <label for="ambilight-monitor-select">Source Display</label>
+              <label for="ambilight-monitor-select" data-i18n="ambi.sourceLabel">Source Display</label>
               <select id="ambilight-monitor-select" class="console-select">
                 <option value="1">Display 1 (Primary)</option>
               </select>
             </div>
 
             <div class="field-group">
-              <span class="field-label" id="ambilight-mode-label">Color Extraction Mode</span>
+              <span class="field-label" id="ambilight-mode-label" data-i18n="ambi.modeLabel">Color Extraction Mode</span>
               <div class="preset-strip" role="group" aria-labelledby="ambilight-mode-label">
                 <button
                   type="button"
                   class="chip-btn ambilight-mode-btn active"
                   data-color-mode="vibrant"
+                  data-i18n="ambi.modeVibrant"
                 >
                   Vibrant / Dominant
                 </button>
@@ -568,6 +577,7 @@
                   type="button"
                   class="chip-btn ambilight-mode-btn"
                   data-color-mode="average"
+                  data-i18n="ambi.modeAverage"
                 >
                   Average Screen Color
                 </button>
@@ -576,7 +586,7 @@
 
             <div class="field-group">
               <div class="speed-label-row">
-                <label for="ambilight-smoothing-slider">EMA Smoothing Response (Alpha)</label>
+                <label for="ambilight-smoothing-slider" data-i18n="ambi.smoothingLabel">EMA Smoothing Response (Alpha)</label>
                 <output id="ambilight-smoothing-output" for="ambilight-smoothing-slider">0.38</output>
               </div>
               <input
@@ -585,21 +595,68 @@
                 class="console-slider"
                 min="0.15"
                 max="0.75"
-                step="0.05"
+                step="0.01"
                 value="0.38"
               >
-              <div class="kelvin-scale-labels" aria-hidden="true">
-                <span>0.15 Cinematic</span>
-                <span>0.38 Balanced</span>
-                <span>0.75 Fast Response</span>
+              <div class="slider-scale-anchored" role="group" aria-label="EMA alpha presets">
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="ambilight-smoothing-slider"
+                  data-value="0.15"
+                  data-align="start"
+                  style="--pos: 0%"
+                  data-i18n="ambi.scaleCinematic"
+                >
+                  0.15 Cinematic
+                </button>
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="ambilight-smoothing-slider"
+                  data-value="0.38"
+                  data-align="center"
+                  style="--pos: 38.33%"
+                  data-i18n="ambi.scaleBalanced"
+                >
+                  0.38 Balanced
+                </button>
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="ambilight-smoothing-slider"
+                  data-value="0.75"
+                  data-align="end"
+                  style="--pos: 100%"
+                  data-i18n="ambi.scaleFast"
+                >
+                  0.75 Fast Response
+                </button>
               </div>
             </div>
 
             <div class="ambilight-Toggle-row">
               <label class="checkbox-control" for="ambilight-auto-brightness">
                 <input type="checkbox" id="ambilight-auto-brightness" checked>
-                <span>Track screen brightness automatically (ITU-R BT.709 luminance)</span>
+                <span data-i18n="ambi.autoBrightness">Track screen brightness automatically (ITU-R BT.709 luminance)</span>
               </label>
+
+              <div class="field-group conditional-floor-row" id="ambilight-min-brightness-row">
+                <div class="speed-label-row">
+                  <label for="ambilight-min-brightness-slider" data-i18n="ambi.minBrightnessLabel">Min Brightness Floor</label>
+                  <output id="ambilight-min-brightness-output" for="ambilight-min-brightness-slider">10%</output>
+                </div>
+                <input
+                  type="range"
+                  id="ambilight-min-brightness-slider"
+                  class="console-slider"
+                  min="5"
+                  max="20"
+                  step="1"
+                  value="10"
+                >
+                <p class="well-description floor-hint" data-i18n="ambi.minBrightnessHint">Prevents dark movie scenes from dimming the fixture below this threshold.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -617,7 +674,7 @@
           <!-- Left: Live Acoustic Telemetry Card -->
           <div class="music-telemetry-card">
             <div class="ambilight-preview-header">
-              <span class="timer-status-badge" id="music-status-badge" data-active="false">STANDBY</span>
+              <span class="timer-status-badge" id="music-status-badge" data-active="false" data-i18n="music.statusStandby">STANDBY</span>
               <span class="telemetry-meta" id="music-frames-readout">0 frames sent</span>
             </div>
 
@@ -628,15 +685,15 @@
                 aria-hidden="true"
               ></div>
               <div class="ambilight-readout-block">
-                <p class="ambilight-swatch-title">Acoustic Spectrum Output</p>
+                <p class="ambilight-swatch-title" data-i18n="music.swatchTitle">Acoustic Spectrum Output</p>
                 <p class="ambilight-color-readout" id="music-color-readout">RGB (56, 34, 24) · #382218</p>
               </div>
             </div>
 
-            <div class="music-meters-list" role="region" aria-label="Real-time FFT frequency band meters">
+            <div class="music-meters-list" role="region" aria-label="Real-time FFT frequency band meters" data-i18n-aria-label="music.metersAria">
               <div class="music-meter-row">
                 <div class="music-meter-header">
-                  <span class="music-meter-label">Bass (20-250 Hz)</span>
+                  <span class="music-meter-label" data-i18n="music.bassLabel">Bass (20-250 Hz)</span>
                   <span class="music-meter-value" id="music-meter-bass-val">0%</span>
                 </div>
                 <div class="music-meter-track" aria-hidden="true">
@@ -646,7 +703,7 @@
 
               <div class="music-meter-row">
                 <div class="music-meter-header">
-                  <span class="music-meter-label">Mid (250-2k Hz)</span>
+                  <span class="music-meter-label" data-i18n="music.midLabel">Mid (250-2k Hz)</span>
                   <span class="music-meter-value" id="music-meter-mid-val">0%</span>
                 </div>
                 <div class="music-meter-track" aria-hidden="true">
@@ -656,7 +713,7 @@
 
               <div class="music-meter-row">
                 <div class="music-meter-header">
-                  <span class="music-meter-label">Treble (2k-12k Hz)</span>
+                  <span class="music-meter-label" data-i18n="music.trebleLabel">Treble (2k-12k Hz)</span>
                   <span class="music-meter-value" id="music-meter-treble-val">0%</span>
                 </div>
                 <div class="music-meter-track" aria-hidden="true">
@@ -666,7 +723,7 @@
 
               <div class="music-meter-row">
                 <div class="music-meter-header">
-                  <span class="music-meter-label">RMS Volume</span>
+                  <span class="music-meter-label" data-i18n="music.rmsLabel">RMS Volume</span>
                   <span class="music-meter-value" id="music-meter-rms-val">0%</span>
                 </div>
                 <div class="music-meter-track" aria-hidden="true">
@@ -684,49 +741,52 @@
               <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <path d="M3.5 12.5v-5M7.5 15.5v-11M11.5 13.5v-7M15.5 16.5v-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
               </svg>
-              <span id="toggle-music-label">Start Music Sync</span>
+              <span id="toggle-music-label" data-i18n="music.startBtn">Start Music Sync</span>
             </button>
           </div>
 
           <!-- Right: WASAPI Loopback & FFT Spectrum Configuration -->
           <div class="music-config-column">
             <div class="field-group">
-              <label for="music-device-select">Loopback Audio Device</label>
+              <label for="music-device-select" data-i18n="music.deviceLabel">Loopback Audio Device</label>
               <select id="music-device-select" class="console-select">
                 <option value="-1">Default System Output (WASAPI Loopback)</option>
               </select>
             </div>
 
             <div class="field-group">
-              <span class="field-label" id="music-palette-label">Color Palette</span>
+              <span class="field-label" id="music-palette-label" data-i18n="music.paletteLabel">Color Palette</span>
               <div class="preset-strip" role="group" aria-labelledby="music-palette-label">
                 <button
                   type="button"
                   class="chip-btn music-palette-btn active"
                   data-palette-mode="spectrum"
                 >
-                  Spectrum (Bass/Mid/Treble)
+                  <span class="palette-swatch-dot palette-dot-spectrum" aria-hidden="true"></span>
+                  <span data-i18n="music.paletteSpectrum">Spectrum (Bass/Mid/Treble)</span>
                 </button>
                 <button
                   type="button"
                   class="chip-btn music-palette-btn"
                   data-palette-mode="club"
                 >
-                  Club Pulse (Warm/Neon)
+                  <span class="palette-swatch-dot palette-dot-club" aria-hidden="true"></span>
+                  <span data-i18n="music.paletteClub">Club Pulse (Warm/Neon)</span>
                 </button>
                 <button
                   type="button"
                   class="chip-btn music-palette-btn"
                   data-palette-mode="chill"
                 >
-                  Aurora Chill (Ocean/Teal)
+                  <span class="palette-swatch-dot palette-dot-chill" aria-hidden="true"></span>
+                  <span data-i18n="music.paletteChill">Aurora Chill (Ocean/Teal)</span>
                 </button>
               </div>
             </div>
 
             <div class="field-group">
               <div class="speed-label-row">
-                <label for="music-sensitivity-slider">Beat Sensitivity</label>
+                <label for="music-sensitivity-slider" data-i18n="music.sensitivityLabel">Beat Sensitivity</label>
                 <output id="music-sensitivity-output" for="music-sensitivity-slider">1.0x</output>
               </div>
               <input
@@ -738,16 +798,46 @@
                 step="0.1"
                 value="1.0"
               >
-              <div class="kelvin-scale-labels" aria-hidden="true">
-                <span>0.4x Subtle</span>
-                <span>1.0x Balanced</span>
-                <span>2.5x High Gain</span>
+              <div class="slider-scale-anchored" role="group" aria-label="Beat sensitivity presets">
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="music-sensitivity-slider"
+                  data-value="0.4"
+                  data-align="start"
+                  style="--pos: 0%"
+                  data-i18n="music.scaleSubtle"
+                >
+                  0.4x Subtle
+                </button>
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="music-sensitivity-slider"
+                  data-value="1.0"
+                  data-align="center"
+                  style="--pos: 28.57%"
+                  data-i18n="music.scaleBalanced"
+                >
+                  1.0x Balanced
+                </button>
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="music-sensitivity-slider"
+                  data-value="2.5"
+                  data-align="end"
+                  style="--pos: 100%"
+                  data-i18n="music.scaleHighGain"
+                >
+                  2.5x High Gain
+                </button>
               </div>
             </div>
 
             <div class="field-group">
               <div class="speed-label-row">
-                <label for="music-smoothing-slider">EMA Smoothing Response (Alpha)</label>
+                <label for="music-smoothing-slider" data-i18n="music.smoothingLabel">EMA Smoothing Response (Alpha)</label>
                 <output id="music-smoothing-output" for="music-smoothing-slider">0.50</output>
               </div>
               <input
@@ -759,22 +849,102 @@
                 step="0.05"
                 value="0.50"
               >
-              <div class="kelvin-scale-labels" aria-hidden="true">
-                <span>0.20 Smooth</span>
-                <span>0.50 Punchy</span>
-                <span>0.85 Instant Beat</span>
+              <div class="slider-scale-anchored" role="group" aria-label="Music EMA smoothing presets">
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="music-smoothing-slider"
+                  data-value="0.20"
+                  data-align="start"
+                  style="--pos: 0%"
+                  data-i18n="music.scaleSmooth"
+                >
+                  0.20 Smooth
+                </button>
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="music-smoothing-slider"
+                  data-value="0.50"
+                  data-align="center"
+                  style="--pos: 46.15%"
+                  data-i18n="music.scalePunchy"
+                >
+                  0.50 Punchy
+                </button>
+                <button
+                  type="button"
+                  class="scale-preset-btn"
+                  data-target-slider="music-smoothing-slider"
+                  data-value="0.85"
+                  data-align="end"
+                  style="--pos: 100%"
+                  data-i18n="music.scaleInstant"
+                >
+                  0.85 Instant Beat
+                </button>
               </div>
             </div>
 
             <div class="ambilight-Toggle-row">
               <label class="checkbox-control" for="music-audio-brightness">
                 <input type="checkbox" id="music-audio-brightness" checked>
-                <span>Modulate brightness with audio volume</span>
+                <span data-i18n="music.audioBrightness">Modulate brightness with audio volume</span>
               </label>
             </div>
           </div>
         </div>
       </section>
+
+      <!-- Collapsible Sleep Timer Bar at Bottom of Stage -->
+      <details class="control-well sleep-timer-well" id="sleep-timer-details" aria-labelledby="sleep-timer-heading">
+        <summary class="well-header sleep-timer-header">
+          <div class="well-title-group">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="11" r="6.25" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 7.75v3.5l2.25 1.5M7.75 2.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div>
+              <h2 id="sleep-timer-heading" class="well-title" data-i18n="sleep.title">Sleep Timer (Progressive Fade)</h2>
+              <p class="well-description" data-i18n="sleep.description">Gradually dims fixtures during the final 30% of the countdown before powering off.</p>
+            </div>
+          </div>
+          <div class="sleep-summary-meta">
+            <span class="timer-status-badge" id="sleep-timer-badge" data-active="false" data-i18n="sleep.badgeInactive">Timer inactive</span>
+            <svg class="icon details-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M5.5 7.75L10 12.25l4.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </summary>
+
+        <div class="sleep-timer-controls">
+          <div class="preset-strip" role="group" aria-label="Sleep timer quick durations" data-i18n-aria-label="sleep.quickPresetsAria">
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="15">15 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="30">30 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="45">45 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="60">60 min</button>
+          </div>
+
+          <div class="sleep-custom-actions">
+            <label class="sr-only" for="sleep-minutes-input" data-i18n="sleep.durationLabel">Timer duration in minutes (1 to 240)</label>
+            <div class="minutes-input-group">
+              <input
+                type="number"
+                id="sleep-minutes-input"
+                min="1"
+                max="240"
+                step="1"
+                value="30"
+                aria-label="Custom sleep timer minutes"
+                data-i18n-aria-label="sleep.customMinutesAria"
+              >
+              <span class="unit-suffix">min</span>
+            </div>
+            <button type="button" class="btn btn-primary" id="start-sleep-timer-btn" data-i18n="sleep.startBtn">Start Timer</button>
+            <button type="button" class="btn btn-ghost" id="cancel-sleep-timer-btn" data-i18n="sleep.cancelBtn" disabled>Cancel Timer</button>
+          </div>
+        </div>
+      </details>
     </main>
   </div>
 
@@ -782,13 +952,13 @@
   <dialog id="add-bulb-dialog" class="console-dialog" closedby="any" aria-labelledby="add-bulb-title">
     <form id="add-bulb-form" method="dialog" class="dialog-surface">
       <header class="dialog-header">
-        <h2 id="add-bulb-title" class="dialog-title">Register Fixture by IPv4</h2>
-        <p class="dialog-subtitle">Directly probe a WiZ bulb on UDP port 38899 when broadcast discovery is filtered.</p>
+        <h2 id="add-bulb-title" class="dialog-title" data-i18n="dialog.addTitle">Register Fixture by IPv4</h2>
+        <p class="dialog-subtitle" data-i18n="dialog.addSubtitle">Directly probe a WiZ bulb on UDP port 38899 when broadcast discovery is filtered.</p>
       </header>
 
       <div class="dialog-body">
         <div class="field-group">
-          <label for="manual-ip-input">Fixture IPv4 Address</label>
+          <label for="manual-ip-input" data-i18n="dialog.addIpLabel">Fixture IPv4 Address</label>
           <input
             type="text"
             id="manual-ip-input"
@@ -800,19 +970,20 @@
         </div>
 
         <div class="field-group">
-          <label for="manual-name-input">Fixture Label (Optional)</label>
+          <label for="manual-name-input" data-i18n="dialog.addNameLabel">Fixture Label (Optional)</label>
           <input
             type="text"
             id="manual-name-input"
             placeholder="Studio Key Light"
+            data-i18n-placeholder="dialog.addNamePlaceholder"
             autocomplete="off"
           >
         </div>
       </div>
 
       <footer class="dialog-footer">
-        <button type="button" class="btn btn-ghost" data-close-dialog="add-bulb-dialog">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="submit-add-bulb-btn">Probe and Register</button>
+        <button type="button" class="btn btn-ghost" data-close-dialog="add-bulb-dialog" data-i18n="dialog.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-add-bulb-btn" data-i18n="dialog.addSubmit">Probe and Register</button>
       </footer>
     </form>
   </dialog>
@@ -821,14 +992,14 @@
   <dialog id="rename-bulb-dialog" class="console-dialog" closedby="any" aria-labelledby="rename-bulb-title">
     <form id="rename-bulb-form" method="dialog" class="dialog-surface">
       <header class="dialog-header">
-        <h2 id="rename-bulb-title" class="dialog-title">Rename Fixture</h2>
+        <h2 id="rename-bulb-title" class="dialog-title" data-i18n="dialog.renameTitle">Rename Fixture</h2>
         <p class="dialog-subtitle" id="rename-bulb-ip-display">IP: 0.0.0.0</p>
       </header>
 
       <div class="dialog-body">
         <input type="hidden" id="rename-bulb-ip-input">
         <div class="field-group">
-          <label for="rename-bulb-name-input">New Fixture Name</label>
+          <label for="rename-bulb-name-input" data-i18n="dialog.renameNameLabel">New Fixture Name</label>
           <input
             type="text"
             id="rename-bulb-name-input"
@@ -839,8 +1010,8 @@
       </div>
 
       <footer class="dialog-footer">
-        <button type="button" class="btn btn-ghost" data-close-dialog="rename-bulb-dialog">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save Name</button>
+        <button type="button" class="btn btn-ghost" data-close-dialog="rename-bulb-dialog" data-i18n="dialog.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="dialog.renameSubmit">Save Name</button>
       </footer>
     </form>
   </dialog>
@@ -849,18 +1020,19 @@
   <dialog id="custom-scene-dialog" class="console-dialog" closedby="any" aria-labelledby="custom-scene-dialog-title">
     <form id="custom-scene-form" method="dialog" class="dialog-surface">
       <header class="dialog-header">
-        <h2 id="custom-scene-dialog-title" class="dialog-title">Save Custom Preset</h2>
-        <p class="dialog-subtitle" id="custom-scene-dialog-subtitle">Snapshots the active fixture state into local persistent storage.</p>
+        <h2 id="custom-scene-dialog-title" class="dialog-title" data-i18n="dialog.presetSaveTitle">Save Custom Preset</h2>
+        <p class="dialog-subtitle" id="custom-scene-dialog-subtitle" data-i18n="dialog.presetSaveSubtitle">Snapshots the active fixture state into local persistent storage.</p>
       </header>
 
       <div class="dialog-body">
         <input type="hidden" id="custom-scene-id-input">
         <div class="field-group">
-          <label for="custom-scene-name-input">Preset Label</label>
+          <label for="custom-scene-name-input" data-i18n="dialog.presetNameLabel">Preset Label</label>
           <input
             type="text"
             id="custom-scene-name-input"
             placeholder="Late Night Coding"
+            data-i18n-placeholder="dialog.presetNamePlaceholder"
             required
             autocomplete="off"
           >
@@ -869,18 +1041,19 @@
         <div class="field-group" id="custom-scene-overwrite-row" hidden>
           <label class="checkbox-control" for="custom-scene-overwrite-checkbox">
             <input type="checkbox" id="custom-scene-overwrite-checkbox">
-            <span>Overwrite preset parameters with current live bulb state</span>
+            <span data-i18n="dialog.presetOverwrite">Overwrite preset parameters with current live bulb state</span>
           </label>
         </div>
       </div>
 
       <footer class="dialog-footer">
-        <button type="button" class="btn btn-ghost" data-close-dialog="custom-scene-dialog">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="custom-scene-submit-btn">Save Preset</button>
+        <button type="button" class="btn btn-ghost" data-close-dialog="custom-scene-dialog" data-i18n="dialog.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="custom-scene-submit-btn" data-i18n="dialog.presetSaveSubmit">Save Preset</button>
       </footer>
     </form>
   </dialog>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

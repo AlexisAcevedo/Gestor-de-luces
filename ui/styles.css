@@ -49,6 +49,25 @@
   box-sizing: border-box;
 }
 
+/* Barras de desplazamiento delgadas y oscuras coherentes con el chasis de instrumentacion */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2f3a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f4756;
+}
+
 html,
 body {
   margin: 0;
@@ -87,10 +106,52 @@ body {
   gap: 14px;
 }
 
+.rail-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .brand-lockup {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+/* Selector segmentado de idioma (EN | ES) en la cabecera de la consola */
+.lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.lang-btn {
+  padding: 3px 9px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.lang-btn:hover {
+  color: var(--text-primary);
+}
+
+.lang-btn[aria-pressed="true"] {
+  color: var(--text-primary);
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
 }
 
 .aperture-dot {
@@ -159,6 +220,8 @@ body {
   border-radius: 999px;
   background-color: var(--surface-chassis);
   border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Lista desplazable de focos descubiertos o agregados manualmente */
@@ -216,6 +279,13 @@ body {
   flex: 1;
 }
 
+.fixture-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .fixture-name {
   margin: 0;
   font-size: 0.92rem;
@@ -224,6 +294,63 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Boton discreto con icono de lapiz junto al nombre de la luminaria */
+.btn-icon-rename {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.btn-icon-rename:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-interactive);
+  border-color: var(--border-structural);
+}
+
+.btn-icon-rename .icon {
+  width: 13.5px;
+  height: 13.5px;
+}
+
+/* Interruptor circular de encendido con icono universal Power en cada tarjeta */
+.btn-fixture-power {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-structural);
+  background-color: var(--surface-chassis);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.btn-fixture-power:hover {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+.btn-fixture-power[aria-pressed="true"] {
+  color: #FFFFFF;
+  background-color: color-mix(in oklab, var(--beam-color) 36%, #1C222D);
+  border-color: var(--beam-border-tint);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--beam-color) 50%, transparent);
 }
 
 .fixture-address {
@@ -329,6 +456,15 @@ body {
   overflow-y: auto;
 }
 
+.photometric-stage > .stage-header,
+.photometric-stage > .control-well,
+.photometric-stage > .mode-tabs,
+.photometric-stage > .mode-panel {
+  max-width: 1240px;
+  width: 100%;
+  margin-inline: auto;
+}
+
 .stage-header {
   display: flex;
   align-items: center;
@@ -362,9 +498,11 @@ body {
   box-shadow: 0 0 24px color-mix(in oklab, var(--beam-color) 60%, transparent);
   forced-color-adjust: none;
   flex-shrink: 0;
+  transition: background-color 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
 .console-shell[data-power="off"] .photometric-aperture {
+  background-color: #232832;
   box-shadow: none;
   border-color: var(--border-structural);
 }
@@ -451,26 +589,66 @@ body {
   border-radius: var(--radius-sm);
 }
 
-/* Deslizadores de consola con borde de contraste >= 3:1 */
+/* Deslizadores de consola con relleno progresivo a la izquierda y contraste >= 3:1 */
 .console-slider {
+  --fill-color: var(--beam-border-tint);
+  --slider-progress: 50%;
+  --slider-track-size: 10px;
+  --slider-thumb-size: 20px;
   width: 100%;
-  height: 10px;
+  height: var(--slider-track-size);
+  margin: 0;
   appearance: none;
-  background-color: var(--surface-well);
+  background: linear-gradient(
+    90deg,
+    var(--fill-color) 0%,
+    var(--fill-color) var(--slider-progress),
+    #1c222d var(--slider-progress),
+    #1c222d 100%
+  );
   border: 1px solid var(--border-structural);
   border-radius: 999px;
   cursor: pointer;
 }
 
+.console-slider::-webkit-slider-runnable-track {
+  height: var(--slider-track-size);
+  border-radius: 999px;
+}
+
+.console-slider::-moz-range-track {
+  height: var(--slider-track-size);
+  border-radius: 999px;
+  background: #1c222d;
+}
+
+.console-slider::-moz-range-progress {
+  height: var(--slider-track-size);
+  border-radius: 999px;
+  background: var(--fill-color);
+}
+
 .console-slider:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .console-slider::-webkit-slider-thumb {
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2 - 1px);
+  border-radius: 50%;
+  background-color: var(--text-primary);
+  border: 2px solid var(--surface-chassis);
+  box-shadow: 0 0 0 1px var(--border-structural);
+  cursor: pointer;
+}
+
+.console-slider::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
   border-radius: 50%;
   background-color: var(--text-primary);
   border: 2px solid var(--surface-chassis);
@@ -486,30 +664,81 @@ body {
 
 /* Pestanas de modo de emision (RGB / Kelvin / Escenas / Presets / Ambilight / Musica) */
 .mode-tabs {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
   background-color: var(--surface-panel);
-  padding: 6px;
+  padding: 5px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-muted) transparent;
+}
+
+.mode-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.mode-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mode-tabs::-webkit-scrollbar-thumb {
+  background: var(--border-muted);
+  border-radius: 2px;
+}
+
+.mode-tabs::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .mode-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 8px 11px;
   background-color: transparent;
   color: var(--text-secondary);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 0.88rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  white-space: nowrap;
+  flex: 1 0 auto;
+  min-width: max-content;
   cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+/* Punto luminoso animado en la pestana que indica que motor de streaming posee el socket UDP */
+.tab-stream-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--status-online);
+  box-shadow: 0 0 9px var(--status-online);
+  flex-shrink: 0;
+  animation: pulse-stream-dot 1.4s ease-in-out infinite;
+}
+
+.tab-stream-dot[hidden] {
+  display: none !important;
+}
+
+@keyframes pulse-stream-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
 }
 
 .mode-tab:hover {
@@ -527,15 +756,17 @@ body {
   display: none !important;
 }
 
-/* Panel 1: Banco de trabajo cromatico RGB */
+/* Panel 1: Banco de trabajo cromatico RGB con proporciones equilibradas en pantallas anchas */
 .rgb-workbench {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 20px;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 560px);
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 28px;
   background-color: var(--surface-panel);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 24px 28px;
 }
 
 .wheel-column {
@@ -546,8 +777,8 @@ body {
 
 .wheel-frame {
   position: relative;
-  width: 240px;
-  height: 240px;
+  width: 256px;
+  height: 256px;
   border-radius: 50%;
   border: 2px solid var(--border-structural);
   background-color: var(--surface-well);
@@ -581,6 +812,8 @@ body {
   flex-direction: column;
   justify-content: space-between;
   gap: 18px;
+  max-width: 560px;
+  width: 100%;
 }
 
 .channel-grid {
@@ -750,6 +983,12 @@ body {
   flex-direction: column;
   gap: 4px;
   min-width: 210px;
+  transition: opacity 150ms ease;
+}
+
+.speed-control-box.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .speed-label-row {
@@ -766,19 +1005,22 @@ body {
 
 .scenes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
   gap: 10px;
-  max-height: 360px;
+  max-height: 380px;
   overflow-y: auto;
   padding-right: 4px;
+  padding-bottom: 16px;
 }
 
+/* Tarjeta de escena con barra de acento izquierdo de 3px e indicador cromatico */
 .scene-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 8px;
-  padding: 12px;
+  gap: 10px;
+  padding: 12px 12px 12px 15px;
   background-color: var(--surface-panel);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
@@ -786,17 +1028,30 @@ body {
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  overflow: hidden;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.scene-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--scene-gradient, var(--scene-accent, #38bdf8));
+  forced-color-adjust: none;
 }
 
 .scene-card:hover {
   background-color: var(--surface-well);
-  border-color: var(--border-structural);
+  border-color: var(--scene-accent, var(--border-structural));
 }
 
 .scene-card.active {
-  background-color: var(--beam-surface-tint);
-  border-color: var(--beam-border-tint);
+  background-color: color-mix(in oklab, var(--scene-accent, var(--beam-color)) 18%, var(--surface-panel));
+  border-color: var(--scene-accent, var(--beam-border-tint));
+  box-shadow: 0 0 14px color-mix(in oklab, var(--scene-accent, var(--beam-color)) 28%, transparent);
 }
 
 .scene-card-top {
@@ -806,10 +1061,32 @@ body {
   gap: 6px;
 }
 
+.scene-card-id-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scene-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--scene-gradient, var(--scene-accent, #38bdf8));
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  forced-color-adjust: none;
+  flex-shrink: 0;
+}
+
 .scene-id-badge {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--text-secondary);
+}
+
+.scene-card-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .scene-tag {
@@ -821,11 +1098,71 @@ body {
   color: var(--text-secondary);
 }
 
+.scene-active-badge {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--scene-accent, var(--beam-color)) 32%, #14181F);
+  border: 1px solid var(--scene-accent, var(--beam-border-tint));
+  color: #FFFFFF;
+}
+
+.scene-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .scene-name {
   margin: 0;
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Boton SVG de estrella para fijar escenas favoritas en localStorage */
+.scene-fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.scene-fav-btn:hover {
+  color: #FACC15;
+  background-color: rgba(250, 204, 21, 0.12);
+}
+
+.scene-fav-btn.is-fav {
+  color: #FACC15;
+}
+
+.scene-fav-btn .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-star {
+  width: 13px;
+  height: 13px;
+  color: #FACC15;
 }
 
 /* Grupo de acciones maestras en la cabecera del escenario */
@@ -836,19 +1173,57 @@ body {
   gap: 10px;
 }
 
-/* Barra de temporizador de apagado (Sleep Timer) con atenuacion progresiva */
-.sleep-timer-well {
-  padding: 14px 18px;
-  gap: 12px;
+/* Barra colapsable de temporizador de apagado (Sleep Timer) al pie del escenario */
+details.sleep-timer-well {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
 }
 
-.sleep-timer-header {
+summary.sleep-timer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
+  gap: 12px;
+  padding: 13px 18px;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 120ms ease;
+}
+
+summary.sleep-timer-header::-webkit-details-marker {
+  display: none;
+}
+
+summary.sleep-timer-header:hover {
+  background-color: var(--surface-well);
+}
+
+.sleep-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.details-chevron {
+  color: var(--text-secondary);
+  transition: transform 160ms ease;
+}
+
+details.sleep-timer-well[open] .details-chevron {
+  transform: rotate(180deg);
+}
+
+details.sleep-timer-well .sleep-timer-controls {
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .timer-status-badge {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 4px 11px;
   border-radius: 999px;
   background-color: var(--surface-well);
@@ -863,6 +1238,28 @@ body {
   background-color: var(--beam-surface-tint);
   border-color: var(--beam-border-tint);
   color: var(--text-primary);
+}
+
+.timer-status-badge[data-live="true"]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--status-online);
+  box-shadow: 0 0 8px var(--status-online);
+  animation: pulse-stream-dot 1.3s ease-in-out infinite;
+}
+
+#cancel-sleep-timer-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+#cancel-sleep-timer-btn.is-active-alert {
+  background-color: rgba(244, 63, 94, 0.16);
+  border-color: #F43F5E;
+  color: #FFE4E6;
 }
 
 .sleep-timer-controls {
@@ -1106,6 +1503,92 @@ body {
 .ambilight-Toggle-row {
   padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Escala de presets matematicamente posicionados bajo deslizadores EMA y Sensibilidad */
+.slider-scale-anchored {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  margin-top: 4px;
+}
+
+.scale-preset-btn {
+  position: absolute;
+  top: 0;
+  left: var(--pos, 0%);
+  padding: 2px 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.scale-preset-btn[data-align="start"] {
+  transform: translateX(0);
+}
+
+.scale-preset-btn[data-align="center"] {
+  transform: translateX(-50%);
+}
+
+.scale-preset-btn[data-align="end"] {
+  transform: translateX(-100%);
+}
+
+.scale-preset-btn:hover,
+.scale-preset-btn.active {
+  color: var(--text-primary);
+  background-color: var(--surface-well);
+  border-color: var(--border-structural);
+}
+
+.conditional-floor-row {
+  padding: 10px 12px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  transition: opacity 150ms ease;
+}
+
+.conditional-floor-row.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.floor-hint {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+/* Pildoras cromaticas de vista previa dentro de los botones de paleta musical */
+.palette-swatch-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  forced-color-adjust: none;
+  flex-shrink: 0;
+}
+
+.palette-dot-spectrum {
+  background: linear-gradient(135deg, #ff4d6d 0%, #10b981 50%, #3b82f6 100%);
+}
+
+.palette-dot-club {
+  background: linear-gradient(135deg, #ff007f 0%, #ff9e00 50%, #a855f7 100%);
+}
+
+.palette-dot-chill {
+  background: linear-gradient(135deg, #00b4d8 0%, #10b981 50%, #4361ee 100%);
 }
 
 /* Panel 6: Sincronizacion musical en tiempo real (WASAPI Loopback y espectro FFT) */
@@ -1146,7 +1629,16 @@ body {
   box-shadow: 0 0 22px color-mix(in oklab, var(--music-swatch-color, var(--beam-color)) 65%, transparent);
   forced-color-adjust: none;
   flex-shrink: 0;
-  transition: background-color 110ms ease, box-shadow 110ms ease;
+  transition: background-color 80ms linear, box-shadow 80ms linear, border-color 80ms linear, transform 80ms ease;
+}
+
+/* Resplandor de deteccion de golpe de ritmo (Beat Peak) cuando supera el umbral de sensibilidad */
+.music-preview-swatch.is-beat-peak {
+  border-color: #FFFFFF;
+  box-shadow:
+    0 0 12px #FFFFFF,
+    0 0 34px color-mix(in oklab, var(--music-swatch-color, var(--beam-color)) 90%, #FFFFFF);
+  transform: scale(1.06);
 }
 
 .music-meters-list {
@@ -1193,23 +1685,32 @@ body {
   width: 0%;
   height: 100%;
   border-radius: 999px;
-  transition: width 140ms ease;
+  transition: width 50ms linear;
+  forced-color-adjust: none;
 }
 
-.music-meter-bass {
-  background-color: #F43F5E;
+.music-meter-bass,
+#music-meter-bass,
+#music-meter-bass-fill {
+  background: linear-gradient(90deg, #ff4d6d 0%, #ff9e00 100%);
 }
 
-.music-meter-mid {
-  background-color: #10B981;
+.music-meter-mid,
+#music-meter-mid,
+#music-meter-mid-fill {
+  background: linear-gradient(90deg, #10b981 0%, #06b6d4 100%);
 }
 
-.music-meter-treble {
-  background-color: #38BDF8;
+.music-meter-treble,
+#music-meter-treble,
+#music-meter-treble-fill {
+  background: linear-gradient(90deg, #3b82f6 0%, #a855f7 100%);
 }
 
-.music-meter-rms {
-  background-color: #F59E0B;
+.music-meter-rms,
+#music-meter-rms,
+#music-meter-rms-fill {
+  background: linear-gradient(90deg, #fde047 0%, #fffbeb 100%);
 }
 
 .music-config-column {
@@ -1301,17 +1802,34 @@ body {
   border-color: var(--beam-border-tint);
 }
 
-.btn-power {
-  padding: 10px 18px;
-  background-color: var(--surface-well);
+/* Boton maestro de encendido diferenciado como accion primaria prominente */
+.btn-power,
+#master-power-btn {
+  padding: 10px 20px;
+  background: linear-gradient(180deg, #283244 0%, #1d2533 100%);
   color: var(--text-primary);
-  border: 1px solid var(--border-structural);
+  border: 1.5px solid #6b7c96;
   border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 100ms ease;
 }
 
-.btn-power[aria-pressed="true"] {
-  background-color: var(--beam-surface-tint);
+.btn-power:hover,
+#master-power-btn:hover {
+  border-color: var(--text-primary);
+  background: linear-gradient(180deg, #313d52 0%, #232d3f 100%);
+}
+
+.btn-power[aria-pressed="true"],
+#master-power-btn[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--beam-color) 36%, #18202c);
   border-color: var(--beam-border-tint);
+  color: #FFFFFF;
+  box-shadow:
+    0 0 18px color-mix(in oklab, var(--beam-color) 45%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 /* Dialogos modales nativos con soporte de light-dismiss (closedby="any") */
@@ -1396,7 +1914,8 @@ body {
   .kelvin-card.active,
   .chip-btn.active,
   .btn-favorite.is-favorite,
-  .btn-power[aria-pressed="true"] {
+  .btn-power[aria-pressed="true"],
+  .lang-btn[aria-pressed="true"] {
     outline: 2px solid Highlight;
     border-color: Highlight;
   }
@@ -1431,6 +1950,10 @@ body {
   }
 
   .mode-tabs {
-    grid-template-columns: repeat(2, 1fr);
+    flex-wrap: wrap;
+  }
+
+  .mode-tab {
+    flex: 1 1 calc(33.333% - 6px);
   }
 }
