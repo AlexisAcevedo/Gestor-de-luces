@@ -484,10 +484,10 @@ body {
   gap: 8px;
 }
 
-/* Pestanas de modo de emision (RGB / Kelvin / Escenas / Presets) */
+/* Pestanas de modo de emision (RGB / Kelvin / Escenas / Presets / Ambilight) */
 .mode-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   background-color: var(--surface-panel);
   padding: 6px;
@@ -1004,6 +1004,110 @@ body {
   border-color: var(--beam-border-tint);
 }
 
+/* Panel 5: Sincronizacion de pantalla en tiempo real (Ambilight) */
+.ambilight-workbench {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.ambilight-preview-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-md);
+}
+
+.ambilight-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ambilight-swatch-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+/* Muestra en vivo del color extraido de la pantalla; se preserva en Forced Colors */
+.ambilight-preview-swatch {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background-color: var(--ambilight-swatch-color, var(--beam-color));
+  border: 2px solid var(--beam-border-tint);
+  box-shadow: 0 0 28px color-mix(in oklab, var(--ambilight-swatch-color, var(--beam-color)) 65%, transparent);
+  forced-color-adjust: none;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.ambilight-readout-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ambilight-swatch-title {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.ambilight-color-readout {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ambilight-toggle-btn {
+  width: 100%;
+  padding: 11px 16px;
+}
+
+.ambilight-config-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.field-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.console-select {
+  background-color: var(--surface-well);
+  color: var(--text-primary);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.ambilight-Toggle-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1204,7 +1308,12 @@ body {
     border-bottom: 1px solid var(--border-subtle);
   }
 
-  .rgb-workbench {
+  .rgb-workbench,
+  .ambilight-workbench {
     grid-template-columns: 1fr;
+  }
+
+  .mode-tabs {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

@@ -9,7 +9,7 @@ prueba sin necesidad de herencia explicita.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from gestor_luces.domain.models import Bulb, LightState
 from gestor_luces.domain.scenes import CustomScene
@@ -97,8 +97,12 @@ class SceneRepository(Protocol):
 class ScreenSampler(Protocol):
     """Puerto para muestrear el color predominante de la pantalla (modo Ambilight)."""
 
-    def sample_average_color(self, monitor_index: int = 1) -> Color:
-        """Captura una version reducida del monitor indicado y devuelve su color promedio."""
+    def sample_average_color(self, monitor_index: int = 1, mode: str = "average") -> Color:
+        """Captura una version reducida del monitor indicado y devuelve su color representativo."""
+        ...
+
+    def list_monitors(self) -> list[dict[str, Any]]:
+        """Devuelve la lista de monitores disponibles para el muestreo de pantalla."""
         ...
 
 

@@ -63,6 +63,18 @@ class StreamRateLimiter:
         """Devuelve el intervalo minimo en segundos permitido entre envios a un mismo foco."""
         return self._min_interval
 
+    @property
+    def alpha(self) -> float:
+        """Devuelve el factor de suavizado EMA vigente en (0.0, 1.0]."""
+        return self._alpha
+
+    def set_alpha(self, alpha: float) -> None:
+        """Actualiza en caliente el coeficiente EMA cuando el usuario ajusta la respuesta visual."""
+        parsed = float(alpha)
+        if not (0.0 < parsed <= 1.0):
+            raise ValueError(f"alpha must be in (0.0, 1.0], got {alpha}.")
+        self._alpha = parsed
+
     def prepare_frame(
         self,
         ip: str,

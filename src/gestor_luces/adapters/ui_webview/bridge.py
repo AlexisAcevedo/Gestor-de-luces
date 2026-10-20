@@ -82,6 +82,8 @@ class WebviewBridge:
         scenes = [scene.to_dict() for scene in list_builtin_scenes()]
         custom_scenes = [scene.to_dict() for scene in self._service.list_custom_scenes()]
         sleep_timer = self._service.get_sleep_timer_status()
+        ambilight = self._service.get_ambilight_status()
+        monitors = self._service.list_monitors()
         return {
             "ok": ok,
             "bulbs": bulbs,
@@ -89,6 +91,8 @@ class WebviewBridge:
             "scenes": scenes,
             "custom_scenes": custom_scenes,
             "sleep_timer": sleep_timer,
+            "ambilight": ambilight,
+            "monitors": monitors,
             "error": error,
         }
 
@@ -122,6 +126,7 @@ class WebviewBridge:
             try:
                 if self._loop.is_running():
                     async def _cancel() -> None:
+                        self._service.stop_ambilight()
                         self._service.cancel_sleep_timer()
 
                     self._run_async(_cancel(), timeout=1.5)
@@ -449,6 +454,53 @@ class WebviewBridge:
         """Obtiene el sobre actualizado incluyendo la cuenta regresiva del temporizador."""
         try:
             # Consulta de solo lectura sondeada cada segundo: no notifica a la bandeja.
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def start_ambilight(
+        self,
+        monitor_index: int = 1,
+        color_mode: str = "vibrant",
+        auto_brightness: bool = True,
+        brightness: int = 85,
+        smoothing_alpha: float = 0.38,
+        ips: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Inicia la sincronizacion Ambilight de pantalla en el bucle de eventos asincrono."""
+        try:
+            target_ips = [str(ip) for ip in ips] if isinstance(ips, list) else None
+
+            async def _start() -> dict[str, Any]:
+                return self._service.start_ambilight(
+                    monitor_index=int(monitor_index),
+                    color_mode=str(color_mode),
+                    auto_brightness=bool(auto_brightness),
+                    brightness=int(brightness),
+                    smoothing_alpha=float(smoothing_alpha),
+                    ips=target_ips,
+                )
+
+            self._run_async(_start())
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def stop_ambilight(self) -> dict[str, Any]:
+        """Detiene el flujo continuo de Ambilight en ejecucion."""
+        try:
+            async def _stop() -> dict[str, Any]:
+                return self._service.stop_ambilight()
+
+            self._run_async(_stop())
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def get_ambilight_status(self) -> dict[str, Any]:
+        """Obtiene el estado en vivo del muestreo Ambilight para la vista previa."""
+        try:
+            # Sondeo frecuente de previsualizacion: evita reconstruir el menu Win32 cada 400ms.
             return self._build_response(ok=True)
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))

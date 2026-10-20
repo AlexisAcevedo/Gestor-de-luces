@@ -12,6 +12,7 @@ import asyncio
 from typing import Any
 from uuid import uuid4
 
+from gestor_luces.application.ambilight_stream import AmbilightStreamManager
 from gestor_luces.application.rate_limiter import StreamRateLimiter
 from gestor_luces.application.sleep_timer import AwaitableStatusDict, SleepTimerManager
 from gestor_luces.domain.models import Bulb, LightState
@@ -27,6 +28,7 @@ from gestor_luces.ports.repositories import (
     BulbRepository,
     LightController,
     SceneRepository,
+    ScreenSampler,
 )
 
 
@@ -40,12 +42,16 @@ class LightControlService:
         scene_repository: SceneRepository | None = None,
         rate_limiter: StreamRateLimiter | None = None,
         sleep_timer: SleepTimerManager | None = None,
+        screen_sampler: ScreenSampler | None = None,
+        ambilight_manager: AmbilightStreamManager | None = None,
     ) -> None:
         self._controller = controller
         self._bulb_repo = bulb_repository
         self._scene_repo = scene_repository
         self._rate_limiter = rate_limiter or StreamRateLimiter()
         self._sleep_timer = sleep_timer or SleepTimerManager()
+        self._screen_sampler = screen_sampler
+        self._ambilight = ambilight_manager or AmbilightStreamManager(sampler=screen_sampler)
         self._bulbs: dict[str, Bulb] = {}
         self._selected_ips: list[str] = []
         self._custom_scenes: dict[str, CustomScene] = {}
@@ -71,6 +77,7 @@ class LightControlService:
         """Define que subconjunto de focos recibira los comandos cuando no se indiquen IPs explicitas."""
         valid_ips = [ip for ip in ips if ip in self._bulbs]
         self._selected_ips = valid_ips
+        self._ambilight.update_targets(self.get_target_ips())
         return list(self._selected_ips)
 
     def get_target_ips(self, explicit_ips: list[str] | None = None) -> list[str]:
@@ -170,6 +177,10 @@ class LightControlService:
         ips: list[str] | None = None,
     ) -> list[Bulb]:
         """Enciende o apaga uno o varios focos en paralelo."""
+        if not is_on:
+            # Si el usuario apaga manualmente o expira el Sleep Timer, detenemos Ambilight
+            # para que un fotograma rezagado no vuelva a encender el foco.
+            self.stop_ambilight()
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
         target_ips = self.get_target_ips(ips)
 
@@ -193,6 +204,7 @@ class LightControlService:
     ) -> list[Bulb]:
         """Ajusta el brillo (10-100%) en todos los focos objetivo."""
         validated = Brightness(brightness).percent
+        self._ambilight.update_fixed_brightness(validated)
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -218,6 +230,8 @@ class LightControlService:
         """Aplica un color RGB validado a uno o multiples focos."""
         color = Color(r=r, g=g, b=b)
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
+        # Cualquier cambio manual de color toma precedencia y detiene el flujo Ambilight.
+        self.stop_ambilight()
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -251,6 +265,7 @@ class LightControlService:
         """Aplica una temperatura de color blanco (2200K-6500K) a los focos objetivo."""
         validated_temp = ColorTemperature(kelvin).kelvin
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
+        self.stop_ambilight()
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -293,6 +308,7 @@ class LightControlService:
             else None
         )
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
+        self.stop_ambilight()
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -553,6 +569,65 @@ class LightControlService:
     def get_sleep_timer_status(self) -> dict[str, Any]:
         """Consulta el estado actual del temporizador de apagado."""
         return dict(self._sleep_timer.get_status())
+
+    def _ensure_screen_sampler(self) -> ScreenSampler:
+        """Obtiene el adaptador de pantalla inyectado o instancia el adaptador por defecto."""
+        if self._screen_sampler is None:
+            from gestor_luces.adapters.ambilight.mss_sampler import MssScreenSampler
+
+            self._screen_sampler = MssScreenSampler()
+            self._ambilight.set_sampler(self._screen_sampler)
+        return self._screen_sampler
+
+    def list_monitors(self) -> list[dict[str, Any]]:
+        """Devuelve la lista de monitores disponibles para el modo Ambilight."""
+        sampler = self._ensure_screen_sampler()
+        list_fn = getattr(sampler, "list_monitors", None)
+        if callable(list_fn):
+            return list(list_fn())
+        return [{"index": 1, "label": "Display 1 (Primary)", "width": 1920, "height": 1080}]
+
+    def start_ambilight(
+        self,
+        monitor_index: int = 1,
+        color_mode: str = "vibrant",
+        auto_brightness: bool = True,
+        brightness: int = 85,
+        smoothing_alpha: float = 0.38,
+        ips: list[str] | None = None,
+    ) -> AwaitableStatusDict:
+        """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
+        sampler = self._ensure_screen_sampler()
+        parsed_alpha = max(0.05, min(1.0, float(smoothing_alpha)))
+        self._rate_limiter.set_alpha(parsed_alpha)
+        self._rate_limiter.reset()
+        target_ips = self.get_target_ips(ips)
+
+        async def _on_frame(frame_color: Color, frame_brightness: int, frame_ips: list[str]) -> bool:
+            return await self.stream_color_frame(
+                color=frame_color,
+                brightness=frame_brightness,
+                ips=frame_ips,
+            )
+
+        return self._ambilight.start(
+            sampler=sampler,
+            target_ips=target_ips,
+            on_frame=_on_frame,
+            monitor_index=int(monitor_index),
+            color_mode=str(color_mode),
+            auto_brightness=bool(auto_brightness),
+            brightness=int(brightness),
+            smoothing_alpha=parsed_alpha,
+        )
+
+    def stop_ambilight(self) -> AwaitableStatusDict:
+        """Detiene el flujo continuo de Ambilight."""
+        return self._ambilight.stop()
+
+    def get_ambilight_status(self) -> dict[str, Any]:
+        """Devuelve el estado actual de la sincronizacion Ambilight."""
+        return dict(self._ambilight.get_status())
 
     def _resolve_reference_state(self, source_ip: str | None = None) -> LightState:
         """Determina el estado luminico de referencia a partir de una IP o la seleccion actual."""

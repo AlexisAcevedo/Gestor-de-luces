@@ -261,6 +261,23 @@
           </svg>
           <span id="custom-tab-label">Custom Presets</span>
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="tab-btn-ambilight"
+          class="mode-tab"
+          aria-selected="false"
+          aria-controls="panel-ambilight"
+          tabindex="-1"
+          data-mode="ambilight"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="2.5" y="3.5" width="15" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M7 16.5h6M10 13.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>Ambilight</span>
+        </button>
       </div>
 
       <!-- Panel 1: Chromatic RGB -->
@@ -467,6 +484,108 @@
 
         <div class="custom-scenes-grid" id="custom-scenes-grid" role="region" aria-label="Saved custom lighting presets">
           <!-- Populated dynamically by ui/app.js -->
+        </div>
+      </section>
+
+      <!-- Panel 5: Ambilight Real-Time Screen Sync -->
+      <section
+        id="panel-ambilight"
+        role="tabpanel"
+        aria-labelledby="tab-btn-ambilight"
+        class="mode-panel"
+        hidden
+      >
+        <div class="ambilight-workbench">
+          <!-- Left: Live Screen Telemetry & Stream Control -->
+          <div class="ambilight-preview-card">
+            <div class="ambilight-preview-header">
+              <span class="timer-status-badge" id="ambilight-status-badge" data-active="false">STANDBY</span>
+              <span class="telemetry-meta" id="ambilight-frames-readout">0 frames sent</span>
+            </div>
+
+            <div class="ambilight-swatch-stage">
+              <div
+                class="ambilight-preview-swatch"
+                id="ambilight-preview-swatch"
+                aria-hidden="true"
+              ></div>
+              <div class="ambilight-readout-block">
+                <p class="ambilight-swatch-title">Sampled Screen Chromaticity</p>
+                <p class="ambilight-color-readout" id="ambilight-color-readout">RGB (0, 0, 0) · #000000</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-primary ambilight-toggle-btn"
+              id="toggle-ambilight-btn"
+              aria-pressed="false"
+            >
+              <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="2.5" y="3.5" width="15" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M7 16.5h6M10 13.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span id="toggle-ambilight-label">Start Ambilight</span>
+            </button>
+          </div>
+
+          <!-- Right: Display & Algorithm Configuration -->
+          <div class="ambilight-config-column">
+            <div class="field-group">
+              <label for="ambilight-monitor-select">Source Display</label>
+              <select id="ambilight-monitor-select" class="console-select">
+                <option value="1">Display 1 (Primary)</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <span class="field-label" id="ambilight-mode-label">Color Extraction Mode</span>
+              <div class="preset-strip" role="group" aria-labelledby="ambilight-mode-label">
+                <button
+                  type="button"
+                  class="chip-btn ambilight-mode-btn active"
+                  data-color-mode="vibrant"
+                >
+                  Vibrant / Dominant
+                </button>
+                <button
+                  type="button"
+                  class="chip-btn ambilight-mode-btn"
+                  data-color-mode="average"
+                >
+                  Average Screen Color
+                </button>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="speed-label-row">
+                <label for="ambilight-smoothing-slider">EMA Smoothing Response (Alpha)</label>
+                <output id="ambilight-smoothing-output" for="ambilight-smoothing-slider">0.38</output>
+              </div>
+              <input
+                type="range"
+                id="ambilight-smoothing-slider"
+                class="console-slider"
+                min="0.15"
+                max="0.75"
+                step="0.05"
+                value="0.38"
+              >
+              <div class="kelvin-scale-labels" aria-hidden="true">
+                <span>0.15 Cinematic</span>
+                <span>0.38 Balanced</span>
+                <span>0.75 Fast Response</span>
+              </div>
+            </div>
+
+            <div class="ambilight-Toggle-row">
+              <label class="checkbox-control" for="ambilight-auto-brightness">
+                <input type="checkbox" id="ambilight-auto-brightness" checked>
+                <span>Track screen brightness automatically (ITU-R BT.709 luminance)</span>
+              </label>
+            </div>
+          </div>
         </div>
       </section>
     </main>

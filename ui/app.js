@@ -70,10 +70,26 @@
       total_seconds: 0,
       target_ips: []
     },
+    ambilight: {
+      active: false,
+      monitor_index: 1,
+      color_mode: "vibrant",
+      auto_brightness: true,
+      brightness: 85,
+      fixed_brightness: 85,
+      smoothing_alpha: 0.38,
+      last_color: null,
+      target_ips: [],
+      frames_sent: 0
+    },
+    monitors: [
+      { index: 1, label: "Display 1 (1920x1080)", width: 1920, height: 1080 }
+    ],
     activeTab: "rgb",
     sceneCategory: "all",
     autoSyncTimer: null,
     sleepPollTimer: null,
+    ambilightPollTimer: null,
     isDraggingWheel: false
   };
 
@@ -130,6 +146,23 @@
       target_ips: [],
       deadlineMs: 0
     };
+    let mockAmbilight = {
+      active: false,
+      monitor_index: 1,
+      color_mode: "vibrant",
+      auto_brightness: true,
+      brightness: 85,
+      fixed_brightness: 85,
+      smoothing_alpha: 0.38,
+      last_color: { r: 56, g: 189, b: 248, hex: "#38bdf8" },
+      target_ips: [],
+      frames_sent: 0
+    };
+    const mockMonitors = [
+      { index: 1, label: "Display 1 (2560x1440)", width: 2560, height: 1440 },
+      { index: 2, label: "Display 2 (1920x1080)", width: 1920, height: 1080 },
+      { index: 0, label: "All displays (4480x1440)", width: 4480, height: 1440 }
+    ];
 
     function syncMockTimer() {
       if (!mockSleepTimer.active) return;
@@ -163,6 +196,8 @@
           total_seconds: mockSleepTimer.total_seconds,
           target_ips: mockSleepTimer.target_ips.slice()
         },
+        ambilight: JSON.parse(JSON.stringify(mockAmbilight)),
+        monitors: mockMonitors.slice(),
         error: null
       });
     }
@@ -371,7 +406,43 @@
         };
         return buildMockEnvelope();
       },
-      get_sleep_timer_status: () => buildMockEnvelope()
+      get_sleep_timer_status: () => buildMockEnvelope(),
+      start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips) => {
+        const targets = resolveTargets(ips);
+        const sampled = { r: 56, g: 189, b: 248, hex: "#38bdf8" };
+        mockAmbilight = {
+          active: true,
+          monitor_index: Number(monitorIndex || 1),
+          color_mode: String(colorMode || "vibrant"),
+          auto_brightness: Boolean(autoBrightness),
+          brightness: Number(brightness || 85),
+          fixed_brightness: Number(brightness || 85),
+          smoothing_alpha: Number(smoothingAlpha || 0.38),
+          last_color: sampled,
+          target_ips: targets,
+          frames_sent: mockAmbilight.frames_sent + 1
+        };
+        mockBulbs.forEach((bulb) => {
+          if (targets.includes(bulb.ip)) {
+            bulb.state.is_on = true;
+            bulb.state.mode = "rgb";
+            bulb.state.color = Object.assign({}, sampled);
+            bulb.state.temperature = null;
+          }
+        });
+        return buildMockEnvelope();
+      },
+      stop_ambilight: () => {
+        mockAmbilight.active = false;
+        mockAmbilight.target_ips = [];
+        return buildMockEnvelope();
+      },
+      get_ambilight_status: () => {
+        if (mockAmbilight.active) {
+          mockAmbilight.frames_sent += 4;
+        }
+        return buildMockEnvelope();
+      }
     };
   }
 
@@ -574,6 +645,12 @@
     if (envelope.sleep_timer && typeof envelope.sleep_timer === "object") {
       appState.sleepTimer = envelope.sleep_timer;
     }
+    if (envelope.ambilight && typeof envelope.ambilight === "object") {
+      appState.ambilight = envelope.ambilight;
+    }
+    if (Array.isArray(envelope.monitors) && envelope.monitors.length > 0) {
+      appState.monitors = envelope.monitors;
+    }
 
     if (!envelope.ok && envelope.error) {
       setStatusMessage(`Warning: ${envelope.error}`);
@@ -582,11 +659,13 @@
     }
 
     syncSleepTimerPolling();
+    syncAmbilightPolling();
     renderFixtureList();
     renderStageHeaderAndControls();
     renderSleepTimer();
     renderScenesGrid();
     renderCustomScenesGrid();
+    renderAmbilightPanel();
   }
 
   /* Renderiza las tarjetas de focos en el riel izquierdo sin usar innerHTML con datos de usuario */
@@ -909,6 +988,100 @@
 
     if (cancelBtn) {
       cancelBtn.disabled = !timer.active;
+    }
+  }
+
+  /* Sondea cada 400ms el color muestreado mientras Ambilight este activo */
+  function syncAmbilightPolling() {
+    const isActive = Boolean(appState.ambilight && appState.ambilight.active);
+    if (isActive && !appState.ambilightPollTimer) {
+      appState.ambilightPollTimer = setInterval(() => {
+        invokeApi(() => backendApi.get_ambilight_status(), null);
+      }, 400);
+    } else if (!isActive && appState.ambilightPollTimer) {
+      clearInterval(appState.ambilightPollTimer);
+      appState.ambilightPollTimer = null;
+    }
+  }
+
+  /* Sincroniza el panel de Ambilight, la lista de pantallas y la muestra de color en vivo */
+  function renderAmbilightPanel() {
+    const ambi = appState.ambilight || {
+      active: false,
+      monitor_index: 1,
+      color_mode: "vibrant",
+      auto_brightness: true,
+      brightness: 85,
+      smoothing_alpha: 0.38,
+      last_color: null,
+      frames_sent: 0
+    };
+
+    const monitorSelect = document.getElementById("ambilight-monitor-select");
+    if (monitorSelect && Array.isArray(appState.monitors) && appState.monitors.length > 0) {
+      const currentOptions = Array.from(monitorSelect.options).map((o) => `${o.value}:${o.textContent}`).join("|");
+      const nextOptions = appState.monitors.map((m) => `${m.index}:${m.label}`).join("|");
+      if (currentOptions !== nextOptions) {
+        monitorSelect.replaceChildren();
+        appState.monitors.forEach((mon) => {
+          const opt = document.createElement("option");
+          opt.value = String(mon.index);
+          opt.textContent = mon.label;
+          monitorSelect.appendChild(opt);
+        });
+      }
+      monitorSelect.value = String(ambi.monitor_index ?? 1);
+    }
+
+    const badge = document.getElementById("ambilight-status-badge");
+    if (badge) {
+      badge.setAttribute("data-active", String(Boolean(ambi.active)));
+      badge.textContent = ambi.active ? "STREAMING 10 HZ" : "STANDBY";
+    }
+
+    const framesEl = document.getElementById("ambilight-frames-readout");
+    if (framesEl) {
+      framesEl.textContent = `${ambi.frames_sent || 0} frames sent`;
+    }
+
+    const swatch = document.getElementById("ambilight-preview-swatch");
+    const colorReadout = document.getElementById("ambilight-color-readout");
+    const lastColor = ambi.last_color;
+    if (lastColor && typeof lastColor.r === "number") {
+      const cssRgb = `rgb(${lastColor.r}, ${lastColor.g}, ${lastColor.b})`;
+      const hex = (lastColor.hex || rgbToHex(lastColor.r, lastColor.g, lastColor.b)).toUpperCase();
+      if (swatch) {
+        swatch.style.setProperty("--ambilight-swatch-color", cssRgb);
+      }
+      if (colorReadout) {
+        colorReadout.textContent = `RGB (${lastColor.r}, ${lastColor.g}, ${lastColor.b}) · ${hex}`;
+      }
+      if (ambi.active) {
+        document.documentElement.style.setProperty("--beam-color", cssRgb);
+      }
+    }
+
+    const toggleBtn = document.getElementById("toggle-ambilight-btn");
+    const toggleLabel = document.getElementById("toggle-ambilight-label");
+    if (toggleBtn && toggleLabel) {
+      toggleBtn.setAttribute("aria-pressed", String(Boolean(ambi.active)));
+      toggleLabel.textContent = ambi.active ? "Stop Ambilight" : "Start Ambilight";
+    }
+
+    document.querySelectorAll(".ambilight-mode-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.colorMode === (ambi.color_mode || "vibrant"));
+    });
+
+    const alphaSlider = document.getElementById("ambilight-smoothing-slider");
+    const alphaOutput = document.getElementById("ambilight-smoothing-output");
+    if (alphaSlider && alphaOutput && typeof ambi.smoothing_alpha === "number") {
+      alphaSlider.value = String(ambi.smoothing_alpha);
+      alphaOutput.textContent = Number(ambi.smoothing_alpha).toFixed(2);
+    }
+
+    const autoBrightnessCheckbox = document.getElementById("ambilight-auto-brightness");
+    if (autoBrightnessCheckbox && typeof ambi.auto_brightness === "boolean") {
+      autoBrightnessCheckbox.checked = ambi.auto_brightness;
     }
   }
 
@@ -1561,6 +1734,100 @@
             `Saved custom preset "${name}".`
           );
           activateTab("custom", false);
+        }
+      });
+    }
+
+    /* Eventos del modo Ambilight (sincronizacion de pantalla en tiempo real) */
+    const readAmbilightParamsFromDom = () => {
+      const monSelect = document.getElementById("ambilight-monitor-select");
+      const activeModeBtn = document.querySelector(".ambilight-mode-btn.active");
+      const alphaSlider = document.getElementById("ambilight-smoothing-slider");
+      const autoBriCheckbox = document.getElementById("ambilight-auto-brightness");
+      const briSlider = document.getElementById("brightness-slider");
+
+      return {
+        monitorIndex: Number(monSelect ? monSelect.value : 1),
+        colorMode: activeModeBtn ? activeModeBtn.dataset.colorMode : "vibrant",
+        smoothingAlpha: Number(alphaSlider ? alphaSlider.value : 0.38),
+        autoBrightness: Boolean(autoBriCheckbox ? autoBriCheckbox.checked : true),
+        brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100)
+      };
+    };
+
+    const startOrUpdateAmbilight = (statusMsg) => {
+      const p = readAmbilightParamsFromDom();
+      invokeApi(
+        () =>
+          backendApi.start_ambilight(
+            p.monitorIndex,
+            p.colorMode,
+            p.autoBrightness,
+            p.brightness,
+            p.smoothingAlpha,
+            null
+          ),
+        statusMsg
+      );
+    };
+
+    const toggleAmbilightBtn = document.getElementById("toggle-ambilight-btn");
+    if (toggleAmbilightBtn) {
+      toggleAmbilightBtn.addEventListener("click", () => {
+        if (appState.ambilight && appState.ambilight.active) {
+          invokeApi(() => backendApi.stop_ambilight(), "Ambilight screen sync stopped.");
+        } else {
+          startOrUpdateAmbilight("Ambilight screen sync active (10 Hz).");
+        }
+      });
+    }
+
+    const monitorSelect = document.getElementById("ambilight-monitor-select");
+    if (monitorSelect) {
+      monitorSelect.addEventListener("change", () => {
+        appState.ambilight.monitor_index = Number(monitorSelect.value);
+        if (appState.ambilight.active) {
+          startOrUpdateAmbilight(`Ambilight switched to Display ${monitorSelect.value}.`);
+        }
+      });
+    }
+
+    document.querySelectorAll(".ambilight-mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".ambilight-mode-btn").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+        });
+        appState.ambilight.color_mode = btn.dataset.colorMode || "vibrant";
+        if (appState.ambilight.active) {
+          startOrUpdateAmbilight(`Ambilight extraction mode set to ${appState.ambilight.color_mode}.`);
+        }
+      });
+    });
+
+    const alphaSlider = document.getElementById("ambilight-smoothing-slider");
+    const alphaOutput = document.getElementById("ambilight-smoothing-output");
+    if (alphaSlider && alphaOutput) {
+      alphaSlider.addEventListener("input", () => {
+        alphaOutput.textContent = Number(alphaSlider.value).toFixed(2);
+      });
+      alphaSlider.addEventListener("change", () => {
+        appState.ambilight.smoothing_alpha = Number(alphaSlider.value);
+        if (appState.ambilight.active) {
+          startOrUpdateAmbilight(`Ambilight EMA smoothing set to ${Number(alphaSlider.value).toFixed(2)}.`);
+        }
+      });
+    }
+
+    const autoBrightnessCheckbox = document.getElementById("ambilight-auto-brightness");
+    if (autoBrightnessCheckbox) {
+      autoBrightnessCheckbox.addEventListener("change", () => {
+        appState.ambilight.auto_brightness = autoBrightnessCheckbox.checked;
+        if (appState.ambilight.active) {
+          startOrUpdateAmbilight(
+            autoBrightnessCheckbox.checked
+              ? "Ambilight automatic screen luminance enabled."
+              : "Ambilight using manual brightness ceiling."
+          );
         }
       });
     }
