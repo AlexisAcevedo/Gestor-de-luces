@@ -278,6 +278,22 @@
           </svg>
           <span>Ambilight</span>
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="tab-music"
+          class="mode-tab"
+          aria-selected="false"
+          aria-controls="panel-music"
+          tabindex="-1"
+          data-mode="music"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M3.5 12.5v-5M7.5 15.5v-11M11.5 13.5v-7M15.5 16.5v-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <span>Music Sync</span>
+        </button>
       </div>
 
       <!-- Panel 1: Chromatic RGB -->
@@ -583,6 +599,177 @@
               <label class="checkbox-control" for="ambilight-auto-brightness">
                 <input type="checkbox" id="ambilight-auto-brightness" checked>
                 <span>Track screen brightness automatically (ITU-R BT.709 luminance)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 6: Music Sync Real-Time WASAPI Loopback & FFT Spectrum -->
+      <section
+        id="panel-music"
+        role="tabpanel"
+        aria-labelledby="tab-music"
+        class="mode-panel"
+        hidden
+      >
+        <div class="music-workbench">
+          <!-- Left: Live Acoustic Telemetry Card -->
+          <div class="music-telemetry-card">
+            <div class="ambilight-preview-header">
+              <span class="timer-status-badge" id="music-status-badge" data-active="false">STANDBY</span>
+              <span class="telemetry-meta" id="music-frames-readout">0 frames sent</span>
+            </div>
+
+            <div class="music-swatch-row">
+              <div
+                class="music-preview-swatch"
+                id="music-preview-swatch"
+                aria-hidden="true"
+              ></div>
+              <div class="ambilight-readout-block">
+                <p class="ambilight-swatch-title">Acoustic Spectrum Output</p>
+                <p class="ambilight-color-readout" id="music-color-readout">RGB (56, 34, 24) · #382218</p>
+              </div>
+            </div>
+
+            <div class="music-meters-list" role="region" aria-label="Real-time FFT frequency band meters">
+              <div class="music-meter-row">
+                <div class="music-meter-header">
+                  <span class="music-meter-label">Bass (20-250 Hz)</span>
+                  <span class="music-meter-value" id="music-meter-bass-val">0%</span>
+                </div>
+                <div class="music-meter-track" aria-hidden="true">
+                  <div class="music-meter-fill music-meter-bass" id="music-meter-bass-fill"></div>
+                </div>
+              </div>
+
+              <div class="music-meter-row">
+                <div class="music-meter-header">
+                  <span class="music-meter-label">Mid (250-2k Hz)</span>
+                  <span class="music-meter-value" id="music-meter-mid-val">0%</span>
+                </div>
+                <div class="music-meter-track" aria-hidden="true">
+                  <div class="music-meter-fill music-meter-mid" id="music-meter-mid-fill"></div>
+                </div>
+              </div>
+
+              <div class="music-meter-row">
+                <div class="music-meter-header">
+                  <span class="music-meter-label">Treble (2k-12k Hz)</span>
+                  <span class="music-meter-value" id="music-meter-treble-val">0%</span>
+                </div>
+                <div class="music-meter-track" aria-hidden="true">
+                  <div class="music-meter-fill music-meter-treble" id="music-meter-treble-fill"></div>
+                </div>
+              </div>
+
+              <div class="music-meter-row">
+                <div class="music-meter-header">
+                  <span class="music-meter-label">RMS Volume</span>
+                  <span class="music-meter-value" id="music-meter-rms-val">0%</span>
+                </div>
+                <div class="music-meter-track" aria-hidden="true">
+                  <div class="music-meter-fill music-meter-rms" id="music-meter-rms-fill"></div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-primary ambilight-toggle-btn"
+              id="toggle-music-btn"
+              aria-pressed="false"
+            >
+              <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3.5 12.5v-5M7.5 15.5v-11M11.5 13.5v-7M15.5 16.5v-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+              <span id="toggle-music-label">Start Music Sync</span>
+            </button>
+          </div>
+
+          <!-- Right: WASAPI Loopback & FFT Spectrum Configuration -->
+          <div class="music-config-column">
+            <div class="field-group">
+              <label for="music-device-select">Loopback Audio Device</label>
+              <select id="music-device-select" class="console-select">
+                <option value="-1">Default System Output (WASAPI Loopback)</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <span class="field-label" id="music-palette-label">Color Palette</span>
+              <div class="preset-strip" role="group" aria-labelledby="music-palette-label">
+                <button
+                  type="button"
+                  class="chip-btn music-palette-btn active"
+                  data-palette-mode="spectrum"
+                >
+                  Spectrum (Bass/Mid/Treble)
+                </button>
+                <button
+                  type="button"
+                  class="chip-btn music-palette-btn"
+                  data-palette-mode="club"
+                >
+                  Club Pulse (Warm/Neon)
+                </button>
+                <button
+                  type="button"
+                  class="chip-btn music-palette-btn"
+                  data-palette-mode="chill"
+                >
+                  Aurora Chill (Ocean/Teal)
+                </button>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="speed-label-row">
+                <label for="music-sensitivity-slider">Beat Sensitivity</label>
+                <output id="music-sensitivity-output" for="music-sensitivity-slider">1.0x</output>
+              </div>
+              <input
+                type="range"
+                id="music-sensitivity-slider"
+                class="console-slider"
+                min="0.4"
+                max="2.5"
+                step="0.1"
+                value="1.0"
+              >
+              <div class="kelvin-scale-labels" aria-hidden="true">
+                <span>0.4x Subtle</span>
+                <span>1.0x Balanced</span>
+                <span>2.5x High Gain</span>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="speed-label-row">
+                <label for="music-smoothing-slider">EMA Smoothing Response (Alpha)</label>
+                <output id="music-smoothing-output" for="music-smoothing-slider">0.50</output>
+              </div>
+              <input
+                type="range"
+                id="music-smoothing-slider"
+                class="console-slider"
+                min="0.20"
+                max="0.85"
+                step="0.05"
+                value="0.50"
+              >
+              <div class="kelvin-scale-labels" aria-hidden="true">
+                <span>0.20 Smooth</span>
+                <span>0.50 Punchy</span>
+                <span>0.85 Instant Beat</span>
+              </div>
+            </div>
+
+            <div class="ambilight-Toggle-row">
+              <label class="checkbox-control" for="music-audio-brightness">
+                <input type="checkbox" id="music-audio-brightness" checked>
+                <span>Modulate brightness with audio volume</span>
               </label>
             </div>
           </div>

@@ -108,7 +108,14 @@ class ScreenSampler(Protocol):
 
 @runtime_checkable
 class AudioSampler(Protocol):
-    """Puerto para analizar el audio del sistema en tiempo real (modo Musica)."""
+    """Puerto para analizar el audio del sistema en tiempo real (modo Musica).
+
+    Ademas de `sample_audio_metrics`, las implementaciones concretas como
+    `WasapiLoopbackSampler` pueden exponer opcionalmente:
+    - `sample_frame(device_index=None, palette_mode="spectrum", sensitivity=1.0) -> dict[str, Any]`
+    - `list_audio_devices() -> list[dict[str, Any]]`
+    - `close() -> None`
+    """
 
     def sample_audio_metrics(self) -> tuple[float, Color]:
         """Analiza una ventana de audio y devuelve (energia_normalizada_0_a_1, color_espectral)."""

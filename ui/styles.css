@@ -484,10 +484,10 @@ body {
   gap: 8px;
 }
 
-/* Pestanas de modo de emision (RGB / Kelvin / Escenas / Presets / Ambilight) */
+/* Pestanas de modo de emision (RGB / Kelvin / Escenas / Presets / Ambilight / Musica) */
 .mode-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 8px;
   background-color: var(--surface-panel);
   padding: 6px;
@@ -1108,6 +1108,117 @@ body {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* Panel 6: Sincronizacion musical en tiempo real (WASAPI Loopback y espectro FFT) */
+.music-workbench {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.music-telemetry-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-md);
+}
+
+.music-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Muestra en vivo del color espectral emitido por la musica; se preserva en Forced Colors */
+.music-preview-swatch {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--music-swatch-color, var(--beam-color));
+  border: 2px solid var(--beam-border-tint);
+  box-shadow: 0 0 22px color-mix(in oklab, var(--music-swatch-color, var(--beam-color)) 65%, transparent);
+  forced-color-adjust: none;
+  flex-shrink: 0;
+  transition: background-color 110ms ease, box-shadow 110ms ease;
+}
+
+.music-meters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.music-meter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.music-meter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.76rem;
+}
+
+.music-meter-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.music-meter-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* Pista con contraste de borde >= 3:1 para cumplir pautas de accesibilidad no textual */
+.music-meter-track {
+  width: 100%;
+  height: 8px;
+  background-color: var(--surface-chassis);
+  border: 1px solid var(--border-structural);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.music-meter-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 140ms ease;
+}
+
+.music-meter-bass {
+  background-color: #F43F5E;
+}
+
+.music-meter-mid {
+  background-color: #10B981;
+}
+
+.music-meter-treble {
+  background-color: #38BDF8;
+}
+
+.music-meter-rms {
+  background-color: #F59E0B;
+}
+
+.music-config-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1293,8 +1404,13 @@ body {
   .btn,
   .chip-btn,
   .console-dialog,
-  .control-well {
+  .control-well,
+  .music-meter-track {
     border: 1px solid ButtonText;
+  }
+
+  .music-meter-fill {
+    background-color: Highlight;
   }
 }
 
@@ -1309,7 +1425,8 @@ body {
   }
 
   .rgb-workbench,
-  .ambilight-workbench {
+  .ambilight-workbench,
+  .music-workbench {
     grid-template-columns: 1fr;
   }
 

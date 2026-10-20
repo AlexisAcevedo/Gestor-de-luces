@@ -84,6 +84,8 @@ class WebviewBridge:
         sleep_timer = self._service.get_sleep_timer_status()
         ambilight = self._service.get_ambilight_status()
         monitors = self._service.list_monitors()
+        music_sync = self._service.get_music_sync_status()
+        audio_devices = self._service.list_audio_devices()
         return {
             "ok": ok,
             "bulbs": bulbs,
@@ -93,6 +95,8 @@ class WebviewBridge:
             "sleep_timer": sleep_timer,
             "ambilight": ambilight,
             "monitors": monitors,
+            "music_sync": music_sync,
+            "audio_devices": audio_devices,
             "error": error,
         }
 
@@ -127,9 +131,12 @@ class WebviewBridge:
                 if self._loop.is_running():
                     async def _cancel() -> None:
                         self._service.stop_ambilight()
+                        self._service.stop_music_sync(close_sampler=True)
                         self._service.cancel_sleep_timer()
 
                     self._run_async(_cancel(), timeout=1.5)
+                else:
+                    self._service.close_audio_sampler()
             except Exception:
                 pass
             self._closed = True
@@ -501,6 +508,56 @@ class WebviewBridge:
         """Obtiene el estado en vivo del muestreo Ambilight para la vista previa."""
         try:
             # Sondeo frecuente de previsualizacion: evita reconstruir el menu Win32 cada 400ms.
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def start_music_sync(
+        self,
+        palette_mode: str = "spectrum",
+        sensitivity: float = 1.0,
+        smoothing_alpha: float = 0.50,
+        audio_brightness: bool = True,
+        brightness: int = 85,
+        device_index: int | None = None,
+        ips: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Inicia la sincronizacion musical WASAPI Loopback en el bucle asincrono."""
+        try:
+            target_ips = [str(ip) for ip in ips] if isinstance(ips, list) else None
+            parsed_device = int(device_index) if device_index is not None else None
+
+            async def _start() -> dict[str, Any]:
+                return self._service.start_music_sync(
+                    palette_mode=str(palette_mode),
+                    sensitivity=float(sensitivity),
+                    smoothing_alpha=float(smoothing_alpha),
+                    audio_brightness=bool(audio_brightness),
+                    brightness=int(brightness),
+                    device_index=parsed_device,
+                    ips=target_ips,
+                )
+
+            self._run_async(_start())
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def stop_music_sync(self) -> dict[str, Any]:
+        """Detiene el flujo continuo de sincronizacion musical."""
+        try:
+            async def _stop() -> dict[str, Any]:
+                return self._service.stop_music_sync()
+
+            self._run_async(_stop())
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def get_music_sync_status(self) -> dict[str, Any]:
+        """Obtiene la telemetria espectral (Graves, Medios, Agudos y RMS) en tiempo real."""
+        try:
+            # Sondeo de 250ms de barras espectrales: no reconstruye el menu de la bandeja.
             return self._build_response(ok=True)
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))

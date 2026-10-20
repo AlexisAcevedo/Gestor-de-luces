@@ -85,11 +85,39 @@
     monitors: [
       { index: 1, label: "Display 1 (1920x1080)", width: 1920, height: 1080 }
     ],
+    musicSync: {
+      active: false,
+      device_index: null,
+      palette_mode: "spectrum",
+      sensitivity: 1.0,
+      smoothing_alpha: 0.50,
+      audio_brightness: true,
+      brightness: 85,
+      fixed_brightness: 85,
+      rms: 0.0,
+      bass: 0.0,
+      mid: 0.0,
+      treble: 0.0,
+      last_color: null,
+      target_ips: [],
+      frames_sent: 0
+    },
+    audioDevices: [
+      {
+        index: -1,
+        name: "System Audio Loopback",
+        label: "Default System Output (WASAPI Loopback)",
+        sample_rate: 48000,
+        channels: 2,
+        is_default: true
+      }
+    ],
     activeTab: "rgb",
     sceneCategory: "all",
     autoSyncTimer: null,
     sleepPollTimer: null,
     ambilightPollTimer: null,
+    musicPollTimer: null,
     isDraggingWheel: false
   };
 
@@ -163,6 +191,33 @@
       { index: 2, label: "Display 2 (1920x1080)", width: 1920, height: 1080 },
       { index: 0, label: "All displays (4480x1440)", width: 4480, height: 1440 }
     ];
+    let mockMusicSync = {
+      active: false,
+      device_index: -1,
+      palette_mode: "spectrum",
+      sensitivity: 1.0,
+      smoothing_alpha: 0.50,
+      audio_brightness: true,
+      brightness: 85,
+      fixed_brightness: 85,
+      rms: 0.0,
+      bass: 0.0,
+      mid: 0.0,
+      treble: 0.0,
+      last_color: { r: 235, g: 45, b: 95, hex: "#eb2d5f" },
+      target_ips: [],
+      frames_sent: 0
+    };
+    const mockAudioDevices = [
+      {
+        index: -1,
+        name: "Speakers (Realtek High Definition Audio) [Loopback]",
+        label: "Default · Speakers (Realtek High Definition Audio) [Loopback] (48000 Hz)",
+        sample_rate: 48000,
+        channels: 2,
+        is_default: true
+      }
+    ];
 
     function syncMockTimer() {
       if (!mockSleepTimer.active) return;
@@ -198,6 +253,8 @@
         },
         ambilight: JSON.parse(JSON.stringify(mockAmbilight)),
         monitors: mockMonitors.slice(),
+        music_sync: JSON.parse(JSON.stringify(mockMusicSync)),
+        audio_devices: mockAudioDevices.slice(),
         error: null
       });
     }
@@ -410,6 +467,8 @@
       start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips) => {
         const targets = resolveTargets(ips);
         const sampled = { r: 56, g: 189, b: 248, hex: "#38bdf8" };
+        mockMusicSync.active = false;
+        mockMusicSync.target_ips = [];
         mockAmbilight = {
           active: true,
           monitor_index: Number(monitorIndex || 1),
@@ -440,6 +499,53 @@
       get_ambilight_status: () => {
         if (mockAmbilight.active) {
           mockAmbilight.frames_sent += 4;
+        }
+        return buildMockEnvelope();
+      },
+      start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips) => {
+        const targets = resolveTargets(ips);
+        const sampled = { r: 240, g: 52, b: 112, hex: "#f03470" };
+        mockAmbilight.active = false;
+        mockAmbilight.target_ips = [];
+        mockMusicSync = {
+          active: true,
+          device_index: deviceIndex != null ? Number(deviceIndex) : -1,
+          palette_mode: String(paletteMode || "spectrum"),
+          sensitivity: Number(sensitivity || 1.0),
+          smoothing_alpha: Number(smoothingAlpha || 0.50),
+          audio_brightness: Boolean(audioBrightness),
+          brightness: Number(brightness || 85),
+          fixed_brightness: Number(brightness || 85),
+          rms: 0.68,
+          bass: 0.82,
+          mid: 0.54,
+          treble: 0.36,
+          last_color: sampled,
+          target_ips: targets,
+          frames_sent: mockMusicSync.frames_sent + 1
+        };
+        mockBulbs.forEach((bulb) => {
+          if (targets.includes(bulb.ip)) {
+            bulb.state.is_on = true;
+            bulb.state.mode = "rgb";
+            bulb.state.color = Object.assign({}, sampled);
+            bulb.state.temperature = null;
+          }
+        });
+        return buildMockEnvelope();
+      },
+      stop_music_sync: () => {
+        mockMusicSync.active = false;
+        mockMusicSync.target_ips = [];
+        mockMusicSync.rms = 0.0;
+        mockMusicSync.bass = 0.0;
+        mockMusicSync.mid = 0.0;
+        mockMusicSync.treble = 0.0;
+        return buildMockEnvelope();
+      },
+      get_music_sync_status: () => {
+        if (mockMusicSync.active) {
+          mockMusicSync.frames_sent += 3;
         }
         return buildMockEnvelope();
       }
@@ -651,6 +757,12 @@
     if (Array.isArray(envelope.monitors) && envelope.monitors.length > 0) {
       appState.monitors = envelope.monitors;
     }
+    if (envelope.music_sync && typeof envelope.music_sync === "object") {
+      appState.musicSync = envelope.music_sync;
+    }
+    if (Array.isArray(envelope.audio_devices) && envelope.audio_devices.length > 0) {
+      appState.audioDevices = envelope.audio_devices;
+    }
 
     if (!envelope.ok && envelope.error) {
       setStatusMessage(`Warning: ${envelope.error}`);
@@ -660,12 +772,14 @@
 
     syncSleepTimerPolling();
     syncAmbilightPolling();
+    syncMusicPolling();
     renderFixtureList();
     renderStageHeaderAndControls();
     renderSleepTimer();
     renderScenesGrid();
     renderCustomScenesGrid();
     renderAmbilightPanel();
+    renderMusicPanel();
   }
 
   /* Renderiza las tarjetas de focos en el riel izquierdo sin usar innerHTML con datos de usuario */
@@ -1082,6 +1196,129 @@
     const autoBrightnessCheckbox = document.getElementById("ambilight-auto-brightness");
     if (autoBrightnessCheckbox && typeof ambi.auto_brightness === "boolean") {
       autoBrightnessCheckbox.checked = ambi.auto_brightness;
+    }
+  }
+
+  /* Sondea cada 250ms la telemetria acustica (Bass/Mid/Treble/RMS) mientras Music Sync este activo */
+  function syncMusicPolling() {
+    const isActive = Boolean(appState.musicSync && appState.musicSync.active);
+    if (isActive && !appState.musicPollTimer) {
+      appState.musicPollTimer = setInterval(() => {
+        invokeApi(() => backendApi.get_music_sync_status(), null);
+      }, 250);
+    } else if (!isActive && appState.musicPollTimer) {
+      clearInterval(appState.musicPollTimer);
+      appState.musicPollTimer = null;
+    }
+  }
+
+  /* Actualiza las barras espectrales FFT, la muestra cromatica y la configuracion de WASAPI */
+  function renderMusicPanel() {
+    const music = appState.musicSync || {
+      active: false,
+      device_index: null,
+      palette_mode: "spectrum",
+      sensitivity: 1.0,
+      smoothing_alpha: 0.50,
+      audio_brightness: true,
+      brightness: 85,
+      rms: 0.0,
+      bass: 0.0,
+      mid: 0.0,
+      treble: 0.0,
+      last_color: null,
+      frames_sent: 0
+    };
+
+    const devSelect = document.getElementById("music-device-select");
+    if (devSelect && Array.isArray(appState.audioDevices) && appState.audioDevices.length > 0) {
+      const currentOpts = Array.from(devSelect.options)
+        .map((o) => `${o.value}:${o.textContent}`)
+        .join("|");
+      const nextOpts = appState.audioDevices.map((d) => `${d.index}:${d.label}`).join("|");
+      if (currentOpts !== nextOpts) {
+        devSelect.replaceChildren();
+        appState.audioDevices.forEach((dev) => {
+          const opt = document.createElement("option");
+          opt.value = String(dev.index);
+          opt.textContent = dev.label;
+          devSelect.appendChild(opt);
+        });
+      }
+      if (music.device_index !== null && music.device_index !== undefined) {
+        devSelect.value = String(music.device_index);
+      }
+    }
+
+    const badge = document.getElementById("music-status-badge");
+    if (badge) {
+      badge.setAttribute("data-active", String(Boolean(music.active)));
+      badge.textContent = music.active ? "WASAPI 10.5 HZ" : "STANDBY";
+    }
+
+    const framesEl = document.getElementById("music-frames-readout");
+    if (framesEl) {
+      framesEl.textContent = `${music.frames_sent || 0} frames sent`;
+    }
+
+    const swatch = document.getElementById("music-preview-swatch");
+    const colorReadout = document.getElementById("music-color-readout");
+    const lastColor = music.last_color;
+    if (lastColor && typeof lastColor.r === "number") {
+      const cssRgb = `rgb(${lastColor.r}, ${lastColor.g}, ${lastColor.b})`;
+      const hex = (lastColor.hex || rgbToHex(lastColor.r, lastColor.g, lastColor.b)).toUpperCase();
+      if (swatch) {
+        swatch.style.setProperty("--music-swatch-color", cssRgb);
+      }
+      if (colorReadout) {
+        colorReadout.textContent = `RGB (${lastColor.r}, ${lastColor.g}, ${lastColor.b}) · ${hex}`;
+      }
+      if (music.active) {
+        document.documentElement.style.setProperty("--beam-color", cssRgb);
+      }
+    }
+
+    const setMeter = (bandName, ratio) => {
+      const pct = clampInt(Math.round((Number(ratio) || 0) * 100), 0, 100);
+      const fill = document.getElementById(`music-meter-${bandName}-fill`);
+      const val = document.getElementById(`music-meter-${bandName}-val`);
+      if (fill) fill.style.width = `${pct}%`;
+      if (val) val.textContent = `${pct}%`;
+    };
+
+    setMeter("bass", music.bass);
+    setMeter("mid", music.mid);
+    setMeter("treble", music.treble);
+    setMeter("rms", music.rms);
+
+    const toggleBtn = document.getElementById("toggle-music-btn");
+    const toggleLabel = document.getElementById("toggle-music-label");
+    if (toggleBtn && toggleLabel) {
+      toggleBtn.setAttribute("aria-pressed", String(Boolean(music.active)));
+      toggleLabel.textContent = music.active ? "Stop Music Sync" : "Start Music Sync";
+    }
+
+    document.querySelectorAll(".music-palette-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.paletteMode === (music.palette_mode || "spectrum"));
+    });
+
+    const sensSlider = document.getElementById("music-sensitivity-slider");
+    const sensOutput = document.getElementById("music-sensitivity-output");
+    if (sensSlider && sensOutput && typeof music.sensitivity === "number") {
+      sensSlider.value = String(music.sensitivity);
+      sensOutput.textContent = `${Number(music.sensitivity).toFixed(1)}x`;
+    }
+
+    const alphaSlider = document.getElementById("music-smoothing-slider");
+    const alphaOutput = document.getElementById("music-smoothing-output");
+    if (alphaSlider && alphaOutput && typeof music.smoothing_alpha === "number") {
+      alphaSlider.value = String(music.smoothing_alpha);
+      alphaOutput.textContent = Number(music.smoothing_alpha).toFixed(2);
+    }
+
+    const audioBriCheckbox = document.getElementById("music-audio-brightness");
+    if (audioBriCheckbox && typeof music.audio_brightness === "boolean") {
+      audioBriCheckbox.checked = music.audio_brightness;
     }
   }
 
@@ -1827,6 +2064,119 @@
             autoBrightnessCheckbox.checked
               ? "Ambilight automatic screen luminance enabled."
               : "Ambilight using manual brightness ceiling."
+          );
+        }
+      });
+    }
+
+    /* Eventos del modo Music Sync (WASAPI Loopback y espectro FFT en tiempo real) */
+    const readMusicParamsFromDom = () => {
+      const devSelect = document.getElementById("music-device-select");
+      const activePaletteBtn = document.querySelector(".music-palette-btn.active");
+      const sensSlider = document.getElementById("music-sensitivity-slider");
+      const alphaSlider = document.getElementById("music-smoothing-slider");
+      const audioBriCheckbox = document.getElementById("music-audio-brightness");
+      const briSlider = document.getElementById("brightness-slider");
+
+      const rawDev = devSelect ? Number(devSelect.value) : -1;
+      return {
+        deviceIndex: rawDev >= 0 ? rawDev : null,
+        paletteMode: activePaletteBtn ? activePaletteBtn.dataset.paletteMode : "spectrum",
+        sensitivity: Number(sensSlider ? sensSlider.value : 1.0),
+        smoothingAlpha: Number(alphaSlider ? alphaSlider.value : 0.50),
+        audioBrightness: Boolean(audioBriCheckbox ? audioBriCheckbox.checked : true),
+        brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100)
+      };
+    };
+
+    const startOrUpdateMusicSync = (statusMsg) => {
+      const p = readMusicParamsFromDom();
+      invokeApi(
+        () =>
+          backendApi.start_music_sync(
+            p.paletteMode,
+            p.sensitivity,
+            p.smoothingAlpha,
+            p.audioBrightness,
+            p.brightness,
+            p.deviceIndex,
+            null
+          ),
+        statusMsg
+      );
+    };
+
+    const toggleMusicBtn = document.getElementById("toggle-music-btn");
+    if (toggleMusicBtn) {
+      toggleMusicBtn.addEventListener("click", () => {
+        if (appState.musicSync && appState.musicSync.active) {
+          invokeApi(() => backendApi.stop_music_sync(), "Music sync stopped.");
+        } else {
+          startOrUpdateMusicSync("Music sync active (WASAPI Loopback 10.5 Hz).");
+        }
+      });
+    }
+
+    const musicDevSelect = document.getElementById("music-device-select");
+    if (musicDevSelect) {
+      musicDevSelect.addEventListener("change", () => {
+        const val = Number(musicDevSelect.value);
+        appState.musicSync.device_index = val >= 0 ? val : null;
+        if (appState.musicSync.active) {
+          startOrUpdateMusicSync("Switched WASAPI loopback audio device.");
+        }
+      });
+    }
+
+    document.querySelectorAll(".music-palette-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".music-palette-btn").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+        });
+        appState.musicSync.palette_mode = btn.dataset.paletteMode || "spectrum";
+        if (appState.musicSync.active) {
+          startOrUpdateMusicSync(`Music palette set to ${appState.musicSync.palette_mode}.`);
+        }
+      });
+    });
+
+    const musicSensSlider = document.getElementById("music-sensitivity-slider");
+    const musicSensOutput = document.getElementById("music-sensitivity-output");
+    if (musicSensSlider && musicSensOutput) {
+      musicSensSlider.addEventListener("input", () => {
+        musicSensOutput.textContent = `${Number(musicSensSlider.value).toFixed(1)}x`;
+      });
+      musicSensSlider.addEventListener("change", () => {
+        appState.musicSync.sensitivity = Number(musicSensSlider.value);
+        if (appState.musicSync.active) {
+          startOrUpdateMusicSync(`Beat sensitivity set to ${Number(musicSensSlider.value).toFixed(1)}x.`);
+        }
+      });
+    }
+
+    const musicAlphaSlider = document.getElementById("music-smoothing-slider");
+    const musicAlphaOutput = document.getElementById("music-smoothing-output");
+    if (musicAlphaSlider && musicAlphaOutput) {
+      musicAlphaSlider.addEventListener("input", () => {
+        musicAlphaOutput.textContent = Number(musicAlphaSlider.value).toFixed(2);
+      });
+      musicAlphaSlider.addEventListener("change", () => {
+        appState.musicSync.smoothing_alpha = Number(musicAlphaSlider.value);
+        if (appState.musicSync.active) {
+          startOrUpdateMusicSync(`Music EMA smoothing set to ${Number(musicAlphaSlider.value).toFixed(2)}.`);
+        }
+      });
+    }
+
+    const musicAudioBriCheckbox = document.getElementById("music-audio-brightness");
+    if (musicAudioBriCheckbox) {
+      musicAudioBriCheckbox.addEventListener("change", () => {
+        appState.musicSync.audio_brightness = musicAudioBriCheckbox.checked;
+        if (appState.musicSync.active) {
+          startOrUpdateMusicSync(
+            musicAudioBriCheckbox.checked
+              ? "Dynamic beat brightness modulation enabled."
+              : "Music sync using fixed brightness ceiling."
           );
         }
       });

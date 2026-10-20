@@ -13,6 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 from gestor_luces.application.ambilight_stream import AmbilightStreamManager
+from gestor_luces.application.music_stream import MusicSyncStreamManager
 from gestor_luces.application.rate_limiter import StreamRateLimiter
 from gestor_luces.application.sleep_timer import AwaitableStatusDict, SleepTimerManager
 from gestor_luces.domain.models import Bulb, LightState
@@ -25,6 +26,7 @@ from gestor_luces.domain.value_objects import (
     SceneSpeed,
 )
 from gestor_luces.ports.repositories import (
+    AudioSampler,
     BulbRepository,
     LightController,
     SceneRepository,
@@ -44,6 +46,8 @@ class LightControlService:
         sleep_timer: SleepTimerManager | None = None,
         screen_sampler: ScreenSampler | None = None,
         ambilight_manager: AmbilightStreamManager | None = None,
+        audio_sampler: AudioSampler | None = None,
+        music_manager: MusicSyncStreamManager | None = None,
     ) -> None:
         self._controller = controller
         self._bulb_repo = bulb_repository
@@ -52,6 +56,8 @@ class LightControlService:
         self._sleep_timer = sleep_timer or SleepTimerManager()
         self._screen_sampler = screen_sampler
         self._ambilight = ambilight_manager or AmbilightStreamManager(sampler=screen_sampler)
+        self._audio_sampler = audio_sampler
+        self._music_sync = music_manager or MusicSyncStreamManager(sampler=audio_sampler)
         self._bulbs: dict[str, Bulb] = {}
         self._selected_ips: list[str] = []
         self._custom_scenes: dict[str, CustomScene] = {}
@@ -77,7 +83,9 @@ class LightControlService:
         """Define que subconjunto de focos recibira los comandos cuando no se indiquen IPs explicitas."""
         valid_ips = [ip for ip in ips if ip in self._bulbs]
         self._selected_ips = valid_ips
-        self._ambilight.update_targets(self.get_target_ips())
+        resolved_targets = self.get_target_ips()
+        self._ambilight.update_targets(resolved_targets)
+        self._music_sync.update_targets(resolved_targets)
         return list(self._selected_ips)
 
     def get_target_ips(self, explicit_ips: list[str] | None = None) -> list[str]:
@@ -179,8 +187,9 @@ class LightControlService:
         """Enciende o apaga uno o varios focos en paralelo."""
         if not is_on:
             # Si el usuario apaga manualmente o expira el Sleep Timer, detenemos Ambilight
-            # para que un fotograma rezagado no vuelva a encender el foco.
+            # y la sincronizacion musical para que un fotograma rezagado no vuelva a encender el foco.
             self.stop_ambilight()
+            self.stop_music_sync()
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
         target_ips = self.get_target_ips(ips)
 
@@ -205,6 +214,7 @@ class LightControlService:
         """Ajusta el brillo (10-100%) en todos los focos objetivo."""
         validated = Brightness(brightness).percent
         self._ambilight.update_fixed_brightness(validated)
+        self._music_sync.update_fixed_brightness(validated)
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -230,8 +240,9 @@ class LightControlService:
         """Aplica un color RGB validado a uno o multiples focos."""
         color = Color(r=r, g=g, b=b)
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
-        # Cualquier cambio manual de color toma precedencia y detiene el flujo Ambilight.
+        # Cualquier cambio manual de color toma precedencia y detiene los flujos continuos.
         self.stop_ambilight()
+        self.stop_music_sync()
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -266,6 +277,7 @@ class LightControlService:
         validated_temp = ColorTemperature(kelvin).kelvin
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
         self.stop_ambilight()
+        self.stop_music_sync()
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -309,6 +321,7 @@ class LightControlService:
         )
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
         self.stop_ambilight()
+        self.stop_music_sync()
         target_ips = self.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
@@ -597,6 +610,8 @@ class LightControlService:
         ips: list[str] | None = None,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
+        # Exclusion mutua: iniciar Ambilight detiene automaticamente la sincronizacion musical.
+        self.stop_music_sync()
         sampler = self._ensure_screen_sampler()
         parsed_alpha = max(0.05, min(1.0, float(smoothing_alpha)))
         self._rate_limiter.set_alpha(parsed_alpha)
@@ -628,6 +643,88 @@ class LightControlService:
     def get_ambilight_status(self) -> dict[str, Any]:
         """Devuelve el estado actual de la sincronizacion Ambilight."""
         return dict(self._ambilight.get_status())
+
+    def _ensure_audio_sampler(self) -> AudioSampler:
+        """Obtiene el adaptador de audio inyectado o instancia el adaptador WASAPI por defecto."""
+        if self._audio_sampler is None:
+            from gestor_luces.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
+
+            self._audio_sampler = WasapiLoopbackSampler()
+            self._music_sync.set_sampler(self._audio_sampler)
+        return self._audio_sampler
+
+    def list_audio_devices(self) -> list[dict[str, Any]]:
+        """Devuelve la lista de dispositivos WASAPI Loopback disponibles para el modo Musica."""
+        sampler = self._ensure_audio_sampler()
+        list_fn = getattr(sampler, "list_audio_devices", None)
+        if callable(list_fn):
+            return list(list_fn())
+        return [
+            {
+                "index": -1,
+                "name": "System Audio Loopback",
+                "label": "Default System Output (WASAPI Loopback)",
+                "sample_rate": 48000,
+                "channels": 2,
+                "is_default": True,
+            }
+        ]
+
+    def start_music_sync(
+        self,
+        palette_mode: str = "spectrum",
+        sensitivity: float = 1.0,
+        smoothing_alpha: float = 0.50,
+        audio_brightness: bool = True,
+        brightness: int = 85,
+        device_index: int | None = None,
+        ips: list[str] | None = None,
+    ) -> AwaitableStatusDict:
+        """Inicia la sincronizacion acustica WASAPI Loopback hacia los focos objetivo."""
+        # Exclusion mutua: iniciar el modo Musica detiene automaticamente el flujo Ambilight.
+        self.stop_ambilight()
+        sampler = self._ensure_audio_sampler()
+        parsed_alpha = max(0.05, min(1.0, float(smoothing_alpha)))
+        self._rate_limiter.set_alpha(parsed_alpha)
+        self._rate_limiter.reset()
+        target_ips = self.get_target_ips(ips)
+
+        async def _on_frame(frame_color: Color, frame_brightness: int, frame_ips: list[str]) -> bool:
+            return await self.stream_color_frame(
+                color=frame_color,
+                brightness=frame_brightness,
+                ips=frame_ips,
+            )
+
+        return self._music_sync.start(
+            sampler=sampler,
+            target_ips=target_ips,
+            on_frame=_on_frame,
+            palette_mode=str(palette_mode),
+            sensitivity=float(sensitivity),
+            smoothing_alpha=parsed_alpha,
+            audio_brightness=bool(audio_brightness),
+            brightness=int(brightness),
+            device_index=device_index,
+        )
+
+    def stop_music_sync(self, close_sampler: bool = False) -> AwaitableStatusDict:
+        """Detiene el flujo continuo de sincronizacion musical y opcionalmente cierra el stream WASAPI."""
+        status = self._music_sync.stop()
+        if close_sampler:
+            self.close_audio_sampler()
+        return status
+
+    def get_music_sync_status(self) -> dict[str, Any]:
+        """Devuelve el estado actual y telemetria espectral de la sincronizacion musical."""
+        return dict(self._music_sync.get_status())
+
+    def close_audio_sampler(self) -> None:
+        """Libera de forma segura los recursos del dispositivo WASAPI si el adaptador lo soporta."""
+        if self._audio_sampler is not None:
+            close_fn = getattr(self._audio_sampler, "close", None)
+            if callable(close_fn):
+                close_fn()
 
     def _resolve_reference_state(self, source_ip: str | None = None) -> LightState:
         """Determina el estado luminico de referencia a partir de una IP o la seleccion actual."""

@@ -15,6 +15,7 @@ import sys
 from typing import Any
 
 from gestor_luces.adapters.ambilight import MssScreenSampler
+from gestor_luces.adapters.audio import WasapiLoopbackSampler
 from gestor_luces.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
@@ -61,11 +62,13 @@ def build_application(
     scene_repo = JsonSceneRepository(data_dir=storage_dir)
     controller = WizUdpController()
     screen_sampler = MssScreenSampler()
+    audio_sampler = WasapiLoopbackSampler()
     service = LightControlService(
         controller=controller,
         bulb_repository=bulb_repo,
         scene_repository=scene_repo,
         screen_sampler=screen_sampler,
+        audio_sampler=audio_sampler,
     )
     bridge = WebviewBridge(service=service)
     return service, bridge
