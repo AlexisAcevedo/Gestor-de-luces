@@ -1,0 +1,21 @@
+# Core WiZ light communication (UDP 38899)
+pywizlight==0.6.6
+
+# Desktop container (WebView2 / Edge Chromium)
+pywebview==6.2.1
+
+# System tray icon and image generation
+pystray==0.19.5
+Pillow==13.0.0
+
+# Screen capture for Ambilight (Win32 GDI, pure Python)
+mss==10.2.0
+
+# System audio capture (WASAPI loopback) and signal processing
+PyAudioWPatch==0.2.12.9
+numpy==2.5.4
+
+# Testing
+pytest==9.0.3
+pytest-asyncio==1.3.0
+
