@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WiZ Architectural Lighting Console</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="console-shell" id="console-shell" data-power="off">
+    <!-- Left Fixture Rail: Network discovery, manual IP entry, and multi-bulb selection -->
+    <aside class="fixture-rail" aria-label="Lighting fixtures">
+      <header class="rail-header">
+        <div class="brand-lockup">
+          <span class="aperture-dot" aria-hidden="true"></span>
+          <div>
+            <h1 class="console-title">Photometric Console</h1>
+            <p class="console-subtitle">Local UDP 38899 Direct Control</p>
+          </div>
+        </div>
+
+        <div class="rail-actions">
+          <button type="button" class="btn btn-secondary" id="scan-network-btn">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M3.5 10a6.5 6.5 0 0 1 11.28-4.42M16.5 10a6.5 6.5 0 0 1-11.28 4.42" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M15 3v3h-3M5 17v-3h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span id="scan-btn-label">Scan network</span>
+          </button>
+
+          <button type="button" class="btn btn-ghost" id="open-add-dialog-btn">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <span>Add by IP</span>
+          </button>
+        </div>
+
+        <div class="selection-bar">
+          <label class="checkbox-control" for="select-all-fixtures">
+            <input type="checkbox" id="select-all-fixtures" checked>
+            <span>Select all fixtures</span>
+          </label>
+          <span class="fixture-count-badge" id="fixture-count-badge">0 online</span>
+        </div>
+      </header>
+
+      <div class="fixture-list" id="fixture-list" role="region" aria-label="Registered fixtures">
+        <!-- Populated dynamically by ui/app.js -->
+      </div>
+
+      <footer class="rail-footer">
+        <div class="sync-controls">
+          <button type="button" class="btn btn-compact" id="sync-now-btn" title="Query getPilot state from all bulbs">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 3.5a6.5 6.5 0 1 0 6.13 4.33" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M16.5 3.5v4.3h-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Sync now</span>
+          </button>
+
+          <label class="toggle-pill" for="auto-sync-toggle">
+            <input type="checkbox" id="auto-sync-toggle">
+            <span>Auto-sync (3s)</span>
+          </label>
+        </div>
+        <p class="status-banner" id="status-banner" role="status" aria-live="polite">
+          Ready for local UDP telemetry.
+        </p>
+      </footer>
+    </aside>
+
+    <!-- Central Photometric Stage: Live state readout, dimming, and mode panels -->
+    <main class="photometric-stage" aria-label="Light parameter controls">
+      <!-- Live Photometric Header -->
+      <header class="stage-header">
+        <div class="stage-identity">
+          <div class="photometric-aperture" id="photometric-aperture" aria-hidden="true"></div>
+          <div>
+            <p class="target-summary" id="target-summary">No fixture selected</p>
+            <div class="readout-row">
+              <span class="state-pill" id="live-state-pill">OFF</span>
+              <span class="telemetry-meta" id="telemetry-meta">UDP 38899</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="master-power-group">
+          <button
+            type="button"
+            class="btn-power"
+            id="master-power-btn"
+            aria-pressed="false"
+          >
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 2.75v6.5M6.1 4.85a6.5 6.5 0 1 0 7.8 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+            <span id="master-power-label">Turn ON</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Master Dimming Well -->
+      <section class="control-well dimming-well" aria-labelledby="dimming-heading">
+        <div class="well-header">
+          <div class="well-title-group">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="3.4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h2 id="dimming-heading" class="well-title">Luminous Flux (Dimming)</h2>
+          </div>
+          <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
+        </div>
+
+        <div class="slider-row">
+          <input
+            type="range"
+            id="brightness-slider"
+            class="console-slider"
+            min="10"
+            max="100"
+            step="1"
+            value="100"
+            aria-label="Master brightness percentage"
+          >
+        </div>
+
+        <div class="preset-strip" role="group" aria-label="Quick dimming presets">
+          <button type="button" class="chip-btn brightness-preset" data-brightness="10">10%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="25">25%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="50">50%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="75">75%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="100">100%</button>
+        </div>
+      </section>
+
+      <!-- Mode Switcher Tabs -->
+      <div class="mode-tabs" role="tablist" aria-label="Lighting emission mode">
+        <button
+          type="button"
+          role="tab"
+          id="tab-btn-rgb"
+          class="mode-tab"
+          aria-selected="true"
+          aria-controls="panel-rgb"
+          tabindex="0"
+          data-mode="rgb"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="10" cy="10" r="2.2" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span>Chromatic (RGB)</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="tab-btn-temperature"
+          class="mode-tab"
+          aria-selected="false"
+          aria-controls="panel-temperature"
+          tabindex="-1"
+          data-mode="temperature"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 3v10.5M7 6.5h6M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="10" cy="15" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span>White Spectrum (Kelvin)</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="tab-btn-scene"
+          class="mode-tab"
+          aria-selected="false"
+          aria-controls="panel-scene"
+          tabindex="-1"
+          data-mode="scene"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="3" y="3" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="11" y="3" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="3" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="11" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span>WiZ Scenes (36)</span>
+        </button>
+      </div>
+
+      <!-- Panel 1: Chromatic RGB -->
+      <section
+        id="panel-rgb"
+        role="tabpanel"
+        aria-labelledby="tab-btn-rgb"
+        class="mode-panel"
+      >
+        <div class="rgb-workbench">
+          <div class="wheel-column">
+            <div class="wheel-frame">
+              <canvas
+                id="color-wheel-canvas"
+                width="240"
+                height="240"
+                aria-label="Interactive HSV color wheel"
+              ></canvas>
+              <div id="wheel-reticle" class="wheel-reticle" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <div class="rgb-controls-column">
+            <div class="channel-grid">
+              <div class="field-group">
+                <label for="input-r">Red (0-255)</label>
+                <input type="number" id="input-r" min="0" max="255" value="255">
+              </div>
+              <div class="field-group">
+                <label for="input-g">Green (0-255)</label>
+                <input type="number" id="input-g" min="0" max="255" value="140">
+              </div>
+              <div class="field-group">
+                <label for="input-b">Blue (0-255)</label>
+                <input type="number" id="input-b" min="0" max="255" value="66">
+              </div>
+              <div class="field-group">
+                <label for="input-hex">Hex Code</label>
+                <div class="hex-input-row">
+                  <input type="text" id="input-hex" value="#ff8c42" maxlength="7" spellcheck="false">
+                  <button type="button" class="btn btn-primary" id="apply-rgb-btn">Apply RGB</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="swatch-section">
+              <p class="section-caption">Reference Chromatic Swatches</p>
+              <div class="swatch-grid" id="swatch-grid" role="group" aria-label="Curated RGB swatches">
+                <button type="button" class="color-swatch" data-r="255" data-g="94" data-b="58" style="--swatch-rgb: rgb(255, 94, 58)">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span>Sodium Amber</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="255" data-g="36" data-b="82" style="--swatch-rgb: rgb(255, 36, 82)">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span>Crimson Laser</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="168" data-g="85" data-b="247" style="--swatch-rgb: rgb(168, 85, 247)">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span>Ultraviolet</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="56" data-g="189" data-b="248" style="--swatch-rgb: rgb(56, 189, 248)">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span>Cerulean Sky</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="16" data-g="185" data-b="129" style="--swatch-rgb: rgb(16, 185, 129)">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span>Phosphor Mint</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="250" data-g="204" data-b="21" style="--swatch-rgb: rgb(250, 204, 21)">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span>Halogen Gold</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: White Balance (Kelvin) -->
+      <section
+        id="panel-temperature"
+        role="tabpanel"
+        aria-labelledby="tab-btn-temperature"
+        class="mode-panel"
+        hidden
+      >
+        <div class="control-well kelvin-well">
+          <div class="well-header">
+            <div>
+              <h3 class="well-title">Correlated Color Temperature (CCT)</h3>
+              <p class="well-description">Continuous blackbody locus from 2200 K warm filament to 6500 K overcast daylight.</p>
+            </div>
+            <output class="numeric-readout" id="kelvin-output" for="kelvin-slider">4200 K</output>
+          </div>
+
+          <div class="kelvin-track-wrapper">
+            <input
+              type="range"
+              id="kelvin-slider"
+              class="console-slider kelvin-track"
+              min="2200"
+              max="6500"
+              step="50"
+              value="4200"
+              aria-label="Color temperature in Kelvin"
+            >
+            <div class="kelvin-scale-labels" aria-hidden="true">
+              <span>2200 K Warm Amber</span>
+              <span>4200 K Neutral</span>
+              <span>6500 K Cool Daylight</span>
+            </div>
+          </div>
+
+          <div class="kelvin-presets-grid" role="group" aria-label="Architectural white presets">
+            <button type="button" class="kelvin-card" data-kelvin="2200">
+              <span class="kelvin-value">2200 K</span>
+              <span class="kelvin-name">Candlelight</span>
+            </button>
+            <button type="button" class="kelvin-card" data-kelvin="2700">
+              <span class="kelvin-value">2700 K</span>
+              <span class="kelvin-name">Warm White</span>
+            </button>
+            <button type="button" class="kelvin-card" data-kelvin="3500">
+              <span class="kelvin-value">3500 K</span>
+              <span class="kelvin-name">Neutral Halogen</span>
+            </button>
+            <button type="button" class="kelvin-card" data-kelvin="4200">
+              <span class="kelvin-value">4200 K</span>
+              <span class="kelvin-name">Daylight</span>
+            </button>
+            <button type="button" class="kelvin-card" data-kelvin="5000">
+              <span class="kelvin-value">5000 K</span>
+              <span class="kelvin-name">Studio Gallery</span>
+            </button>
+            <button type="button" class="kelvin-card" data-kelvin="6500">
+              <span class="kelvin-value">6500 K</span>
+              <span class="kelvin-name">Cool Daylight</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 3: WiZ Built-in Scenes (36) -->
+      <section
+        id="panel-scene"
+        role="tabpanel"
+        aria-labelledby="tab-btn-scene"
+        class="mode-panel"
+        hidden
+      >
+        <div class="scenes-toolbar">
+          <div class="category-pills" role="group" aria-label="Filter scenes by category">
+            <button type="button" class="chip-btn scene-filter active" data-category="all">All (36)</button>
+            <button type="button" class="chip-btn scene-filter" data-category="white">White</button>
+            <button type="button" class="chip-btn scene-filter" data-category="ambient">Ambient</button>
+            <button type="button" class="chip-btn scene-filter" data-category="nature">Nature</button>
+            <button type="button" class="chip-btn scene-filter" data-category="dynamic">Dynamic</button>
+            <button type="button" class="chip-btn scene-filter" data-category="holiday">Holiday</button>
+          </div>
+
+          <div class="speed-control-box" id="scene-speed-container">
+            <div class="speed-label-row">
+              <label for="scene-speed-slider">Transition Speed</label>
+              <output id="scene-speed-output" for="scene-speed-slider">100</output>
+            </div>
+            <input
+              type="range"
+              id="scene-speed-slider"
+              class="console-slider"
+              min="10"
+              max="200"
+              step="5"
+              value="100"
+              disabled
+            >
+          </div>
+        </div>
+
+        <div class="scenes-grid" id="scenes-grid" role="region" aria-label="WiZ firmware scenes">
+          <!-- Populated dynamically by ui/app.js -->
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal Dialog: Add Bulb Manually by IP (Light-dismiss enabled via closedby="any") -->
+  <dialog id="add-bulb-dialog" class="console-dialog" closedby="any" aria-labelledby="add-bulb-title">
+    <form id="add-bulb-form" method="dialog" class="dialog-surface">
+      <header class="dialog-header">
+        <h2 id="add-bulb-title" class="dialog-title">Register Fixture by IPv4</h2>
+        <p class="dialog-subtitle">Directly probe a WiZ bulb on UDP port 38899 when broadcast discovery is filtered.</p>
+      </header>
+
+      <div class="dialog-body">
+        <div class="field-group">
+          <label for="manual-ip-input">Fixture IPv4 Address</label>
+          <input
+            type="text"
+            id="manual-ip-input"
+            placeholder="192.168.1.45"
+            required
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <div class="field-group">
+          <label for="manual-name-input">Fixture Label (Optional)</label>
+          <input
+            type="text"
+            id="manual-name-input"
+            placeholder="Studio Key Light"
+            autocomplete="off"
+          >
+        </div>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-close-dialog="add-bulb-dialog">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-add-bulb-btn">Probe and Register</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal Dialog: Rename Fixture (Light-dismiss enabled via closedby="any") -->
+  <dialog id="rename-bulb-dialog" class="console-dialog" closedby="any" aria-labelledby="rename-bulb-title">
+    <form id="rename-bulb-form" method="dialog" class="dialog-surface">
+      <header class="dialog-header">
+        <h2 id="rename-bulb-title" class="dialog-title">Rename Fixture</h2>
+        <p class="dialog-subtitle" id="rename-bulb-ip-display">IP: 0.0.0.0</p>
+      </header>
+
+      <div class="dialog-body">
+        <input type="hidden" id="rename-bulb-ip-input">
+        <div class="field-group">
+          <label for="rename-bulb-name-input">New Fixture Name</label>
+          <input
+            type="text"
+            id="rename-bulb-name-input"
+            required
+            autocomplete="off"
+          >
+        </div>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-close-dialog="rename-bulb-dialog">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Name</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

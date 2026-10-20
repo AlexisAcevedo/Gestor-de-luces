@@ -1,0 +1,1021 @@
+/*
+ * Hoja de estilos de la Consola Fotometrica Arquitectonica (WiZ Desktop UI).
+ *
+ * El sistema visual se basa en una variable dinamica `--beam-color` que refleja la
+ * emision real del foco activo (RGB, Kelvin o escena). Utilizamos `color-mix(in oklab, ...)`
+ * en lugar de manipular canales de luminosidad crudos para mantener todos los tintes
+ * dentro del gamut sRGB del monitor sin perder contraste estructural (minimo 3:1 en bordes
+ * interactivos y 4.5:1 en tipografia sobre fondos oscuros).
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Paleta base inspirada en hardware de control luminico e instrumentacion */
+  --surface-chassis: #0D0F12;
+  --surface-panel: #14181F;
+  --surface-well: #1C222D;
+  --surface-interactive: #232B38;
+
+  /* Tipografia con contraste verificado > 5.5:1 y > 14:1 sobre grafito */
+  --text-primary: #F2F4F8;
+  --text-secondary: #9BA4B5;
+
+  /* Bordes de componentes con relacion de contraste >= 3:1 frente al chasis */
+  --border-structural: #5A657A;
+  --border-subtle: #353E4F;
+
+  /* Variable fotometrica actualizada en tiempo real por app.js */
+  --beam-color: #2A303C;
+  --beam-surface-tint: color-mix(in oklab, var(--beam-color) 22%, #14181F);
+  --beam-border-tint: color-mix(in oklab, var(--beam-color) 65%, white);
+
+  /* Estados semanticos */
+  --status-online: #34D399;
+  --status-offline: #F87171;
+
+  /* Familias tipograficas del sistema con soporte tabular para telemetria */
+  --font-sans: "Segoe UI Variable Display", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "Consolas", monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--surface-chassis);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Estructura principal de dos columnas: riel de luminarias + escenario fotometrico */
+.console-shell {
+  display: grid;
+  grid-template-columns: 330px 1fr;
+  min-height: 100vh;
+  background-color: var(--surface-chassis);
+}
+
+/* Riel izquierdo de inventario de focos y sincronizacion de red */
+.fixture-rail {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-panel);
+  border-right: 1px solid var(--border-subtle);
+  padding: 18px;
+  gap: 14px;
+}
+
+.rail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aperture-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--beam-color);
+  border: 1px solid var(--beam-border-tint);
+  flex-shrink: 0;
+}
+
+.console-title {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.console-subtitle {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.rail-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.checkbox-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.checkbox-control input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--beam-border-tint);
+  cursor: pointer;
+}
+
+.fixture-count-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: var(--surface-chassis);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Lista desplazable de focos descubiertos o agregados manualmente */
+.fixture-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.fixture-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.fixture-card.is-selected {
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+.fixture-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fixture-select-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.fixture-select-label input[type="checkbox"] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.fixture-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.fixture-name {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fixture-address {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.fixture-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--status-online);
+}
+
+.status-indicator.is-offline .status-dot {
+  background-color: var(--status-offline);
+  border-radius: 2px;
+}
+
+.fixture-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.empty-fixtures-state {
+  padding: 24px 16px;
+  text-align: center;
+  background-color: var(--surface-well);
+  border: 1px dashed var(--border-structural);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.empty-fixtures-state p {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+}
+
+.rail-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sync-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.status-banner {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Escenario fotometrico central */
+.photometric-stage {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  background-color: var(--beam-surface-tint);
+  border: 1px solid var(--beam-border-tint);
+  border-radius: var(--radius-lg);
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.console-shell[data-power="off"] .stage-header {
+  background-color: var(--surface-panel);
+  border-color: var(--border-subtle);
+}
+
+.stage-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Apertura fotometrica donde el color real es informacion esencial del estado del foco */
+.photometric-aperture {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--beam-color);
+  border: 2px solid var(--beam-border-tint);
+  box-shadow: 0 0 24px color-mix(in oklab, var(--beam-color) 60%, transparent);
+  forced-color-adjust: none;
+  flex-shrink: 0;
+}
+
+.console-shell[data-power="off"] .photometric-aperture {
+  box-shadow: none;
+  border-color: var(--border-structural);
+}
+
+.target-summary {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.readout-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background-color: var(--surface-chassis);
+  border: 1px solid var(--border-structural);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.telemetry-meta {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+/* Contenedores de controles (Control Wells) */
+.control-well {
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.well-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.well-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.well-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.well-description {
+  margin: 3px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.numeric-readout {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+/* Deslizadores de consola con borde de contraste >= 3:1 */
+.console-slider {
+  width: 100%;
+  height: 10px;
+  appearance: none;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.console-slider:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.console-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--text-primary);
+  border: 2px solid var(--surface-chassis);
+  box-shadow: 0 0 0 1px var(--border-structural);
+  cursor: pointer;
+}
+
+.preset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Pestanas de modo de emision (RGB / Kelvin / Escenas) */
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background-color: var(--surface-panel);
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.mode-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.mode-tab:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-well);
+}
+
+.mode-tab[aria-selected="true"] {
+  color: var(--text-primary);
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+.mode-panel[hidden] {
+  display: none !important;
+}
+
+/* Panel 1: Banco de trabajo cromatico RGB */
+.rgb-workbench {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.wheel-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wheel-frame {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 2px solid var(--border-structural);
+  background-color: var(--surface-well);
+}
+
+/* El lienzo de la rueda de color representa valores cromaticos esenciales */
+#color-wheel-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  cursor: crosshair;
+  forced-color-adjust: none;
+}
+
+.wheel-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 0 1.5px #000000;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.rgb-controls-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.channel-grid .field-group:last-child {
+  grid-column: 1 / -1;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-group label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.field-group input[type="number"],
+.field-group input[type="text"] {
+  background-color: var(--surface-well);
+  color: var(--text-primary);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hex-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.hex-input-row input {
+  flex: 1;
+}
+
+.section-caption {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+/* Muestras de color donde el matiz RGB es informacion primaria */
+.color-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: var(--surface-well);
+  color: var(--text-primary);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  forced-color-adjust: none;
+}
+
+.color-swatch:hover {
+  border-color: var(--text-primary);
+}
+
+.swatch-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--swatch-rgb, #ffffff);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+/* Panel 2: Espectro de temperatura de blanco (Kelvin) */
+.kelvin-track-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kelvin-track {
+  background: linear-gradient(90deg, #FFB46B 0%, #FFF1E0 50%, #D6E8FF 100%);
+  forced-color-adjust: none;
+}
+
+.kelvin-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.kelvin-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.kelvin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 12px 14px;
+  background-color: var(--surface-well);
+  color: var(--text-primary);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.kelvin-card:hover,
+.kelvin-card.active {
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+.kelvin-value {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.kelvin-name {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+/* Panel 3: Catalogo de las 36 escenas nativas de WiZ */
+.scenes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+
+.category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.speed-control-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 210px;
+}
+
+.speed-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.speed-label-row output {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.scenes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.scene-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--surface-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.scene-card:hover {
+  background-color: var(--surface-well);
+  border-color: var(--border-structural);
+}
+
+.scene-card.active {
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+.scene-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.scene-id-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.scene-tag {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.scene-name {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Botones e iconos SVG */
+.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.btn,
+.chip-btn,
+.btn-power {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border-structural);
+  background-color: var(--surface-well);
+  color: var(--text-primary);
+}
+
+.btn:hover {
+  background-color: var(--surface-interactive);
+}
+
+.btn-primary {
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+.btn-secondary {
+  background-color: var(--surface-well);
+  border-color: var(--border-structural);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  border-color: var(--border-structural);
+  color: var(--text-primary);
+}
+
+.btn-compact {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
+.chip-btn {
+  padding: 5px 11px;
+  background-color: var(--surface-well);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-structural);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.chip-btn:hover,
+.chip-btn.active {
+  color: var(--text-primary);
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+.btn-power {
+  padding: 10px 18px;
+  background-color: var(--surface-well);
+  color: var(--text-primary);
+  border: 1px solid var(--border-structural);
+  border-radius: 999px;
+}
+
+.btn-power[aria-pressed="true"] {
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
+}
+
+/* Dialogos modales nativos con soporte de light-dismiss (closedby="any") */
+.console-dialog {
+  padding: 0;
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-panel);
+  color: var(--text-primary);
+  max-width: 420px;
+  width: calc(100% - 32px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+}
+
+.console-dialog::backdrop {
+  background-color: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.dialog-surface {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+}
+
+.dialog-subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Enfoque de teclado claramente visible para accesibilidad */
+:focus-visible {
+  outline: 2px solid var(--beam-border-tint);
+  outline-offset: 2px;
+}
+
+/* Respeto por la preferencia de movimiento reducido del sistema operativo */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Soporte para el Modo de Colores Forzados (Alto Contraste de Windows).
+ * Cuando el navegador elimina box-shadow y fondos decorativos, garantizamos bordes
+ * del sistema explicitos para conservar la jerarquia de pestanas y tarjetas seleccionadas.
+ */
+@media (forced-colors: active) {
+  .fixture-card.is-selected,
+  .mode-tab[aria-selected="true"],
+  .scene-card.active,
+  .kelvin-card.active,
+  .chip-btn.active,
+  .btn-power[aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    border-color: Highlight;
+  }
+
+  .btn,
+  .chip-btn,
+  .console-dialog,
+  .control-well {
+    border: 1px solid ButtonText;
+  }
+}
+
+@media (max-width: 900px) {
+  .console-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .fixture-rail {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .rgb-workbench {
+    grid-template-columns: 1fr;
+  }
+}
