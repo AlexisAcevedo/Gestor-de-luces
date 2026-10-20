@@ -11,12 +11,16 @@ despacha cada operacion mediante `asyncio.run_coroutine_threadsafe`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
+import logging
 import threading
 from typing import Any
 
 from gestor_luces.application.service import LightControlService
+from gestor_luces.domain.models import Bulb
 from gestor_luces.domain.scenes import list_builtin_scenes
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class WebviewBridge:
@@ -26,9 +30,14 @@ class WebviewBridge:
         self,
         service: LightControlService,
         default_timeout: float = 12.0,
+        on_state_changed: Callable[[], None] | None = None,
     ) -> None:
         self._service = service
         self._default_timeout = default_timeout
+        # Atributo privado a proposito: PyWebView expone a JavaScript todo atributo publico
+        # del objeto `js_api`, y un callback interno no debe ser invocable desde la vista.
+        self._on_state_changed = on_state_changed
+        self._shutdown_lock = threading.Lock()
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
         self._closed = False
@@ -83,23 +92,79 @@ class WebviewBridge:
             "error": error,
         }
 
-    def shutdown(self) -> None:
-        """Detiene limpiamente el bucle de eventos en segundo plano al cerrar la aplicacion."""
-        if self._closed:
+    def _success_response(self) -> dict[str, Any]:
+        """Notifica el cambio de estado a observadores externos y devuelve el sobre exitoso."""
+        self._notify_state_changed()
+        return self._build_response(ok=True)
+
+    def _notify_state_changed(self) -> None:
+        """Avisa a la bandeja del sistema sin permitir que un fallo suyo rompa la respuesta JS."""
+        if self._on_state_changed is None:
             return
         try:
-            if self._loop.is_running():
-                async def _cancel() -> None:
-                    self._service.cancel_sleep_timer()
-
-                self._run_async(_cancel(), timeout=1.5)
+            self._on_state_changed()
         except Exception:
-            pass
-        self._closed = True
-        if self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._thread.is_alive():
-            self._thread.join(timeout=2.0)
+            _LOGGER.exception("State change listener failed.")
+
+    def shutdown(self) -> None:
+        """Detiene limpiamente el bucle de eventos en segundo plano al cerrar la aplicacion.
+
+        Es idempotente y segura entre hilos porque puede invocarse a la vez desde el
+        evento `closed` de la ventana, la opcion Quit de la bandeja y el final de `main`.
+        """
+        with self._shutdown_lock:
+            if self._closed:
+                return
+            try:
+                if self._loop.is_running():
+                    async def _cancel() -> None:
+                        self._service.cancel_sleep_timer()
+
+                    self._run_async(_cancel(), timeout=1.5)
+            except Exception:
+                pass
+            self._closed = True
+            if self._loop.is_running():
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            if self._thread.is_alive():
+                self._thread.join(timeout=2.0)
+
+    def get_tray_snapshot(self) -> dict[str, Any]:
+        """Devuelve una vista resumida y serializable del estado para la bandeja del sistema.
+
+        Se construye dentro del bucle asincrono porque los diccionarios del servicio se
+        mutan en ese hilo; leerlos desde el hilo de la bandeja podria observar estados
+        intermedios o fallar por modificacion concurrente durante la iteracion.
+        """
+
+        async def _collect() -> dict[str, Any]:
+            return self._collect_tray_snapshot()
+
+        return self._run_async(_collect(), timeout=3.0)
+
+    def _collect_tray_snapshot(self) -> dict[str, Any]:
+        """Resume el estado de los focos objetivo, los presets y el temporizador."""
+        targets: list[Bulb] = [
+            bulb
+            for ip in self._service.get_target_ips()
+            if (bulb := self._service.get_bulb(ip)) is not None
+        ]
+        lit = [bulb for bulb in targets if bulb.is_online and bulb.state.is_on]
+        reference = lit[0] if lit else (targets[0] if targets else None)
+        state = reference.state if reference is not None else None
+        color = state.color if state is not None else None
+        return {
+            "is_on": bool(lit),
+            "brightness": state.brightness if state is not None else 100,
+            "mode": state.mode.value if state is not None else None,
+            "color": [color.r, color.g, color.b] if color is not None else None,
+            "temperature": state.temperature if state is not None else None,
+            "presets": [
+                {"id": scene.id, "name": scene.name, "is_favorite": scene.is_favorite}
+                for scene in self._service.list_custom_scenes()
+            ],
+            "sleep_timer_active": bool(self._service.get_sleep_timer_status().get("active")),
+        }
 
     def get_initial_state(self) -> dict[str, Any]:
         """Obtiene el inventario inicial de focos y el catalogo de 36 escenas nativas.
@@ -112,7 +177,7 @@ class WebviewBridge:
                 self._run_async(self._service.discover_bulbs(wait_time=1.8), timeout=15.0)
             else:
                 self._run_async(self._service.refresh_states(), timeout=6.0)
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -120,7 +185,7 @@ class WebviewBridge:
         """Escanea la red local en busca de focos Philips WiZ y sincroniza su estado."""
         try:
             self._run_async(self._service.discover_bulbs(wait_time=2.0), timeout=15.0)
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -128,7 +193,7 @@ class WebviewBridge:
         """Agrega un foco por direccion IP explicita y verifica su disponibilidad UDP."""
         try:
             self._run_async(self._service.add_manual_bulb(ip=str(ip), name=str(name)))
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -136,7 +201,7 @@ class WebviewBridge:
         """Actualiza el nombre descriptivo de un foco registrado."""
         try:
             self._service.rename_bulb(ip=str(ip), new_name=str(new_name))
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -145,7 +210,7 @@ class WebviewBridge:
         try:
             normalized = [str(ip) for ip in ips] if isinstance(ips, list) else []
             self._service.select_targets(normalized)
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -155,7 +220,7 @@ class WebviewBridge:
             all_ips = [b.ip for b in self._service.list_bulbs()]
             if all_ips:
                 self._run_async(self._service.refresh_states(ips=all_ips), timeout=6.0)
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -176,7 +241,7 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -194,7 +259,7 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -219,7 +284,7 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -240,7 +305,7 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -264,7 +329,7 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -280,7 +345,7 @@ class WebviewBridge:
                 name=str(name),
                 source_ip=cleaned_ip,
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -304,7 +369,7 @@ class WebviewBridge:
                     scene_id=cleaned_id,
                     new_name=cleaned_name,
                 )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -312,7 +377,18 @@ class WebviewBridge:
         """Elimina una escena personalizada guardada."""
         try:
             self._service.delete_custom_scene(scene_id=str(scene_id).strip())
-            return self._build_response(ok=True)
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> dict[str, Any]:
+        """Agrega o quita un preset personalizado del submenu de favoritos de la bandeja."""
+        try:
+            self._service.set_custom_scene_favorite(
+                scene_id=str(scene_id).strip(),
+                is_favorite=bool(is_favorite),
+            )
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -330,7 +406,7 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -350,7 +426,7 @@ class WebviewBridge:
                 )
 
             self._run_async(_start())
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
@@ -361,13 +437,14 @@ class WebviewBridge:
                 return self._service.cancel_sleep_timer()
 
             self._run_async(_cancel())
-            return self._build_response(ok=True)
+            return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def get_sleep_timer_status(self) -> dict[str, Any]:
         """Obtiene el sobre actualizado incluyendo la cuenta regresiva del temporizador."""
         try:
+            # Consulta de solo lectura sondeada cada segundo: no notifica a la bandeja.
             return self._build_response(ok=True)
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))

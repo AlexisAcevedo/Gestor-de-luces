@@ -105,6 +105,9 @@ class CustomScene:
     temperature: int | None = None
     built_in_scene_id: int | None = None
     speed: int = 100
+    # Marca de favorito para el acceso rapido desde la bandeja del sistema. Vive en el
+    # dominio porque es una preferencia del usuario sobre el preset, no un detalle de UI.
+    is_favorite: bool = False
 
     def __post_init__(self) -> None:
         if not self.id or not self.id.strip():
@@ -129,6 +132,7 @@ class CustomScene:
             "temperature": self.temperature,
             "built_in_scene_id": self.built_in_scene_id,
             "speed": self.speed,
+            "is_favorite": self.is_favorite,
         }
 
     @classmethod
@@ -153,4 +157,7 @@ class CustomScene:
                 else None
             ),
             speed=int(data.get("speed", 100)),
+            # Los archivos guardados antes de existir la bandeja no incluyen la clave;
+            # se asume False para que sigan cargando sin migracion explicita.
+            is_favorite=bool(data.get("is_favorite", False)),
         )

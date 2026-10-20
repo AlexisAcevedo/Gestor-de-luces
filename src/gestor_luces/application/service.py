@@ -443,10 +443,30 @@ class LightControlService:
             temperature=resolved_temp,
             built_in_scene_id=resolved_builtin,
             speed=int(speed),
+            # Sobrescribir la captura luminica de un preset no debe quitarlo de la bandeja.
+            is_favorite=self._is_existing_favorite(resolved_id),
         )
         self._custom_scenes[scene.id] = scene
         self._persist_scenes()
         return scene
+
+    def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> CustomScene:
+        """Marca o desmarca un preset como favorito de la bandeja y persiste el cambio."""
+        existing = self._custom_scenes.get(scene_id)
+        if existing is None:
+            raise KeyError(f"Custom scene '{scene_id}' does not exist.")
+        existing.is_favorite = bool(is_favorite)
+        self._persist_scenes()
+        return existing
+
+    def list_favorite_scenes(self) -> list[CustomScene]:
+        """Devuelve los presets marcados como favoritos respetando el orden de creacion."""
+        return [scene for scene in self._custom_scenes.values() if scene.is_favorite]
+
+    def _is_existing_favorite(self, scene_id: str) -> bool:
+        """Indica si el identificador corresponde a un preset ya marcado como favorito."""
+        existing = self._custom_scenes.get(scene_id)
+        return existing.is_favorite if existing is not None else False
 
     def rename_custom_scene(self, scene_id: str, new_name: str) -> CustomScene:
         """Actualiza el nombre de una escena personalizada existente y la persiste."""
