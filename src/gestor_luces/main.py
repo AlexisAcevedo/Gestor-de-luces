@@ -12,6 +12,11 @@ import argparse
 from pathlib import Path
 import sys
 
+from gestor_luces.adapters.storage.json_repositories import (
+    JsonBulbRepository,
+    JsonSceneRepository,
+    resolve_default_data_dir,
+)
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
@@ -22,10 +27,19 @@ def resolve_ui_directory() -> Path:
     return Path(__file__).resolve().parents[2] / "ui"
 
 
-def build_application() -> tuple[LightControlService, WebviewBridge]:
-    """Instancia y conecta el controlador UDP, el servicio de aplicacion y el puente JS."""
+def build_application(
+    data_dir: Path | None = None,
+) -> tuple[LightControlService, WebviewBridge]:
+    """Instancia y conecta los repositorios JSON, el controlador UDP, el servicio y el puente JS."""
+    storage_dir = data_dir if data_dir is not None else resolve_default_data_dir()
+    bulb_repo = JsonBulbRepository(data_dir=storage_dir)
+    scene_repo = JsonSceneRepository(data_dir=storage_dir)
     controller = WizUdpController()
-    service = LightControlService(controller=controller)
+    service = LightControlService(
+        controller=controller,
+        bulb_repository=bulb_repo,
+        scene_repository=scene_repo,
+    )
     bridge = WebviewBridge(service=service)
     return service, bridge
 

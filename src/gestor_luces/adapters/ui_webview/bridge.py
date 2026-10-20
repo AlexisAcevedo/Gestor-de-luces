@@ -71,11 +71,15 @@ class WebviewBridge:
         bulbs = [bulb.to_dict() for bulb in self._service.list_bulbs()]
         selected_ips = self._service.get_target_ips()
         scenes = [scene.to_dict() for scene in list_builtin_scenes()]
+        custom_scenes = [scene.to_dict() for scene in self._service.list_custom_scenes()]
+        sleep_timer = self._service.get_sleep_timer_status()
         return {
             "ok": ok,
             "bulbs": bulbs,
             "selected_ips": selected_ips,
             "scenes": scenes,
+            "custom_scenes": custom_scenes,
+            "sleep_timer": sleep_timer,
             "error": error,
         }
 
@@ -83,6 +87,14 @@ class WebviewBridge:
         """Detiene limpiamente el bucle de eventos en segundo plano al cerrar la aplicacion."""
         if self._closed:
             return
+        try:
+            if self._loop.is_running():
+                async def _cancel() -> None:
+                    self._service.cancel_sleep_timer()
+
+                self._run_async(_cancel(), timeout=1.5)
+        except Exception:
+            pass
         self._closed = True
         if self._loop.is_running():
             self._loop.call_soon_threadsafe(self._loop.stop)
@@ -252,6 +264,110 @@ class WebviewBridge:
                     ips=target_ips,
                 )
             )
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def save_custom_scene(
+        self,
+        name: str,
+        source_ip: str | None = None,
+    ) -> dict[str, Any]:
+        """Guarda el estado luminico actual como un nuevo preset personalizado en JSON."""
+        try:
+            cleaned_ip = str(source_ip).strip() if source_ip else None
+            self._service.save_custom_scene_from_current(
+                name=str(name),
+                source_ip=cleaned_ip,
+            )
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def update_custom_scene(
+        self,
+        scene_id: str,
+        name: str,
+        capture_current: bool = False,
+    ) -> dict[str, Any]:
+        """Renombra un preset personalizado y opcionalmente sobreescribe su estado luminico."""
+        try:
+            cleaned_id = str(scene_id).strip()
+            cleaned_name = str(name).strip()
+            if capture_current:
+                self._service.save_custom_scene_from_current(
+                    name=cleaned_name,
+                    scene_id=cleaned_id,
+                )
+            else:
+                self._service.rename_custom_scene(
+                    scene_id=cleaned_id,
+                    new_name=cleaned_name,
+                )
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def delete_custom_scene(self, scene_id: str) -> dict[str, Any]:
+        """Elimina una escena personalizada guardada."""
+        try:
+            self._service.delete_custom_scene(scene_id=str(scene_id).strip())
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def apply_custom_scene(
+        self,
+        scene_id: str,
+        ips: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Aplica una escena personalizada a los focos seleccionados o indicados."""
+        try:
+            target_ips = [str(ip) for ip in ips] if isinstance(ips, list) else None
+            self._run_async(
+                self._service.apply_custom_scene(
+                    scene_id=str(scene_id).strip(),
+                    ips=target_ips,
+                )
+            )
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def start_sleep_timer(
+        self,
+        minutes: float,
+        ips: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Inicia el temporizador de apagado con atenuacion progresiva en el bucle asincrono."""
+        try:
+            target_ips = [str(ip) for ip in ips] if isinstance(ips, list) else None
+
+            async def _start() -> dict[str, Any]:
+                return self._service.start_sleep_timer(
+                    minutes=float(minutes),
+                    ips=target_ips,
+                )
+
+            self._run_async(_start())
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def cancel_sleep_timer(self) -> dict[str, Any]:
+        """Cancela el temporizador de apagado activo."""
+        try:
+            async def _cancel() -> dict[str, Any]:
+                return self._service.cancel_sleep_timer()
+
+            self._run_async(_cancel())
+            return self._build_response(ok=True)
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def get_sleep_timer_status(self) -> dict[str, Any]:
+        """Obtiene el sobre actualizado incluyendo la cuenta regresiva del temporizador."""
+        try:
             return self._build_response(ok=True)
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))

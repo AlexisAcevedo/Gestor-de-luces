@@ -63,9 +63,17 @@
     bulbs: [],
     selectedIps: [],
     scenes: FALLBACK_SCENES.slice(),
+    customScenes: [],
+    sleepTimer: {
+      active: false,
+      remaining_seconds: 0,
+      total_seconds: 0,
+      target_ips: []
+    },
     activeTab: "rgb",
     sceneCategory: "all",
     autoSyncTimer: null,
+    sleepPollTimer: null,
     isDraggingWheel: false
   };
 
@@ -91,13 +99,68 @@
       }
     ];
     let mockSelected = ["192.168.0.34"];
+    let mockCustomScenes = [
+      {
+        id: "preset01",
+        name: "Editorial Warmth",
+        mode: "temperature",
+        brightness: 70,
+        color: null,
+        temperature: 2700,
+        built_in_scene_id: null,
+        speed: 100
+      },
+      {
+        id: "preset02",
+        name: "Cyan Backlight",
+        mode: "rgb",
+        brightness: 85,
+        color: { r: 0, g: 180, b: 255, hex: "#00b4ff" },
+        temperature: null,
+        built_in_scene_id: null,
+        speed: 100
+      }
+    ];
+    let mockSleepTimer = {
+      active: false,
+      remaining_seconds: 0,
+      total_seconds: 0,
+      target_ips: [],
+      deadlineMs: 0
+    };
+
+    function syncMockTimer() {
+      if (!mockSleepTimer.active) return;
+      const rem = Math.max(0, Math.ceil((mockSleepTimer.deadlineMs - Date.now()) / 1000));
+      if (rem <= 0) {
+        mockSleepTimer.active = false;
+        mockSleepTimer.remaining_seconds = 0;
+        mockSleepTimer.total_seconds = 0;
+        mockBulbs.forEach((b) => {
+          if (mockSleepTimer.target_ips.includes(b.ip)) {
+            b.state.is_on = false;
+          }
+        });
+        mockSleepTimer.target_ips = [];
+      } else {
+        mockSleepTimer.remaining_seconds = rem;
+      }
+    }
 
     function buildMockEnvelope() {
+      syncMockTimer();
       return Promise.resolve({
         ok: true,
         bulbs: JSON.parse(JSON.stringify(mockBulbs)),
         selected_ips: mockSelected.slice(),
         scenes: FALLBACK_SCENES.slice(),
+        custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
+        sleep_timer: {
+          active: mockSleepTimer.active,
+          remaining_seconds: mockSleepTimer.remaining_seconds,
+          total_seconds: mockSleepTimer.total_seconds,
+          target_ips: mockSleepTimer.target_ips.slice()
+        },
         error: null
       });
     }
@@ -221,7 +284,85 @@
           }
         });
         return buildMockEnvelope();
-      }
+      },
+      save_custom_scene: (name) => {
+        const refBulb = mockBulbs.find((b) => mockSelected.includes(b.ip)) || mockBulbs[0];
+        const st = refBulb ? refBulb.state : { mode: "temperature", brightness: 100, color: null, temperature: 4200, scene_id: null, speed: 100 };
+        mockCustomScenes.push({
+          id: Math.random().toString(16).slice(2, 10),
+          name: String(name || "Preset").trim(),
+          mode: st.mode,
+          brightness: st.brightness,
+          color: st.color ? Object.assign({}, st.color) : null,
+          temperature: st.temperature,
+          built_in_scene_id: st.scene_id,
+          speed: st.speed || 100
+        });
+        return buildMockEnvelope();
+      },
+      update_custom_scene: (sceneId, name, captureCurrent) => {
+        const target = mockCustomScenes.find((s) => s.id === sceneId);
+        if (target) {
+          target.name = String(name || target.name).trim();
+          if (captureCurrent) {
+            const refBulb = mockBulbs.find((b) => mockSelected.includes(b.ip)) || mockBulbs[0];
+            if (refBulb) {
+              target.mode = refBulb.state.mode;
+              target.brightness = refBulb.state.brightness;
+              target.color = refBulb.state.color ? Object.assign({}, refBulb.state.color) : null;
+              target.temperature = refBulb.state.temperature;
+              target.built_in_scene_id = refBulb.state.scene_id;
+              target.speed = refBulb.state.speed || 100;
+            }
+          }
+        }
+        return buildMockEnvelope();
+      },
+      delete_custom_scene: (sceneId) => {
+        mockCustomScenes = mockCustomScenes.filter((s) => s.id !== sceneId);
+        return buildMockEnvelope();
+      },
+      apply_custom_scene: (sceneId, ips) => {
+        const preset = mockCustomScenes.find((s) => s.id === sceneId);
+        if (!preset) return buildMockEnvelope();
+        const targets = resolveTargets(ips);
+        mockBulbs.forEach((bulb) => {
+          if (targets.includes(bulb.ip)) {
+            bulb.state.is_on = true;
+            bulb.state.mode = preset.mode;
+            bulb.state.brightness = preset.brightness;
+            bulb.state.color = preset.color ? Object.assign({}, preset.color) : null;
+            bulb.state.temperature = preset.temperature;
+            bulb.state.scene_id = preset.built_in_scene_id;
+            const bScene = FALLBACK_SCENES.find((s) => s.scene_id === preset.built_in_scene_id);
+            bulb.state.scene_name = bScene ? bScene.name : null;
+            bulb.state.speed = preset.speed || 100;
+          }
+        });
+        return buildMockEnvelope();
+      },
+      start_sleep_timer: (minutes, ips) => {
+        const totalSec = Math.max(1, Math.round(Number(minutes) * 60));
+        mockSleepTimer = {
+          active: true,
+          remaining_seconds: totalSec,
+          total_seconds: totalSec,
+          target_ips: resolveTargets(ips),
+          deadlineMs: Date.now() + totalSec * 1000
+        };
+        return buildMockEnvelope();
+      },
+      cancel_sleep_timer: () => {
+        mockSleepTimer = {
+          active: false,
+          remaining_seconds: 0,
+          total_seconds: 0,
+          target_ips: [],
+          deadlineMs: 0
+        };
+        return buildMockEnvelope();
+      },
+      get_sleep_timer_status: () => buildMockEnvelope()
     };
   }
 
@@ -418,6 +559,12 @@
     if (Array.isArray(envelope.scenes) && envelope.scenes.length > 0) {
       appState.scenes = envelope.scenes;
     }
+    if (Array.isArray(envelope.custom_scenes)) {
+      appState.customScenes = envelope.custom_scenes;
+    }
+    if (envelope.sleep_timer && typeof envelope.sleep_timer === "object") {
+      appState.sleepTimer = envelope.sleep_timer;
+    }
 
     if (!envelope.ok && envelope.error) {
       setStatusMessage(`Warning: ${envelope.error}`);
@@ -425,9 +572,12 @@
       setStatusMessage(statusText);
     }
 
+    syncSleepTimerPolling();
     renderFixtureList();
     renderStageHeaderAndControls();
+    renderSleepTimer();
     renderScenesGrid();
+    renderCustomScenesGrid();
   }
 
   /* Renderiza las tarjetas de focos en el riel izquierdo sin usar innerHTML con datos de usuario */
@@ -707,6 +857,204 @@
 
       grid.appendChild(btn);
     });
+  }
+
+  /* Formatea segundos totales en MM:SS para el indicador del temporizador */
+  function formatCountdown(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+
+  /* Activa o detiene el sondeo cada 1s mientras el temporizador de apagado este corriendo */
+  function syncSleepTimerPolling() {
+    const isActive = Boolean(appState.sleepTimer && appState.sleepTimer.active);
+    if (isActive && !appState.sleepPollTimer) {
+      appState.sleepPollTimer = setInterval(() => {
+        invokeApi(() => backendApi.get_sleep_timer_status(), null);
+      }, 1000);
+    } else if (!isActive && appState.sleepPollTimer) {
+      clearInterval(appState.sleepPollTimer);
+      appState.sleepPollTimer = null;
+    }
+  }
+
+  /* Actualiza la barra visual del Sleep Timer y el estado del boton Cancelar */
+  function renderSleepTimer() {
+    const badge = document.getElementById("sleep-timer-badge");
+    const cancelBtn = document.getElementById("cancel-sleep-timer-btn");
+    const timer = appState.sleepTimer || { active: false, remaining_seconds: 0, total_seconds: 0 };
+
+    if (badge) {
+      badge.setAttribute("data-active", String(Boolean(timer.active)));
+      if (timer.active) {
+        const fadeThreshold = Math.ceil((timer.total_seconds || 0) * 0.3);
+        const inFadePhase = timer.remaining_seconds <= fadeThreshold;
+        const phaseLabel = inFadePhase ? "Progressive fade active" : "Steady countdown";
+        badge.textContent = `Sleep timer: ${formatCountdown(timer.remaining_seconds)} remaining · ${phaseLabel}`;
+      } else {
+        badge.textContent = "Timer inactive";
+      }
+    }
+
+    if (cancelBtn) {
+      cancelBtn.disabled = !timer.active;
+    }
+  }
+
+  /* Renderiza la galeria de presets personalizados guardados en JSON */
+  function renderCustomScenesGrid() {
+    const grid = document.getElementById("custom-scenes-grid");
+    const tabLabel = document.getElementById("custom-tab-label");
+    if (tabLabel) {
+      tabLabel.textContent = `Custom Presets (${appState.customScenes.length})`;
+    }
+    if (!grid) return;
+
+    grid.replaceChildren();
+
+    if (appState.customScenes.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-fixtures-state";
+      const p1 = document.createElement("p");
+      p1.textContent = "No custom presets saved yet.";
+      const p2 = document.createElement("p");
+      p2.textContent = "Configure any color, Kelvin temperature, or scene and click Save current state.";
+      empty.append(p1, p2);
+      grid.appendChild(empty);
+      return;
+    }
+
+    appState.customScenes.forEach((preset) => {
+      const card = document.createElement("article");
+      card.className = "custom-scene-card";
+
+      let swatchCss = "#FFF1E0";
+      let summaryText = `${preset.brightness}%`;
+
+      if (preset.mode === "rgb" && preset.color) {
+        const hex = (preset.color.hex || rgbToHex(preset.color.r, preset.color.g, preset.color.b)).toUpperCase();
+        swatchCss = `rgb(${preset.color.r}, ${preset.color.g}, ${preset.color.b})`;
+        summaryText = `RGB ${hex} · ${preset.brightness}%`;
+      } else if (preset.mode === "scene" && preset.built_in_scene_id) {
+        const bScene = appState.scenes.find((s) => s.scene_id === preset.built_in_scene_id);
+        const cat = bScene ? bScene.category : "dynamic";
+        swatchCss = SCENE_CATEGORY_COLORS[cat] || "#C084FC";
+        const sName = bScene ? bScene.name : `Scene #${preset.built_in_scene_id}`;
+        summaryText = `Scene: ${sName} · ${preset.brightness}%`;
+      } else {
+        const k = preset.temperature || 4200;
+        swatchCss = kelvinToCssColor(k);
+        summaryText = `${k} K · ${preset.brightness}%`;
+      }
+
+      const topArea = document.createElement("div");
+      topArea.className = "custom-scene-top";
+      topArea.setAttribute("role", "button");
+      topArea.tabIndex = 0;
+      topArea.setAttribute("aria-label", `Apply preset ${preset.name}`);
+
+      const swatch = document.createElement("span");
+      swatch.className = "custom-scene-swatch";
+      swatch.style.setProperty("--preset-swatch", swatchCss);
+      swatch.setAttribute("aria-hidden", "true");
+
+      const meta = document.createElement("div");
+      meta.className = "custom-scene-meta";
+
+      const title = document.createElement("h4");
+      title.className = "custom-scene-title";
+      title.textContent = preset.name;
+
+      const summary = document.createElement("p");
+      summary.className = "custom-scene-summary";
+      summary.textContent = summaryText;
+
+      meta.append(title, summary);
+      topArea.append(swatch, meta);
+
+      const triggerApply = () => {
+        invokeApi(
+          () => backendApi.apply_custom_scene(preset.id, null),
+          `Applied custom preset "${preset.name}".`
+        );
+      };
+
+      topArea.addEventListener("click", triggerApply);
+      topArea.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          triggerApply();
+        }
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "custom-scene-actions";
+
+      const applyBtn = document.createElement("button");
+      applyBtn.type = "button";
+      applyBtn.className = "btn btn-compact btn-primary";
+      applyBtn.textContent = "Apply";
+      applyBtn.addEventListener("click", triggerApply);
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn btn-compact btn-secondary";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => openCustomSceneDialog(preset));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn btn-compact btn-ghost";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => {
+        invokeApi(
+          () => backendApi.delete_custom_scene(preset.id),
+          `Deleted preset "${preset.name}".`
+        );
+      });
+
+      actions.append(applyBtn, editBtn, deleteBtn);
+      card.append(topArea, actions);
+      grid.appendChild(card);
+    });
+  }
+
+  /* Abre el dialogo modal para crear un nuevo preset o editar uno existente */
+  function openCustomSceneDialog(existingPreset) {
+    const dialog = document.getElementById("custom-scene-dialog");
+    const titleEl = document.getElementById("custom-scene-dialog-title");
+    const subtitleEl = document.getElementById("custom-scene-dialog-subtitle");
+    const idInput = document.getElementById("custom-scene-id-input");
+    const nameInput = document.getElementById("custom-scene-name-input");
+    const overwriteRow = document.getElementById("custom-scene-overwrite-row");
+    const overwriteCheckbox = document.getElementById("custom-scene-overwrite-checkbox");
+    const submitBtn = document.getElementById("custom-scene-submit-btn");
+
+    if (!dialog || !idInput || !nameInput) return;
+
+    if (existingPreset) {
+      idInput.value = existingPreset.id;
+      nameInput.value = existingPreset.name;
+      if (titleEl) titleEl.textContent = "Edit Custom Preset";
+      if (subtitleEl) subtitleEl.textContent = "Rename this preset or overwrite its parameters with the current fixture state.";
+      if (overwriteRow) overwriteRow.hidden = false;
+      if (overwriteCheckbox) overwriteCheckbox.checked = false;
+      if (submitBtn) submitBtn.textContent = "Update Preset";
+    } else {
+      idInput.value = "";
+      nameInput.value = "";
+      if (titleEl) titleEl.textContent = "Save Custom Preset";
+      if (subtitleEl) subtitleEl.textContent = "Snapshots the active fixture state into local persistent storage.";
+      if (overwriteRow) overwriteRow.hidden = true;
+      if (overwriteCheckbox) overwriteCheckbox.checked = false;
+      if (submitBtn) submitBtn.textContent = "Save Preset";
+    }
+
+    dialog.showModal();
+    nameInput.focus();
+    if (existingPreset) nameInput.select();
   }
 
   /* Ejecuta llamadas hacia WebviewBridge de forma uniforme */
@@ -1077,6 +1425,84 @@
           () => backendApi.set_builtin_scene(primary.state.scene_id, speed, null, null),
           `Updated scene #${primary.state.scene_id} speed to ${speed}.`
         );
+      });
+    }
+
+    /* Eventos del Temporizador de Apagado (Sleep Timer) */
+    const sleepMinutesInput = document.getElementById("sleep-minutes-input");
+    document.querySelectorAll(".sleep-preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mins = clampInt(btn.dataset.minutes, 1, 240);
+        if (sleepMinutesInput) sleepMinutesInput.value = String(mins);
+        document.querySelectorAll(".sleep-preset-btn").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+        });
+        invokeApi(
+          () => backendApi.start_sleep_timer(mins, null),
+          `Sleep timer started for ${mins} min with progressive fade.`
+        );
+      });
+    });
+
+    const startTimerBtn = document.getElementById("start-sleep-timer-btn");
+    if (startTimerBtn) {
+      startTimerBtn.addEventListener("click", () => {
+        const mins = clampInt(sleepMinutesInput ? sleepMinutesInput.value : 30, 1, 240);
+        if (sleepMinutesInput) sleepMinutesInput.value = String(mins);
+        invokeApi(
+          () => backendApi.start_sleep_timer(mins, null),
+          `Sleep timer started for ${mins} min with progressive fade.`
+        );
+      });
+    }
+
+    const cancelTimerBtn = document.getElementById("cancel-sleep-timer-btn");
+    if (cancelTimerBtn) {
+      cancelTimerBtn.addEventListener("click", () => {
+        document.querySelectorAll(".sleep-preset-btn").forEach((b) => b.classList.remove("active"));
+        invokeApi(() => backendApi.cancel_sleep_timer(), "Sleep timer cancelled.");
+      });
+    }
+
+    /* Eventos de creacion y edicion de escenas personalizadas (Custom Presets) */
+    const quickSavePresetBtn = document.getElementById("quick-save-preset-btn");
+    if (quickSavePresetBtn) {
+      quickSavePresetBtn.addEventListener("click", () => openCustomSceneDialog(null));
+    }
+
+    const openSaveSceneBtn = document.getElementById("open-save-scene-dialog-btn");
+    if (openSaveSceneBtn) {
+      openSaveSceneBtn.addEventListener("click", () => openCustomSceneDialog(null));
+    }
+
+    const customSceneForm = document.getElementById("custom-scene-form");
+    const customSceneDialog = document.getElementById("custom-scene-dialog");
+    if (customSceneForm && customSceneDialog) {
+      customSceneForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const idInput = document.getElementById("custom-scene-id-input");
+        const nameInput = document.getElementById("custom-scene-name-input");
+        const overwriteCheckbox = document.getElementById("custom-scene-overwrite-checkbox");
+
+        const sceneId = idInput ? idInput.value.trim() : "";
+        const name = nameInput ? nameInput.value.trim() : "";
+        const captureCurrent = Boolean(overwriteCheckbox && overwriteCheckbox.checked);
+        if (!name) return;
+
+        customSceneDialog.close();
+        if (sceneId) {
+          invokeApi(
+            () => backendApi.update_custom_scene(sceneId, name, captureCurrent),
+            `Updated custom preset "${name}".`
+          );
+        } else {
+          const primary = getPrimaryBulb();
+          invokeApi(
+            () => backendApi.save_custom_scene(name, primary ? primary.ip : null),
+            `Saved custom preset "${name}".`
+          );
+          activateTab("custom", false);
+        }
       });
     }
   }

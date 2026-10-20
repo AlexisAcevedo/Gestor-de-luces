@@ -46,6 +46,28 @@ class LightState:
             "speed": self.speed,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LightState:
+        """Reconstruye el estado luminico a partir de un diccionario deserializado de JSON."""
+        raw_color = data.get("color")
+        color = (
+            Color(r=int(raw_color["r"]), g=int(raw_color["g"]), b=int(raw_color["b"]))
+            if isinstance(raw_color, dict)
+            else None
+        )
+        raw_mode = data.get("mode", LightMode.TEMPERATURE.value)
+        mode = LightMode(raw_mode) if raw_mode in {m.value for m in LightMode} else LightMode.TEMPERATURE
+        return cls(
+            is_on=bool(data.get("is_on", False)),
+            brightness=int(data.get("brightness", 100)),
+            mode=mode,
+            color=color,
+            temperature=int(data["temperature"]) if data.get("temperature") is not None else None,
+            scene_id=int(data["scene_id"]) if data.get("scene_id") is not None else None,
+            scene_name=str(data["scene_name"]) if data.get("scene_name") else None,
+            speed=int(data.get("speed", 100)),
+        )
+
 
 @dataclass
 class Bulb:
@@ -75,6 +97,20 @@ class Bulb:
             "is_online": self.is_online,
             "state": self.state.to_dict(),
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Bulb:
+        """Reconstruye una entidad Bulb completa desde su representacion persistida en JSON."""
+        raw_state = data.get("state")
+        state = LightState.from_dict(raw_state) if isinstance(raw_state, dict) else LightState()
+        return cls(
+            ip=str(data["ip"]),
+            mac=str(data.get("mac", "unknown")),
+            name=str(data.get("name", "")),
+            module_name=str(data.get("module_name", "ESP01_SHRGB1C_31")),
+            is_online=bool(data.get("is_online", True)),
+            state=state,
+        )
 
 
 @dataclass

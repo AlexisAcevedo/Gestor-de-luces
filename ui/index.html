@@ -88,6 +88,18 @@
         <div class="master-power-group">
           <button
             type="button"
+            class="btn btn-secondary"
+            id="quick-save-preset-btn"
+            title="Save current bulb state as a custom preset"
+          >
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v11.5L10 13.25 3.5 16.5V5A1.5 1.5 0 0 1 5 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span>Save current state</span>
+          </button>
+
+          <button
+            type="button"
             class="btn-power"
             id="master-power-btn"
             aria-pressed="false"
@@ -99,6 +111,50 @@
           </button>
         </div>
       </header>
+
+      <!-- Sleep Timer Bar with Progressive Fade -->
+      <section class="control-well sleep-timer-well" aria-labelledby="sleep-timer-heading">
+        <div class="well-header sleep-timer-header">
+          <div class="well-title-group">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="11" r="6.25" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 7.75v3.5l2.25 1.5M7.75 2.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div>
+              <h2 id="sleep-timer-heading" class="well-title">Sleep Timer (Progressive Fade)</h2>
+              <p class="well-description">Gradually dims fixtures during the final 30% of the countdown before powering off.</p>
+            </div>
+          </div>
+          <span class="timer-status-badge" id="sleep-timer-badge" data-active="false">Timer inactive</span>
+        </div>
+
+        <div class="sleep-timer-controls">
+          <div class="preset-strip" role="group" aria-label="Sleep timer quick durations">
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="15">15 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="30">30 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="45">45 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="60">60 min</button>
+          </div>
+
+          <div class="sleep-custom-actions">
+            <label class="sr-only" for="sleep-minutes-input">Timer duration in minutes (1 to 240)</label>
+            <div class="minutes-input-group">
+              <input
+                type="number"
+                id="sleep-minutes-input"
+                min="1"
+                max="240"
+                step="1"
+                value="30"
+                aria-label="Custom sleep timer minutes"
+              >
+              <span class="unit-suffix">min</span>
+            </div>
+            <button type="button" class="btn btn-primary" id="start-sleep-timer-btn">Start Timer</button>
+            <button type="button" class="btn btn-ghost" id="cancel-sleep-timer-btn" disabled>Cancel Timer</button>
+          </div>
+        </div>
+      </section>
 
       <!-- Master Dimming Well -->
       <section class="control-well dimming-well" aria-labelledby="dimming-heading">
@@ -188,6 +244,22 @@
             <rect x="11" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
           </svg>
           <span>WiZ Scenes (36)</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="tab-btn-custom"
+          class="mode-tab"
+          aria-selected="false"
+          aria-controls="panel-custom"
+          tabindex="-1"
+          data-mode="custom"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v11.5L10 13.25 3.5 16.5V5A1.5 1.5 0 0 1 5 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          <span id="custom-tab-label">Custom Presets</span>
         </button>
       </div>
 
@@ -371,6 +443,32 @@
           <!-- Populated dynamically by ui/app.js -->
         </div>
       </section>
+
+      <!-- Panel 4: User Custom Presets -->
+      <section
+        id="panel-custom"
+        role="tabpanel"
+        aria-labelledby="tab-btn-custom"
+        class="mode-panel"
+        hidden
+      >
+        <div class="scenes-toolbar custom-scenes-toolbar">
+          <div>
+            <h3 class="well-title">Saved Custom Presets</h3>
+            <p class="well-description">Capture any RGB color, Kelvin temperature, or dynamic scene with brightness into local JSON storage.</p>
+          </div>
+          <button type="button" class="btn btn-primary" id="open-save-scene-dialog-btn">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <span>Save current state</span>
+          </button>
+        </div>
+
+        <div class="custom-scenes-grid" id="custom-scenes-grid" role="region" aria-label="Saved custom lighting presets">
+          <!-- Populated dynamically by ui/app.js -->
+        </div>
+      </section>
     </main>
   </div>
 
@@ -437,6 +535,42 @@
       <footer class="dialog-footer">
         <button type="button" class="btn btn-ghost" data-close-dialog="rename-bulb-dialog">Cancel</button>
         <button type="submit" class="btn btn-primary">Save Name</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal Dialog: Save or Edit Custom Scene Preset (Light-dismiss enabled via closedby="any") -->
+  <dialog id="custom-scene-dialog" class="console-dialog" closedby="any" aria-labelledby="custom-scene-dialog-title">
+    <form id="custom-scene-form" method="dialog" class="dialog-surface">
+      <header class="dialog-header">
+        <h2 id="custom-scene-dialog-title" class="dialog-title">Save Custom Preset</h2>
+        <p class="dialog-subtitle" id="custom-scene-dialog-subtitle">Snapshots the active fixture state into local persistent storage.</p>
+      </header>
+
+      <div class="dialog-body">
+        <input type="hidden" id="custom-scene-id-input">
+        <div class="field-group">
+          <label for="custom-scene-name-input">Preset Label</label>
+          <input
+            type="text"
+            id="custom-scene-name-input"
+            placeholder="Late Night Coding"
+            required
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="field-group" id="custom-scene-overwrite-row" hidden>
+          <label class="checkbox-control" for="custom-scene-overwrite-checkbox">
+            <input type="checkbox" id="custom-scene-overwrite-checkbox">
+            <span>Overwrite preset parameters with current live bulb state</span>
+          </label>
+        </div>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-close-dialog="custom-scene-dialog">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="custom-scene-submit-btn">Save Preset</button>
       </footer>
     </form>
   </dialog>
