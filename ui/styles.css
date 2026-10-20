@@ -985,11 +985,23 @@ body {
 
 .custom-scene-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
+}
+
+.btn-favorite {
+  margin-right: auto;
+  color: var(--text-secondary);
+}
+
+.btn-favorite.is-favorite {
+  color: var(--text-primary);
+  background-color: var(--beam-surface-tint);
+  border-color: var(--beam-border-tint);
 }
 
 .sr-only {
@@ -1168,6 +1180,7 @@ body {
   .scene-card.active,
   .kelvin-card.active,
   .chip-btn.active,
+  .btn-favorite.is-favorite,
   .btn-power[aria-pressed="true"] {
     outline: 2px solid Highlight;
     border-color: Highlight;

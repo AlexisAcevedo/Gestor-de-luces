@@ -2,24 +2,48 @@
 
 Este modulo ensambla las capas de la Arquitectura Hexagonal inyectando las
 implementaciones concretas de infraestructura (`WizUdpController`) en los casos
-de uso (`LightControlService`) y exponiendolos al adaptador primario de ventana
-nativa (`WebviewBridge` + `pywebview`).
+de uso (`LightControlService`) y exponiendolos a los adaptadores primarios de
+ventana nativa (`WebviewBridge` + `pywebview`) y bandeja del sistema (`TrayController`).
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 import sys
+from typing import Any
 
 from gestor_luces.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
     resolve_default_data_dir,
 )
+from gestor_luces.adapters.tray import TrayController
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class _NoopTrayIcon:
+    """Icono simulado sin efectos secundarios para verificar el ensamblado en smoke-test."""
+
+    def __init__(self, name: str, image: Any, title: str, menu: Any) -> None:
+        self.name = name
+        self.icon = image
+        self.title = title
+        self.menu = menu
+
+    def run(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+    def update_menu(self) -> None:
+        return None
 
 
 def resolve_ui_directory() -> Path:
@@ -74,6 +98,17 @@ def main(argv: list[str] | None = None) -> int:
     _, bridge = build_application()
 
     if args.smoke_test:
+        smoke_tray = TrayController(
+            bridge,
+            show_window=lambda: None,
+            hide_window=lambda: None,
+            quit_app=lambda: None,
+            is_window_visible=lambda: True,
+            icon_factory=_NoopTrayIcon,
+            executor=lambda task: task(),
+            poll_interval=0.0,
+        )
+        bridge.set_state_change_listener(smoke_tray.request_refresh)
         try:
             missing = [
                 str(p)
@@ -83,12 +118,21 @@ def main(argv: list[str] | None = None) -> int:
             if missing:
                 print(f"Smoke test failed: missing UI assets: {missing}", file=sys.stderr)
                 return 1
+            smoke_tray.refresh()
+            if not smoke_tray.spec:
+                print("Smoke test failed: tray menu specification is empty.", file=sys.stderr)
+                return 1
             print(f"Composition root initialized. UI entry verified at: {index_path}")
             return 0
         finally:
+            smoke_tray.stop()
             bridge.shutdown()
 
     import webview
+
+    is_window_visible = True
+    is_quitting = False
+    tray: TrayController | None = None
 
     window = webview.create_window(
         title="WiZ Architectural Lighting Console",
@@ -99,8 +143,112 @@ def main(argv: list[str] | None = None) -> int:
         min_size=(920, 620),
         background_color="#0D0F12",
     )
-    window.events.closed += bridge.shutdown
-    webview.start(debug=args.debug)
+
+    def show_window() -> None:
+        """Restaura la ventana desde la bandeja y la trae al frente en Windows."""
+        nonlocal is_window_visible
+        is_window_visible = True
+        window.show()
+        try:
+            window.restore()
+        except Exception:
+            _LOGGER.debug("Window restore skipped because window was not minimized.")
+        try:
+            native_form = getattr(window, "native", None)
+            if native_form is not None:
+                import ctypes
+
+                hwnd = native_form.Handle.ToInt32()
+                # SW_RESTORE (9) asegura que deje el estado minimizado/oculto y SetForegroundWindow
+                # le devuelve el foco tras cerrar el menu popup de la bandeja.
+                ctypes.windll.user32.ShowWindow(hwnd, 9)
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            _LOGGER.debug("Native foreground activation skipped.")
+        if tray is not None:
+            tray.request_refresh()
+
+    def hide_window() -> None:
+        """Oculta la ventana en la bandeja manteniendo vivos el bucle UDP y los temporizadores."""
+        nonlocal is_window_visible
+        is_window_visible = False
+        window.hide()
+        if tray is not None:
+            tray.request_refresh()
+
+    def notify_ui() -> None:
+        """Avisa a la vista web que una accion de la bandeja modifico el estado luminico."""
+        if not is_window_visible or is_quitting:
+            return
+        try:
+            window.evaluate_js("window.onTrayStateChanged && window.onTrayStateChanged()")
+        except Exception:
+            _LOGGER.debug("Skipped UI notification because webview was not ready.")
+
+    def quit_app() -> None:
+        """Autoriza el cierre definitivo de la ventana y libera la bandeja y el bucle UDP."""
+        nonlocal is_quitting
+        is_quitting = True
+        if tray is not None:
+            tray.stop()
+        bridge.shutdown()
+        try:
+            window.destroy()
+        except Exception:
+            _LOGGER.debug("Window destroy skipped because window was already closed.")
+
+    def on_closing() -> bool:
+        """Intercepta el boton [X] para minimizar a la bandeja salvo cuando se invoca Quit.
+
+        Importante en WinForms/pywebview: `window.events.closing` se ejecuta de forma
+        sincrona en el hilo principal de la ventana (`should_lock=True`). Llamar a
+        `window.hide()` directamente dentro de `FormClosing` puede reentrar o bloquear
+        con `self.Invoke(self.Hide)`. Por eso despachamos `hide_window` en un hilo corto
+        apenas `on_closing` devuelve `False` (`args.Cancel = True`).
+        """
+        if not is_quitting:
+            import threading
+
+            threading.Thread(target=hide_window, name="GestorLucesHideOnClose", daemon=True).start()
+            return False
+        return True
+
+    def on_minimized() -> None:
+        """Cuando el usuario minimiza la ventana con [_], la enviamos a la bandeja."""
+        if not is_quitting and is_window_visible:
+            import threading
+
+            threading.Thread(
+                target=hide_window,
+                name="GestorLucesHideOnMinimize",
+                daemon=True,
+            ).start()
+
+    def on_closed() -> None:
+        """Garantiza la liberacion de recursos si el sistema operativo cierra la ventana."""
+        if tray is not None:
+            tray.stop()
+        bridge.shutdown()
+
+    tray = TrayController(
+        bridge,
+        show_window=show_window,
+        hide_window=hide_window,
+        quit_app=quit_app,
+        is_window_visible=lambda: is_window_visible,
+        notify_ui=notify_ui,
+    )
+    bridge.set_state_change_listener(tray.request_refresh)
+    window.events.closing += on_closing
+    window.events.minimized += on_minimized
+    window.events.closed += on_closed
+
+    tray.start()
+    try:
+        webview.start(debug=args.debug)
+    finally:
+        tray.stop()
+        bridge.shutdown()
     return 0
 
 

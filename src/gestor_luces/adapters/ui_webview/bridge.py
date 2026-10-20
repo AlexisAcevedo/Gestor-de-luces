@@ -97,6 +97,10 @@ class WebviewBridge:
         self._notify_state_changed()
         return self._build_response(ok=True)
 
+    def set_state_change_listener(self, listener: Callable[[], None] | None) -> None:
+        """Registra o reemplaza el observador invocado tras cada mutacion desde la UI."""
+        self._on_state_changed = listener
+
     def _notify_state_changed(self) -> None:
         """Avisa a la bandeja del sistema sin permitir que un fallo suyo rompa la respuesta JS."""
         if self._on_state_changed is None:

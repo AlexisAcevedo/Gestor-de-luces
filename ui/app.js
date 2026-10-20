@@ -108,7 +108,8 @@
         color: null,
         temperature: 2700,
         built_in_scene_id: null,
-        speed: 100
+        speed: 100,
+        is_favorite: true
       },
       {
         id: "preset02",
@@ -118,7 +119,8 @@
         color: { r: 0, g: 180, b: 255, hex: "#00b4ff" },
         temperature: null,
         built_in_scene_id: null,
-        speed: 100
+        speed: 100,
+        is_favorite: false
       }
     ];
     let mockSleepTimer = {
@@ -320,6 +322,13 @@
       },
       delete_custom_scene: (sceneId) => {
         mockCustomScenes = mockCustomScenes.filter((s) => s.id !== sceneId);
+        return buildMockEnvelope();
+      },
+      set_custom_scene_favorite: (sceneId, isFavorite) => {
+        const target = mockCustomScenes.find((s) => s.id === sceneId);
+        if (target) {
+          target.is_favorite = Boolean(isFavorite);
+        }
         return buildMockEnvelope();
       },
       apply_custom_scene: (sceneId, ips) => {
@@ -992,6 +1001,43 @@
       const actions = document.createElement("div");
       actions.className = "custom-scene-actions";
 
+      const isFavorite = Boolean(preset.is_favorite);
+      const favoriteBtn = document.createElement("button");
+      favoriteBtn.type = "button";
+      favoriteBtn.className = `btn btn-compact btn-favorite${isFavorite ? " is-favorite" : ""}`;
+      favoriteBtn.setAttribute("aria-pressed", String(isFavorite));
+      favoriteBtn.title = isFavorite
+        ? "Remove from system tray Favorite presets"
+        : "Add to system tray Favorite presets";
+
+      const starSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      starSvg.setAttribute("class", "icon");
+      starSvg.setAttribute("viewBox", "0 0 20 20");
+      starSvg.setAttribute("fill", isFavorite ? "currentColor" : "none");
+      starSvg.setAttribute("aria-hidden", "true");
+      const starPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      starPath.setAttribute(
+        "d",
+        "M10 2.75l2.18 4.42 4.88.71-3.53 3.44.83 4.86L10 13.88l-4.36 2.3.83-4.86-3.53-3.44 4.88-.71L10 2.75Z"
+      );
+      starPath.setAttribute("stroke", "currentColor");
+      starPath.setAttribute("stroke-width", "1.5");
+      starPath.setAttribute("stroke-linejoin", "round");
+      starSvg.appendChild(starPath);
+
+      const favoriteLabel = document.createElement("span");
+      favoriteLabel.textContent = isFavorite ? "Favorited" : "Favorite";
+      favoriteBtn.append(starSvg, favoriteLabel);
+      favoriteBtn.addEventListener("click", () => {
+        const nextFavorite = !isFavorite;
+        invokeApi(
+          () => backendApi.set_custom_scene_favorite(preset.id, nextFavorite),
+          nextFavorite
+            ? `Added "${preset.name}" to tray favorite presets.`
+            : `Removed "${preset.name}" from tray favorite presets.`
+        );
+      });
+
       const applyBtn = document.createElement("button");
       applyBtn.type = "button";
       applyBtn.className = "btn btn-compact btn-primary";
@@ -1015,7 +1061,7 @@
         );
       });
 
-      actions.append(applyBtn, editBtn, deleteBtn);
+      actions.append(favoriteBtn, applyBtn, editBtn, deleteBtn);
       card.append(topArea, actions);
       grid.appendChild(card);
     });
@@ -1067,6 +1113,19 @@
       setStatusMessage(`Communication error: ${err && err.message ? err.message : String(err)}`);
     }
   }
+
+  /* Refresca el estado completo de la consola cuando se solicita manual o externamente */
+  function refreshStates(statusMessage) {
+    return invokeApi(
+      () => backendApi.refresh_states(),
+      statusMessage || "Synchronized state from system tray."
+    );
+  }
+
+  /* Callback global invocado desde Python cuando el usuario opera el menu de la bandeja */
+  window.onTrayStateChanged = () => {
+    refreshStates();
+  };
 
   /* Gestion de pestanas accesibles (WAI-ARIA Tabs con navegacion por flechas) */
   function activateTab(modeName, focusTab) {

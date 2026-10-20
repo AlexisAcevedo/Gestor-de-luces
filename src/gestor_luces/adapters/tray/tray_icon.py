@@ -140,6 +140,7 @@ class TrayController:
         self._handlers: dict[str, Callable[[Any], None]] = {
             ACTION_SHOW_WINDOW: lambda _payload: self._show_window(),
             ACTION_HIDE_WINDOW: lambda _payload: self._hide_window(),
+            "toggle_window": lambda _payload: self._toggle_window_visibility(),
             ACTION_TURN_ON: lambda _payload: self._call_bridge(self._actions.set_power, True),
             ACTION_TURN_OFF: lambda _payload: self._call_bridge(self._actions.set_power, False),
             ACTION_SET_BRIGHTNESS: lambda payload: self._call_bridge(
@@ -159,6 +160,13 @@ class TrayController:
         """Ultimo modelo de menu calculado, expuesto para diagnostico y pruebas."""
         with self._lock:
             return list(self._spec)
+
+    def _toggle_window_visibility(self) -> None:
+        """Conmuta entre mostrar y ocultar la ventana con base en el estado real."""
+        if self._safe_window_visible():
+            self._hide_window()
+        else:
+            self._show_window()
 
     @property
     def title(self) -> str:
@@ -245,7 +253,7 @@ class TrayController:
                 return
             self._signature = signature
             self._spec, self._title, self._rgb = spec, title, rgb
-        self._apply_to_icon()
+        self._apply_to_icon(spec, title, rgb)
 
     def dispatch(self, action_id: str, payload: Any = None) -> None:
         """Encola una accion del menu en el ejecutor para no bloquear el bombeo Win32."""
@@ -275,13 +283,24 @@ class TrayController:
             except Exception:
                 _LOGGER.exception("Failed to notify the web UI about a tray change.")
 
-    def _apply_to_icon(self) -> None:
+    def _apply_to_icon(
+        self,
+        spec: list[TrayMenuEntry],
+        title: str,
+        rgb: tuple[int, int, int],
+    ) -> None:
         icon = self._icon
         if icon is None or self._stopped.is_set():
             return
         try:
-            icon.icon = render_icon_image(self._rgb)
-            icon.title = self._title
+            with self._lock:
+                if (tuple(spec), title, rgb) != self._signature:
+                    return
+                icon.icon = render_icon_image(rgb)
+                icon.title = title
+            # Importante: `update_menu()` evalua `_current_menu_items()`, que adquiere
+            # `self._lock`. Como `threading.Lock` no es reentrante, debemos llamarlo
+            # fuera del bloque `with self._lock:` para no provocar un interbloqueo (deadlock).
             icon.update_menu()
         except Exception:
             _LOGGER.exception("Failed to update the tray icon.")
@@ -309,7 +328,9 @@ class TrayController:
             return True
 
     def _current_menu_items(self) -> tuple[pystray.MenuItem, ...]:
-        return tuple(self._to_menu_item(entry) for entry in self.spec)
+        with self._lock:
+            entries = list(self._spec)
+        return tuple(self._to_menu_item(entry) for entry in entries)
 
     def _to_menu_item(self, entry: TrayMenuEntry) -> pystray.MenuItem:
         if entry.is_separator:
@@ -327,9 +348,17 @@ class TrayController:
         )
 
     def _make_handler(self, entry: TrayMenuEntry) -> Callable[[], None]:
-        # Funcion sin parametros: pystray inspecciona `co_argcount` para decidir como
-        # invocar la accion, y un `functools.partial` carece de `__code__`.
+        # Si es el item por defecto (Show/Hide window) y el usuario hace clic izquierdo en el
+        # icono antes de que termine un refresh en segundo plano, conmutamos la visibilidad
+        # verificando el estado en vivo para que un clic en el icono oculto SIEMPRE abra la ventana.
+        action_id = entry.action_id
+        payload = entry.payload
+        is_window_toggle = action_id in (ACTION_SHOW_WINDOW, ACTION_HIDE_WINDOW)
+
         def _handler() -> None:
-            self.dispatch(entry.action_id, entry.payload)
+            if is_window_toggle and entry.is_default:
+                self.dispatch("toggle_window", None)
+            else:
+                self.dispatch(action_id, payload)
 
         return _handler
