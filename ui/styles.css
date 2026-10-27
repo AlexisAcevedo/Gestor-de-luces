@@ -453,6 +453,78 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Toasts de feedback: no bloquean la interaccion y no desplazan el layout */
+.toast-region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: var(--surface-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 0.8125rem;
+  pointer-events: auto;
+}
+
+.toast-ok {
+  border-left: 3px solid var(--status-online);
+}
+
+.toast-error {
+  border-left: 3px solid #ff4d6d;
+}
+
+.toast-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast-action,
+.toast-close {
+  flex: none;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.toast-close {
+  border-color: transparent;
+  padding: 2px 8px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.toast-action:hover,
+.toast-close:hover {
+  background-color: var(--surface-well);
+}
+
+.toast-action:focus-visible,
+.toast-close:focus-visible {
+  outline: 2px solid var(--beam-color, #fff);
+  outline-offset: 2px;
+}
+
 /* Escenario fotometrico central */
 .photometric-stage {
   display: flex;

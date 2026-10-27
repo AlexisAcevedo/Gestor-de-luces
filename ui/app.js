@@ -835,6 +835,74 @@
     }
   }
 
+  /* Toasts: los exitosos se cierran solos y se reemplazan entre si (evita ruido al arrastrar
+     sliders); los de error permanecen hasta cerrarse e incluyen un boton para reintentar. */
+  const TOAST_OK_MS = 2200;
+  let okToastEl = null;
+  let okToastTimer = null;
+
+  function dismissToast(el) {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    if (el === okToastEl) okToastEl = null;
+  }
+
+  function showToast({ kind, message, retry }) {
+    const region = document.getElementById("toast-region");
+    if (!region || !message) return;
+
+    if (kind === "ok") {
+      clearTimeout(okToastTimer);
+      if (okToastEl) {
+        okToastEl.querySelector(".toast-message").textContent = message;
+      } else {
+        okToastEl = buildToast("ok", message, null);
+        region.appendChild(okToastEl);
+      }
+      okToastTimer = setTimeout(() => dismissToast(okToastEl), TOAST_OK_MS);
+      return;
+    }
+
+    /* Un error identico ya visible no se duplica */
+    const duplicate = Array.from(region.querySelectorAll(".toast-error .toast-message")).find(
+      (node) => node.textContent === message
+    );
+    if (duplicate) return;
+    region.appendChild(buildToast("error", message, retry));
+  }
+
+  function buildToast(kind, message, retry) {
+    const el = document.createElement("div");
+    el.className = `toast toast-${kind}`;
+    if (kind === "error") el.setAttribute("role", "alert");
+
+    const text = document.createElement("span");
+    text.className = "toast-message";
+    text.textContent = message;
+    el.appendChild(text);
+
+    if (kind === "error") {
+      if (typeof retry === "function") {
+        const retryBtn = document.createElement("button");
+        retryBtn.type = "button";
+        retryBtn.className = "toast-action";
+        retryBtn.textContent = t("toast.retry");
+        retryBtn.addEventListener("click", () => {
+          dismissToast(el);
+          retry();
+        });
+        el.appendChild(retryBtn);
+      }
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "toast-close";
+      closeBtn.setAttribute("aria-label", t("toast.dismiss"));
+      closeBtn.textContent = "\u00d7";
+      closeBtn.addEventListener("click", () => dismissToast(el));
+      el.appendChild(closeBtn);
+    }
+    return el;
+  }
+
   /* Sincroniza el progreso visual de un deslizador (<input type="range">) y sus botones de escala */
   function updateSliderFill(inputEl) {
     if (!inputEl) return;
@@ -909,7 +977,7 @@
   }
 
   /* Actualiza la variable CSS `--beam-color` y toda la interfaz a partir del sobre del backend */
-  function applyBackendEnvelope(envelope, statusText) {
+  function applyBackendEnvelope(envelope, statusText, retry, silent) {
     if (!envelope) return;
     if (typeof envelope.language === "string") {
       syncLanguageUi(envelope.language);
@@ -943,11 +1011,15 @@
     }
 
     if (!envelope.ok && envelope.error) {
-      setStatusMessage(t("status.warning", { error: envelope.error }));
-    } else if (typeof statusText === "function") {
-      setStatusMessage(statusText());
-    } else if (statusText) {
-      setStatusMessage(statusText);
+      const warning = t("status.warning", { error: envelope.error });
+      setStatusMessage(warning);
+      showToast({ kind: "error", message: warning, retry });
+    } else {
+      const text = typeof statusText === "function" ? statusText() : statusText;
+      if (text) {
+        setStatusMessage(text);
+        if (!silent) showToast({ kind: "ok", message: text });
+      }
     }
 
     syncSleepTimerPolling();
@@ -2013,15 +2085,19 @@
   }
 
   /* Ejecuta llamadas hacia WebviewBridge de forma uniforme */
-  async function invokeApi(callFn, successMessage) {
+  async function invokeApi(callFn, successMessage, options) {
     if (!backendApi) return;
+    const retry = () => invokeApi(callFn, successMessage, options);
+    const silent = Boolean(options && options.silent);
     try {
       const response = await callFn();
-      applyBackendEnvelope(response, successMessage);
+      applyBackendEnvelope(response, successMessage, retry, silent);
     } catch (err) {
-      setStatusMessage(
-        t("status.commError", { error: err && err.message ? err.message : String(err) })
-      );
+      const message = t("status.commError", {
+        error: err && err.message ? err.message : String(err),
+      });
+      setStatusMessage(message);
+      showToast({ kind: "error", message, retry });
     }
   }
 
@@ -2029,7 +2105,8 @@
   function refreshStates(statusMessage) {
     return invokeApi(
       () => backendApi.refresh_states(),
-      statusMessage || (() => t("status.syncedTray"))
+      statusMessage || (() => t("status.syncedTray")),
+      { silent: true }
     );
   }
 

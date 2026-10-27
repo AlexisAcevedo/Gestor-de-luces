@@ -235,6 +235,9 @@
 
       /* Mensajes de estado (Status Banner) */
       "status.warning": "Warning: {error}",
+      "toast.regionLabel": "Notifications",
+      "toast.retry": "Retry",
+      "toast.dismiss": "Dismiss",
       "status.commError": "Communication error: {error}",
       "status.connected": "Connected to local UDP lighting service.",
       "status.scanDone": "Network scan completed.",
@@ -510,6 +513,9 @@
 
       /* Mensajes de estado (Status Banner) */
       "status.warning": "Advertencia: {error}",
+      "toast.regionLabel": "Notificaciones",
+      "toast.retry": "Reintentar",
+      "toast.dismiss": "Cerrar",
       "status.commError": "Error de comunicación: {error}",
       "status.connected": "Conectado al servicio local de iluminación UDP.",
       "status.scanDone": "Escaneo de red completado.",
