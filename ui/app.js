@@ -2854,3 +2854,16 @@
     );
   });
 })();
+
+
+/* Suspende transiciones CSS mientras se redimensiona la ventana (se restauran 150 ms despues). */
+(function setupResizeThrottle() {
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    document.documentElement.classList.add('is-resizing');
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      document.documentElement.classList.remove('is-resizing');
+    }, 150);
+  }, { passive: true });
+})();

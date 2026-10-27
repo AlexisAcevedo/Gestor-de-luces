@@ -30,6 +30,38 @@ from gestor_luces.application.service import LightControlService
 _LOGGER = logging.getLogger(__name__)
 
 
+WINDOW_MIN_SIZE = (760, 560)
+WINDOW_FALLBACK_SIZE = (1180, 780)
+WINDOW_MAX_SIZE = (1440, 920)
+WINDOW_SCREEN_RATIO = 0.9
+
+
+def _compute_initial_window_geometry(webview_module: object) -> tuple[int, int, int | None, int | None]:
+    """Return (width, height, x, y) sized to ~90% of the primary screen and centered.
+
+    Falls back to the legacy fixed size (OS-centered) when screen info is unavailable.
+    """
+    try:
+        screens = getattr(webview_module, "screens", None)
+        if not screens:
+            raise RuntimeError("no screens reported")
+        screen = screens[0]
+        screen_w, screen_h = int(screen.width), int(screen.height)
+        if screen_w <= 0 or screen_h <= 0:
+            raise RuntimeError("invalid screen size")
+    except Exception:
+        return (*WINDOW_FALLBACK_SIZE, None, None)
+
+    width = int(screen_w * WINDOW_SCREEN_RATIO)
+    height = int(screen_h * WINDOW_SCREEN_RATIO)
+    width = max(WINDOW_MIN_SIZE[0], min(width, WINDOW_MAX_SIZE[0], screen_w))
+    height = max(WINDOW_MIN_SIZE[1], min(height, WINDOW_MAX_SIZE[1], screen_h))
+    x = max(0, (screen_w - width) // 2)
+    y = max(0, (screen_h - height) // 2)
+    return width, height, x, y
+
+
+
 class _NoopTrayIcon:
     """Icono simulado sin efectos secundarios para verificar el ensamblado en smoke-test."""
 
@@ -144,13 +176,17 @@ def main(argv: list[str] | None = None) -> int:
     is_quitting = False
     tray: TrayController | None = None
 
+    win_width, win_height, win_x, win_y = _compute_initial_window_geometry(webview)
+
     window = webview.create_window(
         title="WiZ Architectural Lighting Console",
         url=index_path.as_uri(),
         js_api=bridge,
-        width=1180,
-        height=780,
-        min_size=(920, 620),
+        width=win_width,
+        height=win_height,
+        x=win_x,
+        y=win_y,
+        min_size=(WINDOW_MIN_SIZE[0], WINDOW_MIN_SIZE[1]),
         background_color="#0D0F12",
     )
 
