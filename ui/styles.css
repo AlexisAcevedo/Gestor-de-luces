@@ -569,6 +569,12 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stage-identity > div:last-child {
+  min-width: 0;
 }
 
 /* Apertura fotometrica donde el color real es informacion esencial del estado del foco */
@@ -595,13 +601,21 @@ body {
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .readout-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin-top: 4px;
+  min-width: 0;
 }
 
 .state-pill {
@@ -615,6 +629,10 @@ body {
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .telemetry-meta {

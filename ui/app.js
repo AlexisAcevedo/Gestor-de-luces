@@ -1231,10 +1231,22 @@
 
     const selectedCount = appState.selectedIps.length || appState.bulbs.length;
     if (targetSummary) {
-      targetSummary.textContent =
-        selectedCount === 1
-          ? t("stage.controllingOne", { name: primary.name })
-          : t("stage.controllingMany", { count: selectedCount, name: primary.name });
+      /* Destinos reales de los comandos: los seleccionados (o todos si no hay seleccion) */
+      const targets = appState.selectedIps.length
+        ? appState.bulbs.filter((b) => appState.selectedIps.includes(b.ip))
+        : appState.bulbs;
+      const names = targets.map((b) => b.name);
+      let summary;
+      if (selectedCount === 1) {
+        summary = t("stage.controllingOne", { name: primary.name });
+      } else if (selectedCount <= 3 && names.length === selectedCount) {
+        summary = t("stage.controllingList", { count: selectedCount, names: names.join(", ") });
+      } else {
+        summary = t("stage.controllingMany", { count: selectedCount, name: primary.name });
+      }
+      targetSummary.textContent = summary;
+      /* El tooltip siempre lista todos los destinos */
+      targetSummary.title = names.join("\n");
     }
 
     const st = primary.state;
@@ -1308,7 +1320,10 @@
         aperture.style.boxShadow = "none";
       }
     }
-    if (statePill) statePill.textContent = modeReadout;
+    if (statePill) {
+      statePill.textContent = modeReadout;
+      statePill.title = modeReadout;
+    }
     if (telemetryMeta) telemetryMeta.textContent = `${primary.ip} · ${primary.module_name}`;
 
     /* Sincronizacion de controles RGB */
