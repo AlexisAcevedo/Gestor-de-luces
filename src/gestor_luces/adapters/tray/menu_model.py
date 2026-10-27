@@ -77,7 +77,7 @@ def select_tray_presets(presets: Sequence[TrayPreset]) -> list[TrayPreset]:
 _TRAY_STRINGS: dict[str, dict[str, str]] = {
     "en": {
         "hide_window": "Hide window",
-        "show_window": "Show window",
+        "show_window": "Open console",
         "turn_off": "Turn off",
         "turn_on": "Turn on",
         "brightness": "Brightness",
@@ -88,7 +88,7 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
     },
     "es": {
         "hide_window": "Ocultar ventana",
-        "show_window": "Mostrar ventana",
+        "show_window": "Abrir consola",
         "turn_off": "Apagar",
         "turn_on": "Encender",
         "brightness": "Brillo",
@@ -117,17 +117,19 @@ def build_tray_menu_spec(
 ) -> list[TrayMenuEntry]:
     """Construye la estructura completa del menu a partir del estado e idioma actuales."""
     strings = _resolve_tray_strings(language)
+    # Power goes first: quick light control is the tray's primary purpose. The window
+    # toggle stays the default item (left click) so a hidden window can always be reopened.
     entries: list[TrayMenuEntry] = [
+        TrayMenuEntry(
+            label=strings["turn_off"] if is_on else strings["turn_on"],
+            action_id=ACTION_TURN_OFF if is_on else ACTION_TURN_ON,
+        ),
         TrayMenuEntry(
             label=strings["hide_window"] if window_visible else strings["show_window"],
             action_id=ACTION_HIDE_WINDOW if window_visible else ACTION_SHOW_WINDOW,
             is_default=True,
         ),
         SEPARATOR,
-        TrayMenuEntry(
-            label=strings["turn_off"] if is_on else strings["turn_on"],
-            action_id=ACTION_TURN_OFF if is_on else ACTION_TURN_ON,
-        ),
         TrayMenuEntry(
             label=strings["brightness"],
             children=_build_brightness_entries(brightness),

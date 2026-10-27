@@ -115,9 +115,9 @@ def test_build_tray_menu_spec_reflects_visibility_power_and_sleep_timer() -> Non
         window_visible=False,
         sleep_timer_active=False,
     )
-    assert spec_hidden_off[0].label == "Show window"
-    assert spec_hidden_off[0].action_id == ACTION_SHOW_WINDOW
-    assert spec_hidden_off[0].is_default is True
+    assert spec_hidden_off[1].label == "Open console"
+    assert spec_hidden_off[1].action_id == ACTION_SHOW_WINDOW
+    assert spec_hidden_off[1].is_default is True
 
     power_entry = _find_entry_by_label(spec_hidden_off, "Turn on")
     assert power_entry.action_id == ACTION_TURN_ON
@@ -140,8 +140,8 @@ def test_build_tray_menu_spec_reflects_visibility_power_and_sleep_timer() -> Non
         window_visible=True,
         sleep_timer_active=True,
     )
-    assert spec_visible_on[0].label == "Hide window"
-    assert spec_visible_on[0].action_id == ACTION_HIDE_WINDOW
+    assert spec_visible_on[1].label == "Hide window"
+    assert spec_visible_on[1].action_id == ACTION_HIDE_WINDOW
     assert _find_entry_by_label(spec_visible_on, "Turn off").action_id == ACTION_TURN_OFF
     assert _find_entry_by_label(spec_visible_on, "Cancel sleep timer").action_id == (
         ACTION_CANCEL_SLEEP_TIMER
@@ -291,12 +291,12 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             await asyncio.to_thread(tray.dispatch, ACTION_HIDE_WINDOW)
             assert hide_count == 1
             assert window_visible is False
-            assert tray.spec[0].action_id == ACTION_SHOW_WINDOW
+            assert tray.spec[1].action_id == ACTION_SHOW_WINDOW
 
             await asyncio.to_thread(tray.dispatch, ACTION_SHOW_WINDOW)
             assert show_count == 1
             assert window_visible is True
-            assert tray.spec[0].action_id == ACTION_HIDE_WINDOW
+            assert tray.spec[1].action_id == ACTION_HIDE_WINDOW
 
             # 5. Iniciar temporizador desde la UI y cancelarlo desde la bandeja
             await asyncio.to_thread(bridge.start_sleep_timer, 15)

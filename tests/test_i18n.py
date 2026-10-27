@@ -108,8 +108,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
     )
     labels_off = [entry.label for entry in spec_es_off if not entry.is_separator]
     assert labels_off == [
-        "Mostrar ventana",
         "Encender",
+        "Abrir consola",
         "Brillo",
         "Escenas favoritas",
         "Salir",
@@ -128,8 +128,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
     )
     labels_on = [entry.label for entry in spec_es_on if not entry.is_separator]
     assert labels_on == [
-        "Ocultar ventana",
         "Apagar",
+        "Ocultar ventana",
         "Brillo",
         "Escenas favoritas",
         "Cancelar temporizador",
@@ -177,7 +177,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
 
             await asyncio.to_thread(tray.start)
             assert created_icons[0].title == "WiZ Lighting - On 75%"
-            assert tray.spec[0].label == "Hide window"
+            assert tray.spec[1].label == "Hide window"
 
             # Cambiamos a espanol a traves del puente JS
             es_env = await asyncio.to_thread(bridge.set_language, "es")
@@ -186,7 +186,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
 
             await asyncio.to_thread(tray.refresh)
             assert created_icons[0].title == "Iluminación WiZ - Encendido 75%"
-            assert tray.spec[0].label == "Ocultar ventana"
+            assert tray.spec[1].label == "Ocultar ventana"
             assert any(e.label == "Escenas favoritas" for e in tray.spec)
             assert any(e.label == "Salir" for e in tray.spec)
         finally:
