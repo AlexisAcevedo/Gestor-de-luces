@@ -316,7 +316,15 @@ def main(argv: list[str] | None = None) -> int:
 
     tray.start()
     try:
-        webview.start(debug=args.debug)
+        # private_mode=False + storage_path make localStorage (UI prefs, favorite scenes)
+        # persist across launches; WebView2 defaults to an ephemeral profile otherwise.
+        webview_storage = resolve_default_data_dir() / "webview"
+        webview_storage.mkdir(parents=True, exist_ok=True)
+        webview.start(
+            debug=args.debug,
+            private_mode=False,
+            storage_path=str(webview_storage),
+        )
     finally:
         tray.stop()
         bridge.shutdown()

@@ -2130,9 +2130,54 @@
     refreshStates();
   };
 
+  /* Preferencias de interfaz persistentes (pestana activa y secciones plegables) */
+  const UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
+
+  function loadUiPrefs() {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(UI_PREFS_STORAGE_KEY) || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function saveUiPref(key, value) {
+    try {
+      const prefs = loadUiPrefs();
+      prefs[key] = value;
+      window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+    } catch (err) {
+      /* localStorage no disponible: la preferencia solo vive en la sesion actual */
+    }
+  }
+
+  function restoreUiPrefs() {
+    const prefs = loadUiPrefs();
+    const openState = prefs.openSections && typeof prefs.openSections === "object" ? prefs.openSections : {};
+
+    document.querySelectorAll("details[data-persist-open]").forEach((el) => {
+      const key = el.getAttribute("data-persist-open");
+      if (typeof openState[key] === "boolean") el.open = openState[key];
+      el.addEventListener("toggle", () => {
+        const current = loadUiPrefs();
+        const sections = current.openSections && typeof current.openSections === "object" ? current.openSections : {};
+        sections[key] = el.open;
+        saveUiPref("openSections", sections);
+      });
+    });
+
+    const savedTab = prefs.activeTab;
+    const known = Array.from(document.querySelectorAll(".mode-tab")).some(
+      (tab) => tab.dataset.mode === savedTab
+    );
+    if (known) activateTab(savedTab, false);
+  }
+
   /* Gestion de pestanas accesibles (WAI-ARIA Tabs con navegacion por flechas) */
   function activateTab(modeName, focusTab) {
     appState.activeTab = modeName;
+    saveUiPref("activeTab", modeName);
     const tabs = Array.from(document.querySelectorAll(".mode-tab"));
     tabs.forEach((tab) => {
       const isMatch = tab.dataset.mode === modeName;
@@ -3029,6 +3074,7 @@
     drawColorWheel();
     updateAllSlidersFill();
     bindEvents();
+    restoreUiPrefs();
     backendApi = await resolveBackendApi();
     await invokeApi(
       () => backendApi.get_initial_state(),

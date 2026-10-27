@@ -962,6 +962,40 @@ body {
   color: var(--text-secondary);
 }
 
+/* Secciones plegables de apoyo (por ejemplo, muestras de referencia) */
+details.swatch-section > summary.section-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 2px;
+  cursor: pointer;
+  list-style: none;
+}
+
+details.swatch-section > summary.section-caption::-webkit-details-marker {
+  display: none;
+}
+
+details.swatch-section > summary.section-caption::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+details.swatch-section[open] > summary.section-caption::after {
+  transform: rotate(-135deg);
+}
+
+details.swatch-section[open] > summary.section-caption {
+  margin-bottom: 8px;
+}
+
 .swatch-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

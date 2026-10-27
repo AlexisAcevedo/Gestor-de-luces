@@ -353,8 +353,8 @@
               </div>
             </div>
 
-            <div class="swatch-section">
-              <p class="section-caption" data-i18n="rgb.swatchesCaption">Reference Chromatic Swatches</p>
+            <details class="swatch-section" data-persist-open="swatches">
+              <summary class="section-caption" data-i18n="rgb.swatchesCaption">Reference Chromatic Swatches</summary>
               <div class="swatch-grid" id="swatch-grid" role="group" aria-label="Curated RGB swatches" data-i18n-aria-label="rgb.swatchesAria">
                 <button type="button" class="color-swatch" data-r="255" data-g="94" data-b="58" style="--swatch-rgb: rgb(255, 94, 58)">
                   <span class="swatch-dot" aria-hidden="true"></span>
@@ -381,7 +381,7 @@
                   <span data-i18n="rgb.swatchHalogen">Halogen Gold</span>
                 </button>
               </div>
-            </div>
+            </details>
           </div>
         </div>
       </section>
@@ -910,7 +910,7 @@
       </section>
 
       <!-- Collapsible Sleep Timer Bar at Bottom of Stage -->
-      <details class="control-well sleep-timer-well" id="sleep-timer-details" aria-labelledby="sleep-timer-heading">
+      <details class="control-well sleep-timer-well" id="sleep-timer-details" data-persist-open="sleep-timer" aria-labelledby="sleep-timer-heading">
         <summary class="well-header sleep-timer-header">
           <div class="well-title-group">
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
