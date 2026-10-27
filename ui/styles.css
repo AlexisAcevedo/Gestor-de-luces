@@ -1985,8 +1985,41 @@ details.sleep-timer-well .sleep-timer-controls {
 
 /* Enfoque de teclado claramente visible para accesibilidad */
 :focus-visible {
-  outline: 2px solid var(--beam-border-tint);
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
+}
+
+/* Referencia de atajos de teclado */
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.shortcuts-list > div {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.shortcuts-list dt,
+.shortcuts-list dd {
+  margin: 0;
+}
+
+.shortcuts-list kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 7px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-structural);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
 }
 
 /* Respeto por la preferencia de movimiento reducido del sistema operativo */

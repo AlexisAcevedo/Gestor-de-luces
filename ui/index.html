@@ -104,6 +104,17 @@
             <input type="checkbox" id="auto-sync-toggle">
             <span data-i18n="rail.autoSync">Auto-sync (3s)</span>
           </label>
+
+          <button
+            type="button"
+            class="btn btn-compact"
+            id="shortcuts-help-btn"
+            aria-keyshortcuts="?"
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+            data-i18n-aria-label="shortcuts.openLabel"
+            data-i18n-title="shortcuts.openTitle"
+          >?</button>
         </div>
         <p class="status-banner" id="status-banner" role="status" aria-live="polite" data-i18n="rail.statusReady">
           Ready for local UDP telemetry.
@@ -144,6 +155,7 @@
             type="button"
             class="btn-power"
             id="master-power-btn"
+            aria-keyshortcuts="Space"
             aria-pressed="false"
           >
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -1013,6 +1025,26 @@
       <footer class="dialog-footer">
         <button type="button" class="btn btn-ghost" data-close-dialog="rename-bulb-dialog" data-i18n="dialog.cancel">Cancel</button>
         <button type="submit" class="btn btn-primary" data-i18n="dialog.renameSubmit">Save Name</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal Dialog: Keyboard shortcuts reference -->
+  <dialog id="shortcuts-dialog" class="console-dialog" closedby="any" aria-labelledby="shortcuts-title">
+    <form method="dialog" class="dialog-surface">
+      <header class="dialog-header">
+        <h2 id="shortcuts-title" class="dialog-title" data-i18n="shortcuts.title">Keyboard shortcuts</h2>
+      </header>
+      <div class="dialog-body">
+        <dl class="shortcuts-list">
+          <div><dt><kbd>Space</kbd></dt><dd data-i18n="shortcuts.power">Turn selected fixtures on / off</dd></div>
+          <div><dt><kbd>&uarr;</kbd> <kbd>&darr;</kbd></dt><dd data-i18n="shortcuts.brightness">Brightness &plusmn;5% (Shift: &plusmn;10%)</dd></div>
+          <div><dt><kbd>1</kbd>&ndash;<kbd>6</kbd></dt><dd data-i18n="shortcuts.tabs">Switch emission mode tab</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd data-i18n="shortcuts.help">Show this help</dd></div>
+        </dl>
+      </div>
+      <footer class="dialog-footer">
+        <button type="submit" class="btn btn-primary" data-i18n="shortcuts.close">Close</button>
       </footer>
     </form>
   </dialog>

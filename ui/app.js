@@ -2198,8 +2198,98 @@
   }
 
   /* Vincula eventos de la rueda de color, deslizadores, selector de idioma y formularios */
+  /* Atajos globales: se ignoran al escribir, con modificadores o con un dialogo abierto */
+  const SHORTCUT_BRIGHTNESS_STEP = 5;
+  let pendingBrightness = null;
+  let brightnessTimer = null;
+
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+  }
+
+  function nudgeBrightness(delta) {
+    const primary = getPrimaryBulb();
+    if (!primary) return;
+    const base = pendingBrightness !== null ? pendingBrightness : primary.state.brightness;
+    const val = clampInt(base + delta, 10, 100);
+    pendingBrightness = val;
+
+    const slider = document.getElementById("brightness-slider");
+    const output = document.getElementById("brightness-output");
+    if (slider) {
+      slider.value = String(val);
+      updateSliderFill(slider);
+    }
+    if (output) output.textContent = `${val}%`;
+
+    /* Se envia un solo comando al dejar de pulsar (mantener la tecla genera repeticiones) */
+    clearTimeout(brightnessTimer);
+    brightnessTimer = setTimeout(() => {
+      const target = pendingBrightness;
+      pendingBrightness = null;
+      invokeApi(
+        () => backendApi.set_brightness(target, null),
+        () => t("status.brightnessSet", { brightness: target })
+      );
+    }, 250);
+  }
+
+  function setupGlobalShortcuts() {
+    const tabs = Array.from(document.querySelectorAll(".mode-tab"));
+    tabs.forEach((tab, idx) => tab.setAttribute("aria-keyshortcuts", String(idx + 1)));
+
+    const helpBtn = document.getElementById("shortcuts-help-btn");
+    const helpDialog = document.getElementById("shortcuts-dialog");
+    const openHelp = () => {
+      if (helpDialog && !helpDialog.open) helpDialog.showModal();
+    };
+    if (helpBtn) helpBtn.addEventListener("click", openHelp);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (document.querySelector("dialog[open]")) return;
+      const target = event.target;
+      if (isTypingTarget(target)) return;
+
+      if (event.key === "?") {
+        event.preventDefault();
+        openHelp();
+        return;
+      }
+
+      if (/^[1-6]$/.test(event.key)) {
+        const tab = tabs[Number(event.key) - 1];
+        if (tab) {
+          event.preventDefault();
+          activateTab(tab.dataset.mode, false);
+        }
+        return;
+      }
+
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const step = event.shiftKey ? SHORTCUT_BRIGHTNESS_STEP * 2 : SHORTCUT_BRIGHTNESS_STEP;
+        event.preventDefault();
+        nudgeBrightness(event.key === "ArrowUp" ? step : -step);
+        return;
+      }
+
+      /* Espacio sobre controles interactivos conserva su comportamiento nativo */
+      if (event.key === " " || event.code === "Space") {
+        if (target && target.closest && target.closest("button, a, summary, [role='tab'], label")) {
+          return;
+        }
+        event.preventDefault();
+        const masterPowerBtn = document.getElementById("master-power-btn");
+        if (masterPowerBtn) masterPowerBtn.click();
+      }
+    });
+  }
+
   function bindEvents() {
     setupDialogLightDismissFallbacks();
+    setupGlobalShortcuts();
 
     /* Selector segmentado de idioma (EN | ES) */
     document.querySelectorAll(".lang-btn").forEach((btn) => {
