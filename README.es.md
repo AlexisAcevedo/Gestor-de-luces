@@ -12,7 +12,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 - Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
-- Pruebas 100% Fuera de Línea: Suite de 37 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+- Pruebas 100% Fuera de Línea: Suite de 48 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
 
 ---
 
@@ -46,7 +46,14 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Cuenta regresiva configurable (1 a 120 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
 
 7. Consola de Escritorio Bilingüe:
-   - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo y dinámico en la UI y el menú de la bandeja.
+   - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo y dinámico en la UI, el menú de la bandeja y la barra de menú de la ventana.
+
+8. Integración con el Escritorio de Windows:
+   - Icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
+   - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de).
+   - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
+   - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra.
+   - Se distribuye como instalador por usuario o como ZIP portable (ver [Empaquetado y Distribución](#empaquetado-y-distribución)).
 
 ---
 
@@ -114,6 +121,13 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 ```
 .
 ├── .gitignore
+├── assets/
+│   └── icon/                    # make_icon.py más app.ico / app.png generados
+├── packaging/
+│   ├── gestor_luces.spec        # Definición del build PyInstaller (carpeta)
+│   └── installer.iss            # Script del instalador por usuario (Inno Setup)
+├── scripts/
+│   └── build.ps1                # Icono + PyInstaller + ZIP portable + instalador
 ├── pyproject.toml               # Metadatos del proyecto y configuración de pytest
 ├── requirements.txt             # Dependencias fijadas para producción y pruebas
 ├── README.md                    # Documentación principal en inglés
@@ -128,13 +142,15 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │       ├── __init__.py
 │       ├── main.py              # Raíz de composición y punto de entrada de la app
 │       ├── cli.py               # Herramienta de sondeo y diagnóstico de red por CLI
+│       ├── resources.py         # Resolución de assets y versión (dev y congelado con PyInstaller)
 │       ├── domain/              # Lógica pura del dominio y entidades
 │       │   ├── models.py        # Entidades Bulb, LightState y Group
 │       │   ├── scenes.py        # Catálogo nativo de WiZ y modelo de presets personalizados
 │       │   └── value_objects.py # Validación de Color, Brillo, Kelvin y Modos
 │       ├── ports/               # Contratos (interfaces typing.Protocol)
 │       │   ├── interfaces.py    # Exportación centralizada de puertos
-│       │   └── repositories.py  # Protocolos de controladores, persistencia y muestreo
+│       │   ├── repositories.py  # Protocolos de controladores, persistencia y muestreo
+│       │   └── autostart.py     # Protocolo AutostartManager
 │       ├── application/         # Casos de uso y gestores de streaming
 │       │   ├── service.py       # Servicio principal de orquestación
 │       │   ├── rate_limiter.py  # Limitador de tasa UDP a 10 Hz
@@ -146,9 +162,10 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           ├── storage/         # Repositorios en disco JSON (%LOCALAPPDATA%)
 │           ├── ambilight/       # Muestreador de pantalla MSS
 │           ├── audio/           # Muestreador de audio WASAPI loopback
-│           ├── tray/            # Controlador de la bandeja del sistema con pystray
-│           └── ui_webview/      # Puente seguro para comunicación bidireccional JS-Python
-├── tests/                       # Suite de pruebas automatizadas (37 tests)
+│           ├── tray/            # Bandeja del sistema con pystray y render compartido de la bombilla
+│           ├── system/          # Autoinicio de Windows (registro) e instancia única
+│           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
+├── tests/                       # Suite de pruebas automatizadas (48 tests)
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
@@ -158,7 +175,8 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   ├── test_tray.py             # Pruebas de la bandeja del sistema y sincronización
 │   ├── test_ambilight.py        # Pruebas de captura de pantalla y suavizado EMA
 │   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
-│   └── test_i18n.py             # Pruebas de localización bilingüe
+│   ├── test_i18n.py             # Pruebas de localización bilingüe
+│   └── test_app_shell.py        # Pruebas del menú, autoinicio, --minimized y assets
 └── ui/                          # Frontend web embebido en WebView2
     ├── index.html               # Estructura visual de la consola
     ├── styles.css               # Estilos de consola fotométrica oscura
@@ -215,7 +233,8 @@ python -m gestor_luces.main
 Parámetros opcionales aceptados por `main.py`:
 - `--data-dir <RUTA>`: Especifica una carpeta alternativa para guardar `bulbs.json`, `scenes.json` y `settings.json` (por defecto se utiliza `%LOCALAPPDATA%\GestorLuces`).
 - `--debug`: Habilita registros de diagnóstico detallados (nivel `DEBUG`) en todos los hilos del sistema.
-- `--smoke-test`: Construye la raíz de composición, inicializa los adaptadores sin abrir ventanas del sistema operativo, verifica la integridad y finaliza con código de salida 0.
+- `--minimized`: Inicia oculta en la bandeja del sistema (es el parámetro que registra "Iniciar con Windows").
+- `--smoke-test`: Construye la raíz de composición, inicializa los adaptadores sin abrir ventanas del sistema operativo, verifica la integridad (incluidos los iconos) y finaliza con código de salida 0.
 
 ### 2. Modo Diagnóstico por Consola (CLI)
 
@@ -260,8 +279,35 @@ pytest
 
 Resultado esperado:
 ```
-37 passed in ~2.0s
+48 passed in ~2.0s
 ```
+
+---
+
+## Empaquetado y Distribución
+
+Para generar todo (icono, app PyInstaller en carpeta, ZIP portable e instalador):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+```
+
+Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
+
+| Salida (en `dist/`) | Descripción |
+|---|---|
+| `GestorDeLuces\GestorDeLuces.exe` | App portable en carpeta. La carpeta `_internal` debe quedar junto al ejecutable. |
+| `GestorDeLuces-portable-<versión>.zip` | La misma carpeta comprimida. Se extrae en cualquier lado y se ejecuta `GestorDeLuces.exe`. |
+| `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
+
+Requisitos para compilar: el entorno virtual del proyecto con `requirements.txt` más `pyinstaller`, y [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia.
+
+Notas para las PCs de destino:
+- Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
+- Los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Algunos antivirus pueden marcar los binarios de PyInstaller como falso positivo.
+- Los datos del usuario viven en `%LOCALAPPDATA%\GestorLuces`, nunca junto al ejecutable.
+- Si se mueve la carpeta portable con "Iniciar con Windows" activado, la entrada del registro se corrige en el siguiente arranque.
+- A veces `Compress-Archive` falla por un archivo bloqueado justo después de PyInstaller (el antivirus lo está escaneando); volvé a correr el script.
 
 ---
 

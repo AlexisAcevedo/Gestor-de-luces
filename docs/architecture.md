@@ -230,3 +230,19 @@ To prevent JSON corruption in the event of sudden power cuts or process terminat
 3. Flush and synchronize file descriptor (`flush()` + `os.fsync()`).
 4. Atomically replace the target file via `os.replace()`, guaranteeing an all-or-nothing filesystem transaction on NTFS.
 
+
+---
+
+## 6. Desktop Shell, Autostart & Packaging
+
+### Native Menu Bar
+`adapters/ui_webview/app_menu.py` is a pure model of the window menu (File: Show/Hide, Start with Windows, Exit; Help: Keyboard shortcuts, About), localized in English and Spanish. `main.py` passes it to `webview.start(menu=...)`. pywebview 6.2.1 menus are static (no checkable items, no update API), so `main.py` updates the live WinForms `MenuStrip` in place on a worker thread when the language, window visibility or autostart state changes. Exit follows the same path as the tray's Quit action.
+
+### Autostart (`--minimized`)
+The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), which writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The registered command is `<exe> --minimized` when frozen and `pythonw -m gestor_luces.main --minimized` in development. On every launch, `refresh_if_stale` rewrites the entry if it points to a different path (for example after moving the portable folder). The registry is injectable, so tests never touch `HKCU`.
+
+### Single Instance
+`adapters/system/single_instance.py` combines a named mutex with a named event. A second launch signals the event and exits; the first instance reacts by showing its window.
+
+### Packaging
+`scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`) and builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights). `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorLuces`.

@@ -12,7 +12,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 - Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
-- Fully Offline Testable: Suite of 37 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
+- Fully Offline Testable: Suite of 48 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
 
 ---
 
@@ -46,7 +46,14 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Configurable countdown timer (1 to 120 minutes) with progressive brightness dimming down to zero before powering off.
 
 7. Bilingual Desktop Console:
-   - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI and System Tray.
+   - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, System Tray and the window menu bar.
+
+8. Windows Desktop Integration:
+   - Custom light-bulb icon for the window, taskbar, tray and executable.
+   - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About).
+   - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
+   - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one.
+   - Distributed as a per-user installer or a portable ZIP (see [Packaging & Distribution](#packaging--distribution)).
 
 ---
 
@@ -114,6 +121,13 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 ```
 .
 ├── .gitignore
+├── assets/
+│   └── icon/                    # make_icon.py plus generated app.ico / app.png
+├── packaging/
+│   ├── gestor_luces.spec        # PyInstaller one-folder build definition
+│   └── installer.iss            # Inno Setup per-user installer script
+├── scripts/
+│   └── build.ps1                # Icon + PyInstaller + portable ZIP + installer
 ├── pyproject.toml               # Project metadata and pytest configuration
 ├── requirements.txt             # Locked production and testing dependencies
 ├── README.md                    # Primary English documentation
@@ -128,13 +142,15 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │       ├── __init__.py
 │       ├── main.py              # Composition root and application entrypoint
 │       ├── cli.py               # Low-level network probe and CLI diagnostics
+│       ├── resources.py         # Asset/version resolution (dev and PyInstaller-frozen)
 │       ├── domain/              # Pure domain logic and entities
 │       │   ├── models.py        # Bulb, LightState, and Group entities
 │       │   ├── scenes.py        # Built-in WiZ catalog and custom scene models
 │       │   └── value_objects.py # Color, Brightness, Kelvin, LightMode validation
 │       ├── ports/               # Driven contracts (typing.Protocol interfaces)
 │       │   ├── interfaces.py    # Public interface exports
-│       │   └── repositories.py  # Controller, Repository, and Sampler protocols
+│       │   ├── repositories.py  # Controller, Repository, and Sampler protocols
+│       │   └── autostart.py     # AutostartManager protocol
 │       ├── application/         # Use cases and streaming managers
 │       │   ├── service.py       # Core orchestration service
 │       │   ├── rate_limiter.py  # 10 Hz UDP rate limiter
@@ -146,9 +162,10 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           ├── storage/         # %LOCALAPPDATA% JSON file repositories
 │           ├── ambilight/       # MSS screen sampler
 │           ├── audio/           # WASAPI loopback audio sampler
-│           ├── tray/            # Pystray background notification area controller
-│           └── ui_webview/      # Thread-safe JS-Python PyWebView bridge
-├── tests/                       # Automated test suite (37 tests)
+│           ├── tray/            # Pystray tray controller and shared bulb icon renderer
+│           ├── system/          # Windows autostart (registry) and single-instance guard
+│           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
+├── tests/                       # Automated test suite (48 tests)
 │   ├── simulators/              # In-memory WiZ UDP server simulator
 │   ├── test_domain.py           # Domain validation tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
@@ -158,7 +175,8 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   ├── test_tray.py             # System tray synchronization and menu tests
 │   ├── test_ambilight.py        # Screen capture and EMA streaming tests
 │   ├── test_music_sync.py       # WASAPI and FFT DSP tests
-│   └── test_i18n.py             # Bilingual localization tests
+│   ├── test_i18n.py             # Bilingual localization tests
+│   └── test_app_shell.py        # Menu model, autostart, --minimized and asset tests
 └── ui/                          # Web frontend rendered inside WebView2
     ├── index.html               # Main console markup
     ├── styles.css               # Architectural photometric styling (Dark theme)
@@ -215,7 +233,8 @@ python -m gestor_luces.main
 Supported CLI flags for `main.py`:
 - `--data-dir <PATH>`: Override the storage folder for `bulbs.json`, `scenes.json`, and `settings.json` (defaults to `%LOCALAPPDATA%\GestorLuces`).
 - `--debug`: Enable verbose diagnostic logging (`DEBUG` level) across all application threads.
-- `--smoke-test`: Initialize the composition root, instantiate all adapters without opening native GUI windows, run validation checks, and exit with code 0.
+- `--minimized`: Start hidden in the system tray (this is the flag registered by "Start with Windows").
+- `--smoke-test`: Initialize the composition root, instantiate all adapters without opening native GUI windows, run validation checks (including icon assets), and exit with code 0.
 
 ### 2. Low-Level Network CLI Mode
 
@@ -260,8 +279,35 @@ pytest
 
 Expected output:
 ```
-37 passed in ~2.0s
+48 passed in ~2.0s
 ```
+
+---
+
+## Packaging & Distribution
+
+Build everything (icon, PyInstaller one-folder app, portable ZIP and installer) with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+```
+
+Use `-SkipInstaller` to build only the app folder and the portable ZIP.
+
+| Output (in `dist/`) | Description |
+|---|---|
+| `GestorDeLuces\GestorDeLuces.exe` | Portable one-folder app. Keep the `_internal` folder next to the executable. |
+| `GestorDeLuces-portable-<version>.zip` | The same folder zipped. Extract anywhere and run `GestorDeLuces.exe`. |
+| `GestorDeLuces-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
+
+Build requirements: the project virtual environment with `requirements.txt` plus `pyinstaller`, and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning.
+
+Notes for target machines:
+- Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.
+- The executables are unsigned, so Windows SmartScreen shows "Windows protected your PC": choose **More info** then **Run anyway**. Some antivirus products may flag PyInstaller binaries as false positives.
+- User data lives in `%LOCALAPPDATA%\GestorLuces`, never next to the executable.
+- If the portable folder is moved while "Start with Windows" is enabled, the registry entry is corrected on the next launch.
+- Occasionally `Compress-Archive` fails with a locked file right after PyInstaller finishes (antivirus scanning); re-run the script.
 
 ---
 

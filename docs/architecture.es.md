@@ -230,3 +230,19 @@ Para prevenir la corrupción de los archivos JSON ante cortes imprevistos de ene
 3. Se sincronizan los descriptores con el sistema de archivos (`flush()` + `os.fsync()`).
 4. Se reemplaza de forma atómica el archivo de destino mediante `os.replace()`, garantizando una transacción de todo o nada en NTFS.
 
+
+---
+
+## 6. Shell de Escritorio, Autoinicio y Empaquetado
+
+### Barra de Menú Nativa
+`adapters/ui_webview/app_menu.py` es un modelo puro del menú de la ventana (Archivo: Mostrar/Ocultar, Iniciar con Windows, Salir; Ayuda: Atajos de teclado, Acerca de), localizado en inglés y español. `main.py` lo entrega a `webview.start(menu=...)`. Los menús de pywebview 6.2.1 son estáticos (sin ítems con tilde ni API de actualización), por lo que `main.py` actualiza en caliente el `MenuStrip` de WinForms desde un hilo de trabajo cuando cambia el idioma, la visibilidad de la ventana o el estado del autoinicio. Salir sigue el mismo camino que la acción Salir de la bandeja.
+
+### Autoinicio (`--minimized`)
+El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` reescribe la entrada si apunta a otra ruta (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
+
+### Instancia Única
+`adapters/system/single_instance.py` combina un mutex con nombre y un evento con nombre. Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana.
+
+### Empaquetado
+`scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`) y construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador). `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorLuces`.
