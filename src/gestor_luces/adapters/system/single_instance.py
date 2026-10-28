@@ -42,12 +42,57 @@ class SingleInstanceGuard:
             return True
         import ctypes
 
+        class _SECURITY_ATTRIBUTES(ctypes.Structure):
+            _fields_ = [
+                ("nLength", ctypes.c_uint32),
+                ("lpSecurityDescriptor", ctypes.c_void_p),
+                ("bInheritHandle", ctypes.c_int),
+            ]
+
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+            ctypes.c_wchar_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.c_void_p,
+        ]
+        advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = ctypes.c_int
+
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
         kernel32.CreateMutexW.restype = ctypes.c_void_p
+        kernel32.CreateEventW.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_wchar_p,
+        ]
         kernel32.CreateEventW.restype = ctypes.c_void_p
-        self._mutex = kernel32.CreateMutexW(None, False, self._mutex_name)
-        already_running = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
-        self._event = kernel32.CreateEventW(None, False, False, self._event_name)
+        kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+        kernel32.LocalFree.restype = ctypes.c_void_p
+
+        # SDDL restringida a SYSTEM (SY), Administradores (BA) y propietario (OW).
+        sddl = "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)"
+        sd_ptr = ctypes.c_void_p()
+        sa_ref = None
+        if advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, 1, ctypes.byref(sd_ptr), None
+        ):
+            sa = _SECURITY_ATTRIBUTES(
+                ctypes.sizeof(_SECURITY_ATTRIBUTES),
+                sd_ptr.value,
+                0,
+            )
+            sa_ref = ctypes.byref(sa)
+
+        try:
+            self._mutex = kernel32.CreateMutexW(sa_ref, False, self._mutex_name)
+            already_running = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+            self._event = kernel32.CreateEventW(sa_ref, False, False, self._event_name)
+        finally:
+            if sd_ptr.value:
+                kernel32.LocalFree(sd_ptr)
+
         self._is_primary = not already_running
         return self._is_primary
 

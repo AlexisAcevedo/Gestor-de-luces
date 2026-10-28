@@ -9,6 +9,7 @@ multiples focos en simultaneo de forma concurrente con asyncio.gather.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 from typing import Any
 from uuid import uuid4
 
@@ -35,6 +36,36 @@ from gestor_luces.ports.repositories import (
 )
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
+MAX_EXPLICIT_TARGETS = 64
+MAX_DISPLAY_NAME_LEN = 80
+
+
+def _validate_display_name(raw_name: str, kind: str) -> str:
+    """Valida que un nombre de foco o escena no este vacio ni exceda el largo maximo."""
+    cleaned = raw_name.strip()
+    if not cleaned:
+        raise ValueError(f"{kind} name cannot be empty.")
+    if len(cleaned) > MAX_DISPLAY_NAME_LEN:
+        raise ValueError(f"{kind} name is too long (max {MAX_DISPLAY_NAME_LEN} chars).")
+    return cleaned
+
+
+def validate_local_endpoint(value: str) -> str:
+    """Valida que el destino sea una IPv4 local (privada, loopback o link-local).
+
+    Acepta 'a.b.c.d' o 'a.b.c.d:puerto'. Evita que el puente de la UI dirija
+    trafico UDP hacia hosts publicos o nombres DNS arbitrarios.
+    """
+    host, sep, raw_port = value.strip().partition(":")
+    try:
+        address = ipaddress.IPv4Address(host)
+    except ValueError as exc:
+        raise ValueError(f"Invalid bulb IPv4 address: {value!r}") from exc
+    if not (address.is_private or address.is_loopback or address.is_link_local):
+        raise ValueError(f"Bulb address must be on the local network: {value!r}")
+    if sep and not (raw_port.isdigit() and 1 <= int(raw_port) <= 65535):
+        raise ValueError(f"Invalid bulb port: {value!r}")
+    return value.strip()
 
 
 class LightControlService:
@@ -121,6 +152,10 @@ class LightControlService:
         seleccion esta vacia).
         """
         if explicit_ips is not None:
+            if len(explicit_ips) > MAX_EXPLICIT_TARGETS:
+                raise ValueError(f"Too many target IPs (max {MAX_EXPLICIT_TARGETS}).")
+            for explicit_ip in explicit_ips:
+                validate_local_endpoint(explicit_ip)
             return list(explicit_ips)
         if self._selected_ips:
             return list(self._selected_ips)
@@ -152,14 +187,16 @@ class LightControlService:
         cleaned_ip = ip.strip()
         if not cleaned_ip:
             raise ValueError("Bulb IP address cannot be empty.")
+        validate_local_endpoint(cleaned_ip)
 
         probed = await self._controller.probe_bulb(cleaned_ip)
+        validated_name = _validate_display_name(name, "Bulb") if (name and name.strip()) else None
         if probed is not None:
-            if name and name.strip():
-                probed.name = name.strip()
+            if validated_name:
+                probed.name = validated_name
             self._bulbs[cleaned_ip] = probed
         else:
-            fallback_name = name.strip() if name and name.strip() else f"WiZ Bulb ({cleaned_ip})"
+            fallback_name = validated_name or f"WiZ Bulb ({cleaned_ip})"
             self._bulbs[cleaned_ip] = Bulb(ip=cleaned_ip, name=fallback_name, is_online=False)
 
         if cleaned_ip not in self._selected_ips:
@@ -173,10 +210,7 @@ class LightControlService:
         bulb = self._bulbs.get(ip)
         if bulb is None:
             raise KeyError(f"Bulb with IP '{ip}' is not registered.")
-        cleaned = new_name.strip()
-        if not cleaned:
-            raise ValueError("Bulb name cannot be empty.")
-        bulb.name = cleaned
+        bulb.name = _validate_display_name(new_name, "Bulb")
         self._persist_bulbs()
         return bulb
 
@@ -436,9 +470,7 @@ class LightControlService:
         registrado. Si aun no hay focos en el inventario, emplea el estado por defecto
         (4200K al 100%) para permitir crear presets antes de conectar fisicamente un foco.
         """
-        cleaned_name = name.strip()
-        if not cleaned_name:
-            raise ValueError("Custom scene name cannot be empty.")
+        cleaned_name = _validate_display_name(name, "Custom scene")
 
         reference_state = self._resolve_reference_state(source_ip)
         return self.create_or_update_custom_scene(
@@ -464,9 +496,7 @@ class LightControlService:
         scene_id: str | None = None,
     ) -> CustomScene:
         """Crea un nuevo preset personalizado o actualiza uno existente validando el dominio."""
-        cleaned_name = name.strip()
-        if not cleaned_name:
-            raise ValueError("Custom scene name cannot be empty.")
+        cleaned_name = _validate_display_name(name, "Custom scene")
 
         resolved_mode = mode if isinstance(mode, LightMode) else LightMode(str(mode))
         resolved_id = (
@@ -527,10 +557,7 @@ class LightControlService:
         existing = self._custom_scenes.get(scene_id)
         if existing is None:
             raise KeyError(f"Custom scene '{scene_id}' does not exist.")
-        cleaned = new_name.strip()
-        if not cleaned:
-            raise ValueError("Custom scene name cannot be empty.")
-        existing.name = cleaned
+        existing.name = _validate_display_name(new_name, "Custom scene")
         self._persist_scenes()
         return existing
 
@@ -747,11 +774,14 @@ class LightControlService:
         return dict(self._music_sync.get_status())
 
     def close_audio_sampler(self) -> None:
-        """Libera de forma segura los recursos del dispositivo WASAPI si el adaptador lo soporta."""
+        """Libera de forma segura los recursos del dispositivo WASAPI y del controlador UDP."""
         if self._audio_sampler is not None:
             close_fn = getattr(self._audio_sampler, "close", None)
             if callable(close_fn):
                 close_fn()
+        ctrl_close = getattr(self._controller, "close", None)
+        if callable(ctrl_close):
+            ctrl_close()
 
     def _resolve_reference_state(self, source_ip: str | None = None) -> LightState:
         """Determina el estado luminico de referencia a partir de una IP o la seleccion actual."""

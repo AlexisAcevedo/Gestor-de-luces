@@ -56,7 +56,19 @@ a = Analysis(  # noqa: F821
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter", "pytest"],
+    excludes=[
+        "tkinter",
+        "pytest",
+        "_pytest",
+        "py",
+        "pluggy",
+        "unittest",
+        "pydoc",
+        "doctest",
+        "pdb",
+        "sqlite3",
+        "xmlrpc",
+    ],
     noarchive=False,
 )
 pyz = PYZ(a.pure)  # noqa: F821

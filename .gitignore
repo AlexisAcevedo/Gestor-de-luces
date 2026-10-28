@@ -22,6 +22,10 @@ dist/
 data/
 *.local.json
 .env
+*.pfx
+*.p12
+*.key
+*.pem
 
 # AI agent configuration (local only)
 .agent/

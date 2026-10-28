@@ -22,6 +22,20 @@ from gestor_luces.domain.scenes import get_builtin_scene
 from gestor_luces.domain.value_objects import Color, LightMode
 
 DEFAULT_WIZ_UDP_PORT = 38899
+_MAX_NETWORK_TEXT_LEN = 64
+
+
+def _safe_int(value: Any, default: int) -> int:
+    """Convierte datos no confiables de red a int sin lanzar excepciones."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _safe_text(value: Any, default: str) -> str:
+    """Normaliza texto recibido por red acotando su longitud."""
+    return str(value)[:_MAX_NETWORK_TEXT_LEN] if value is not None else default
 
 
 def detect_local_ipv4() -> str | None:
@@ -78,6 +92,24 @@ class WizUdpController:
         self._port = port
         self._default_timeout = default_timeout
         self._probe_candidates = list(probe_candidates) if probe_candidates is not None else None
+        self._stream_sock: socket.socket | None = None
+
+    def _get_stream_socket(self) -> socket.socket:
+        """Devuelve un socket UDP no bloqueante reutilizable para el flujo continuo."""
+        if self._stream_sock is None or self._stream_sock.fileno() < 0:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setblocking(False)
+            self._stream_sock = sock
+        return self._stream_sock
+
+    def close(self) -> None:
+        """Cierra el socket UDP reutilizado por `stream_pilot` si fue inicializado."""
+        if self._stream_sock is not None:
+            try:
+                self._stream_sock.close()
+            except OSError:
+                pass
+            self._stream_sock = None
 
     def _resolve_endpoint(self, ip_or_endpoint: str) -> tuple[str, int]:
         """Permite direcciones IP estandar o endpoints 'ip:puerto' para pruebas locales."""
@@ -122,10 +154,11 @@ class WizUdpController:
         # los sondeamos directamente sin depender del broadcast del sistema operativo.
         if self._probe_candidates is not None:
             probed_results = await asyncio.gather(
-                *(self.probe_bulb(candidate, timeout=0.5) for candidate in self._probe_candidates)
+                *(self.probe_bulb(candidate, timeout=0.5) for candidate in self._probe_candidates),
+                return_exceptions=True,
             )
             for bulb in probed_results:
-                if bulb is not None:
+                if isinstance(bulb, Bulb):
                     found_by_ip[bulb.ip] = bulb
             return list(found_by_ip.values())
 
@@ -142,12 +175,6 @@ class WizUdpController:
                     probed = await self.probe_bulb(item.ip, timeout=0.6)
                     if probed is not None:
                         found_by_ip[item.ip] = probed
-                    else:
-                        found_by_ip[item.ip] = Bulb(
-                            ip=item.ip,
-                            mac=item.mac or "unknown",
-                            is_online=True,
-                        )
             except OSError:
                 pass
 
@@ -159,9 +186,9 @@ class WizUdpController:
                 for host_ip in network.hosts()
                 if str(host_ip) != local_ip
             ]
-            results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             for bulb in results:
-                if bulb is not None:
+                if isinstance(bulb, Bulb):
                     found_by_ip[bulb.ip] = bulb
 
         return list(found_by_ip.values())
@@ -173,8 +200,8 @@ class WizUdpController:
             return None
 
         sys_result = sys_resp["result"]
-        mac = str(sys_result.get("mac", "unknown"))
-        module_name = str(sys_result.get("moduleName", "ESP01_SHRGB1C_31"))
+        mac = _safe_text(sys_result.get("mac"), "unknown")
+        module_name = _safe_text(sys_result.get("moduleName"), "ESP01_SHRGB1C_31")
 
         state = await self.get_state(ip, timeout=timeout)
         return Bulb(
@@ -193,9 +220,9 @@ class WizUdpController:
 
         pilot = response["result"]
         is_on = bool(pilot.get("state", False))
-        raw_dimming = int(pilot.get("dimming", 100))
+        raw_dimming = _safe_int(pilot.get("dimming", 100), 100)
         brightness = max(10, min(100, raw_dimming))
-        speed = int(pilot.get("speed", 100))
+        speed = _safe_int(pilot.get("speed", 100), 100)
 
         scene_id = pilot.get("sceneId")
         if isinstance(scene_id, int) and scene_id > 0:
@@ -218,9 +245,9 @@ class WizUdpController:
 
         if all(channel in pilot for channel in ("r", "g", "b")):
             color = Color(
-                r=max(0, min(255, int(pilot["r"]))),
-                g=max(0, min(255, int(pilot["g"]))),
-                b=max(0, min(255, int(pilot["b"]))),
+                r=max(0, min(255, _safe_int(pilot["r"], 0))),
+                g=max(0, min(255, _safe_int(pilot["g"], 0))),
+                b=max(0, min(255, _safe_int(pilot["b"], 0))),
             )
             return LightState(
                 is_on=is_on,
@@ -233,7 +260,7 @@ class WizUdpController:
                 speed=speed,
             )
 
-        raw_temp = int(pilot.get("temp", 4200))
+        raw_temp = _safe_int(pilot.get("temp", 4200), 4200)
         clamped_temp = max(2200, min(6500, raw_temp))
         return LightState(
             is_on=is_on,
@@ -314,14 +341,10 @@ class WizUdpController:
             }
         ).encode("utf-8")
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setblocking(False)
         try:
-            sock.sendto(payload, (host, port))
+            self._get_stream_socket().sendto(payload, (host, port))
         except OSError:
-            pass
-        finally:
-            sock.close()
+            self.close()
 
     async def _send_set_pilot(self, ip: str, params: dict[str, Any]) -> bool:
         """Ejecuta setPilot y verifica que el foco confirme con success=True."""

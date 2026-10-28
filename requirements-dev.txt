@@ -1,0 +1,9 @@
+# Development, testing, static security analysis, and packaging dependencies
+-r requirements.txt
+
+pytest==9.0.3
+pytest-asyncio==1.3.0
+bandit==1.9.4
+pip-audit==2.10.1
+pyinstaller==6.22.3
+

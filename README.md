@@ -280,7 +280,14 @@ pytest
 
 Expected output:
 ```
-48 passed in ~2.0s
+73 passed in ~2.0s
+```
+
+To run static security analysis and dependency vulnerability checks (using `requirements-dev.txt`):
+
+```bash
+python -m bandit -r src -q
+python -m pip_audit -r requirements.txt
 ```
 
 ---
@@ -300,13 +307,15 @@ Use `-SkipInstaller` to build only the app folder and the portable ZIP.
 | `GestorDeLuces\GestorDeLuces.exe` | Portable one-folder app. Keep the `_internal` folder next to the executable. |
 | `GestorDeLuces-portable-<version>.zip` | The same folder zipped. Extract anywhere and run `GestorDeLuces.exe`. |
 | `GestorDeLuces-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
+| `SHA256SUMS.txt` | SHA-256 checksums for all release artifacts generated in `dist/`. |
 
-Build requirements: the project virtual environment with `requirements.txt` plus `pyinstaller`, and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning.
+Build requirements: the project virtual environment with `requirements.txt` (or `requirements-dev.txt`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
 
 Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.
-- The executables are unsigned, so Windows SmartScreen shows "Windows protected your PC": choose **More info** then **Run anyway**. Some antivirus products may flag PyInstaller binaries as false positives.
-- User data lives in `%LOCALAPPDATA%\GestorLuces`, never next to the executable.
+- Unless built with `SIGN_CERT_SHA1`, executables are unsigned, so Windows SmartScreen shows "Windows protected your PC": choose **More info** then **Run anyway**. Verify the download against `SHA256SUMS.txt`.
+- Per-user installation writes to `%LOCALAPPDATA%\Programs\GestorDeLuces` (no administrator prompt required); if you share the Windows account or require system-wide write-protected binaries under `C:\Program Files`, run the installer with administrator privileges or pass `/ALLUSERS`.
+- User data lives in `%LOCALAPPDATA%\GestorDeLuces`, never next to the executable.
 - If the portable folder is moved while "Start with Windows" is enabled, the registry entry is corrected on the next launch.
 - Occasionally `Compress-Archive` fails with a locked file right after PyInstaller finishes (antivirus scanning); re-run the script.
 

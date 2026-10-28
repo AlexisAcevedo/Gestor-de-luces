@@ -15,8 +15,6 @@ import sys
 import threading
 from typing import Any
 
-from gestor_luces.adapters.ambilight import MssScreenSampler
-from gestor_luces.adapters.audio import WasapiLoopbackSampler
 from gestor_luces.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
@@ -25,7 +23,6 @@ from gestor_luces.adapters.storage.json_repositories import (
 )
 from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
 from gestor_luces.adapters.system.windows_autostart import WindowsRegistryAutostart
-from gestor_luces.adapters.tray import TrayController
 from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_EXIT,
     ACTION_SHOW_ABOUT,
@@ -37,7 +34,7 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     build_about_text,
     build_app_menu,
 )
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
+from gestor_luces.adapters.ui_webview.bridge import JsApi, WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
 from gestor_luces.ports.autostart import AutostartManager
@@ -193,14 +190,10 @@ def build_application(
     scene_repo = JsonSceneRepository(data_dir=storage_dir)
     settings_repo = JsonSettingsRepository(data_dir=storage_dir)
     controller = WizUdpController()
-    screen_sampler = MssScreenSampler()
-    audio_sampler = WasapiLoopbackSampler()
     service = LightControlService(
         controller=controller,
         bulb_repository=bulb_repo,
         scene_repository=scene_repo,
-        screen_sampler=screen_sampler,
-        audio_sampler=audio_sampler,
         settings_repository=settings_repo,
     )
     bridge = WebviewBridge(
@@ -255,6 +248,9 @@ def main(argv: list[str] | None = None) -> int:
 
     autostart = _default_autostart()
     _, bridge = build_application(autostart=autostart)
+
+    
+    from gestor_luces.adapters.tray import TrayController
 
     if args.smoke_test:
         smoke_tray = TrayController(
@@ -313,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     window = webview.create_window(
         title="WiZ Architectural Lighting Console",
         url=index_path.as_uri(),
-        js_api=bridge,
+        js_api=JsApi(bridge),
         width=win_width,
         height=win_height,
         x=win_x,

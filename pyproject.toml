@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestor-luces"
-version = "0.2.0"
+version = "0.2.1"
 description = "Hexagonal desktop light manager for Philips WiZ smart bulbs over local UDP."
 requires-python = ">=3.11"
 

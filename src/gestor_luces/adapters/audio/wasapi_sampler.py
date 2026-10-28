@@ -306,7 +306,7 @@ class WasapiLoopbackSampler:
                 try:
                     pa.terminate()
                 except Exception:
-                    pass
+                    _LOGGER.debug("Ignoring PyAudio terminate error during device enumeration.", exc_info=True)
 
         if not devices:
             fallback = [
@@ -470,15 +470,15 @@ class WasapiLoopbackSampler:
                 if hasattr(stream, "stop_stream"):
                     stream.stop_stream()
             except Exception:
-                pass
+                _LOGGER.debug("Ignoring error while stopping WASAPI stream.", exc_info=True)
             try:
                 if hasattr(stream, "close"):
                     stream.close()
             except Exception:
-                pass
+                _LOGGER.debug("Ignoring error while closing WASAPI stream.", exc_info=True)
 
         if pa is not None:
             try:
                 pa.terminate()
             except Exception:
-                pass
+                _LOGGER.debug("Ignoring error while terminating PyAudio.", exc_info=True)

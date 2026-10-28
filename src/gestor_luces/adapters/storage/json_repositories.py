@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from gestor_luces.domain.models import Bulb
@@ -44,10 +45,25 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
     la version anterior integra o la version nueva completa.
     """
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
-    serialized = json.dumps(payload, indent=2, ensure_ascii=False)
-    tmp_path.write_text(serialized, encoding="utf-8")
-    os.replace(tmp_path, target_path)
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+    fd, tmp_raw = tempfile.mkstemp(
+        prefix=f".{target_path.name}.",
+        suffix=".tmp",
+        dir=str(target_path.parent),
+    )
+    tmp_path = Path(tmp_raw)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, target_path)
+    except BaseException:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _safe_read_json_list(target_path: Path) -> list[dict[str, Any]]:

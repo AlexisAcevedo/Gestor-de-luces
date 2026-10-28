@@ -144,7 +144,7 @@ class WebviewBridge:
                 else:
                     self._service.close_audio_sampler()
             except Exception:
-                pass
+                _LOGGER.debug("Ignoring error while cancelling streams during shutdown.", exc_info=True)
             self._closed = True
             if self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._loop.stop)
@@ -207,7 +207,10 @@ class WebviewBridge:
     def set_language(self, language: str) -> dict[str, Any]:
         """Cambia y persiste el idioma activo (`en` o `es`), refrescando tambien la bandeja."""
         try:
-            self._service.set_language(str(language))
+            async def _apply() -> None:
+                self._service.set_language(str(language))
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -254,7 +257,10 @@ class WebviewBridge:
     def rename_bulb(self, ip: str, new_name: str) -> dict[str, Any]:
         """Actualiza el nombre descriptivo de un foco registrado."""
         try:
-            self._service.rename_bulb(ip=str(ip), new_name=str(new_name))
+            async def _apply() -> None:
+                self._service.rename_bulb(ip=str(ip), new_name=str(new_name))
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -263,7 +269,11 @@ class WebviewBridge:
         """Actualiza la seleccion de focos activos para control individual o grupal."""
         try:
             normalized = [str(ip) for ip in ips] if isinstance(ips, list) else []
-            self._service.select_targets(normalized)
+
+            async def _apply() -> None:
+                self._service.select_targets(normalized)
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -395,10 +405,14 @@ class WebviewBridge:
         """Guarda el estado luminico actual como un nuevo preset personalizado en JSON."""
         try:
             cleaned_ip = str(source_ip).strip() if source_ip else None
-            self._service.save_custom_scene_from_current(
-                name=str(name),
-                source_ip=cleaned_ip,
-            )
+
+            async def _apply() -> None:
+                self._service.save_custom_scene_from_current(
+                    name=str(name),
+                    source_ip=cleaned_ip,
+                )
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -413,16 +427,20 @@ class WebviewBridge:
         try:
             cleaned_id = str(scene_id).strip()
             cleaned_name = str(name).strip()
-            if capture_current:
-                self._service.save_custom_scene_from_current(
-                    name=cleaned_name,
-                    scene_id=cleaned_id,
-                )
-            else:
-                self._service.rename_custom_scene(
-                    scene_id=cleaned_id,
-                    new_name=cleaned_name,
-                )
+
+            async def _apply() -> None:
+                if capture_current:
+                    self._service.save_custom_scene_from_current(
+                        name=cleaned_name,
+                        scene_id=cleaned_id,
+                    )
+                else:
+                    self._service.rename_custom_scene(
+                        scene_id=cleaned_id,
+                        new_name=cleaned_name,
+                    )
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -430,7 +448,10 @@ class WebviewBridge:
     def delete_custom_scene(self, scene_id: str) -> dict[str, Any]:
         """Elimina una escena personalizada guardada."""
         try:
-            self._service.delete_custom_scene(scene_id=str(scene_id).strip())
+            async def _apply() -> None:
+                self._service.delete_custom_scene(scene_id=str(scene_id).strip())
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -438,10 +459,13 @@ class WebviewBridge:
     def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> dict[str, Any]:
         """Agrega o quita un preset personalizado del submenu de favoritos de la bandeja."""
         try:
-            self._service.set_custom_scene_favorite(
-                scene_id=str(scene_id).strip(),
-                is_favorite=bool(is_favorite),
-            )
+            async def _apply() -> None:
+                self._service.set_custom_scene_favorite(
+                    scene_id=str(scene_id).strip(),
+                    is_favorite=bool(is_favorite),
+                )
+
+            self._run_async(_apply())
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -601,3 +625,24 @@ class WebviewBridge:
             return self._build_response(ok=True)
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
+
+
+JS_API_EXCLUDED: frozenset[str] = frozenset(
+    {"set_state_change_listener", "shutdown", "get_tray_snapshot"}
+)
+
+
+class JsApi:
+    """Fachada que expone a JavaScript unicamente los metodos aptos para la UI.
+
+    pywebview publica todo metodo publico del objeto `js_api`. Los metodos de
+    ciclo de vida y de bandeja de `WebviewBridge` quedan fuera de esta fachada
+    para que el contenido web no pueda cerrar la app ni manipular la bandeja.
+    """
+
+    def __init__(self, bridge: WebviewBridge) -> None:
+        for name in dir(WebviewBridge):
+            if name.startswith("_") or name in JS_API_EXCLUDED:
+                continue
+            if callable(getattr(WebviewBridge, name, None)):
+                setattr(self, name, getattr(bridge, name))

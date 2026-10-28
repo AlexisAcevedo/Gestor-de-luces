@@ -1,8 +1,8 @@
-; Inno Setup script. Build with:  iscc /DAppVersion=0.2.0 packaging\installer.iss
+; Inno Setup script. Build with:  iscc /DAppVersion=0.2.1 packaging\installer.iss
 ; Expects the PyInstaller one-folder output in dist\GestorDeLuces (see scripts\build.ps1).
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.2.1"
 #endif
 
 #define AppName "WiZ Lighting Console"

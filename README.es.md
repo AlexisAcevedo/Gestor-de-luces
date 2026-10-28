@@ -280,7 +280,14 @@ pytest
 
 Resultado esperado:
 ```
-48 passed in ~2.0s
+73 passed in ~2.0s
+```
+
+Para ejecutar el análisis estático de seguridad y la auditoría de vulnerabilidades en dependencias (usando `requirements-dev.txt`):
+
+```bash
+python -m bandit -r src -q
+python -m pip_audit -r requirements.txt
 ```
 
 ---
@@ -300,13 +307,15 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 | `GestorDeLuces\GestorDeLuces.exe` | App portable en carpeta. La carpeta `_internal` debe quedar junto al ejecutable. |
 | `GestorDeLuces-portable-<versión>.zip` | La misma carpeta comprimida. Se extrae en cualquier lado y se ejecuta `GestorDeLuces.exe`. |
 | `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
+| `SHA256SUMS.txt` | Hashes SHA-256 de todos los artefactos generados en `dist/`. |
 
-Requisitos para compilar: el entorno virtual del proyecto con `requirements.txt` más `pyinstaller`, y [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia.
+Requisitos para compilar: el entorno virtual del proyecto con `requirements.txt` (o `requirements-dev.txt`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
 
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
-- Los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Algunos antivirus pueden marcar los binarios de PyInstaller como falso positivo.
-- Los datos del usuario viven en `%LOCALAPPDATA%\GestorLuces`, nunca junto al ejecutable.
+- Salvo que se compile con `SIGN_CERT_SHA1`, los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Verificá la descarga contra `SHA256SUMS.txt`.
+- La instalación por defecto es por usuario en `%LOCALAPPDATA%\Programs\GestorDeLuces` (no pide permisos de administrador); si se requiere proteger los binarios bajo `C:\Program Files`, ejecutá el instalador como administrador o con `/ALLUSERS`.
+- Los datos del usuario viven en `%LOCALAPPDATA%\GestorDeLuces`, nunca junto al ejecutable.
 - Si se mueve la carpeta portable con "Iniciar con Windows" activado, la entrada del registro se corrige en el siguiente arranque.
 - A veces `Compress-Archive` falla por un archivo bloqueado justo después de PyInstaller (el antivirus lo está escaneando); volvé a correr el script.
 

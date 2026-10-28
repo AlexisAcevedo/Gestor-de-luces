@@ -1597,6 +1597,7 @@
     const isActive = Boolean(appState.sleepTimer && appState.sleepTimer.active);
     if (isActive && !appState.sleepPollTimer) {
       appState.sleepPollTimer = setInterval(() => {
+        if (document.hidden) return;
         invokeApi(() => backendApi.get_sleep_timer_status(), null);
       }, 1000);
     } else if (!isActive && appState.sleepPollTimer) {
@@ -1646,6 +1647,7 @@
     const isActive = Boolean(appState.ambilight && appState.ambilight.active);
     if (isActive && !appState.ambilightPollTimer) {
       appState.ambilightPollTimer = setInterval(() => {
+        if (document.hidden) return;
         invokeApi(() => backendApi.get_ambilight_status(), null);
       }, 400);
     } else if (!isActive && appState.ambilightPollTimer) {
@@ -1767,6 +1769,7 @@
     const isActive = Boolean(appState.musicSync && appState.musicSync.active);
     if (isActive && !appState.musicPollTimer) {
       appState.musicPollTimer = setInterval(() => {
+        if (document.hidden) return;
         invokeApi(() => backendApi.get_music_sync_status(), null);
       }, 250);
     } else if (!isActive && appState.musicPollTimer) {
@@ -2451,6 +2454,7 @@
         }
         if (autoSyncToggle.checked) {
           appState.autoSyncTimer = setInterval(() => {
+            if (document.hidden) return;
             invokeApi(() => backendApi.refresh_states(), () => t("status.autoSyncStep"));
           }, 3000);
           setStatusMessage(t("status.autoSyncEnabled"));
@@ -3066,6 +3070,17 @@
         }
       });
     }
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && backendApi) {
+        if (appState.ambilight && appState.ambilight.active) {
+          invokeApi(() => backendApi.get_ambilight_status(), null);
+        } else if (appState.musicSync && appState.musicSync.active) {
+          invokeApi(() => backendApi.get_music_sync_status(), null);
+        } else if (appState.sleepTimer && appState.sleepTimer.active) {
+          invokeApi(() => backendApi.get_sleep_timer_status(), null);
+        }
+      }
+    });
   }
 
   /* Inicializacion principal al cargar el DOM */
