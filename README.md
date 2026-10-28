@@ -197,9 +197,10 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 
 ### Step-by-Step Installation
 
-1. Clone or open the repository:
+1. Clone the repository and enter its folder:
    ```bash
-   cd "d:\Programacion\proyectos\Gestor de luces"
+   git clone https://github.com/AlexisAcevedo/Gestor-de-luces.git
+   cd Gestor-de-luces
    ```
 
 2. Create and activate a Python virtual environment:

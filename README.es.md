@@ -197,9 +197,10 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 
 ### Proceso de Instalación
 
-1. Ubicarse en el directorio del proyecto:
+1. Clonar el repositorio y ubicarse en su carpeta:
    ```bash
-   cd "d:\Programacion\proyectos\Gestor de luces"
+   git clone https://github.com/AlexisAcevedo/Gestor-de-luces.git
+   cd Gestor-de-luces
    ```
 
 2. Crear y activar el entorno virtual de Python:
