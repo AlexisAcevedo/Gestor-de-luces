@@ -19,3 +19,6 @@ numpy==2.5.4
 pytest==9.0.3
 pytest-asyncio==1.3.0
 
+# Packaging (portable build and installer, see scripts/build.ps1)
+pyinstaller==6.22.3
+

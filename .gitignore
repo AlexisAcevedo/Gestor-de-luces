@@ -15,6 +15,7 @@ htmlcov/
 build/
 dist/
 *.spec
+!packaging/*.spec
 *.egg-info/
 
 # Local user data and secrets

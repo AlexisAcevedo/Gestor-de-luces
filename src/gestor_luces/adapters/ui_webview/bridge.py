@@ -19,6 +19,7 @@ from typing import Any
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.models import Bulb
 from gestor_luces.domain.scenes import list_builtin_scenes
+from gestor_luces.ports.autostart import AutostartManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,8 +32,11 @@ class WebviewBridge:
         service: LightControlService,
         default_timeout: float = 12.0,
         on_state_changed: Callable[[], None] | None = None,
+        autostart: AutostartManager | None = None,
     ) -> None:
         self._service = service
+        # Private on purpose (see `_on_state_changed`): never exposed to JavaScript.
+        self._autostart = autostart
         self._default_timeout = default_timeout
         # Atributo privado a proposito: PyWebView expone a JavaScript todo atributo publico
         # del objeto `js_api`, y un callback interno no debe ser invocable desde la vista.
@@ -207,6 +211,29 @@ class WebviewBridge:
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
+
+    def get_autostart(self) -> dict[str, Any]:
+        """Report whether the app is registered to start with the operating system."""
+        if self._autostart is None:
+            return {"ok": False, "error": "Autostart is not available.", "enabled": False}
+        try:
+            return {"ok": True, "enabled": bool(self._autostart.is_enabled())}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "enabled": False}
+
+    def set_autostart(self, enabled: bool) -> dict[str, Any]:
+        """Enable or disable starting with the operating system (always minimized to the tray)."""
+        if self._autostart is None:
+            return {"ok": False, "error": "Autostart is not available.", "enabled": False}
+        try:
+            if bool(enabled):
+                self._autostart.enable()
+            else:
+                self._autostart.disable()
+            self._notify_state_changed()
+            return {"ok": True, "enabled": bool(self._autostart.is_enabled())}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "enabled": False}
 
     def discover_bulbs(self) -> dict[str, Any]:
         """Escanea la red local en busca de focos Philips WiZ y sincroniza su estado."""

@@ -12,6 +12,7 @@ import argparse
 import logging
 from pathlib import Path
 import sys
+import threading
 from typing import Any
 
 from gestor_luces.adapters.ambilight import MssScreenSampler
@@ -22,10 +23,25 @@ from gestor_luces.adapters.storage.json_repositories import (
     JsonSettingsRepository,
     resolve_default_data_dir,
 )
+from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
+from gestor_luces.adapters.system.windows_autostart import WindowsRegistryAutostart
 from gestor_luces.adapters.tray import TrayController
+from gestor_luces.adapters.ui_webview.app_menu import (
+    ACTION_EXIT,
+    ACTION_SHOW_ABOUT,
+    ACTION_SHOW_SHORTCUTS,
+    ACTION_TOGGLE_AUTOSTART,
+    ACTION_TOGGLE_WINDOW,
+    APP_DISPLAY_NAME,
+    AppMenu,
+    build_about_text,
+    build_app_menu,
+)
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
+from gestor_luces.ports.autostart import AutostartManager
+from gestor_luces.resources import resolve_app_version, resolve_asset_path, resolve_resource_root
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +78,70 @@ def _compute_initial_window_geometry(webview_module: object) -> tuple[int, int, 
 
 
 
+def _to_webview_menus(
+    spec: list[AppMenu],
+    on_action: Any,
+) -> list[Any]:
+    """Translate the pure menu model into pywebview `Menu` objects."""
+    from webview.menu import Menu, MenuAction, MenuSeparator
+
+    menus: list[Any] = []
+    for menu in spec:
+        items: list[Any] = []
+        for item in menu.items:
+            if item.is_separator:
+                items.append(MenuSeparator())
+            else:
+                items.append(
+                    # Items from pywebview are not checkable: `_sync_native_menu` sets `Checked`.
+                    MenuAction(item.label, lambda action_id=item.action_id: on_action(action_id))
+                )
+        menus.append(Menu(menu.title, items))
+    return menus
+
+
+def _sync_native_menu(window: Any, spec: list[AppMenu]) -> None:
+    """Push labels and check marks onto the live WinForms `MenuStrip` created by pywebview.
+
+    pywebview builds the menu once and offers no update API, so after startup the
+    `ToolStripMenuItem` objects are updated in place (language, show/hide label and the
+    Start with Windows check mark). Failures are logged and never propagate.
+    """
+    if sys.platform != "win32":
+        return
+    native_form = getattr(window, "native", None)
+    if native_form is None:
+        return
+
+    def _apply() -> None:
+        strip = next(
+            (c for c in native_form.Controls if c.GetType().Name == "MenuStrip"),
+            None,
+        )
+        if strip is None:
+            return
+        for top_index, menu in enumerate(spec):
+            top_item = strip.Items[top_index]
+            top_item.Text = menu.title
+            for sub_index, item in enumerate(menu.items):
+                if item.is_separator:
+                    continue
+                native_item = top_item.DropDownItems[sub_index]
+                native_item.Text = item.label
+                if item.checked is not None:
+                    native_item.Checked = bool(item.checked)
+
+    try:
+        from System import Action
+
+        if native_form.InvokeRequired:
+            native_form.Invoke(Action(_apply))
+        else:
+            _apply()
+    except Exception:
+        _LOGGER.debug("Native menu sync skipped.", exc_info=True)
+
+
 class _NoopTrayIcon:
     """Icono simulado sin efectos secundarios para verificar el ensamblado en smoke-test."""
 
@@ -82,12 +162,30 @@ class _NoopTrayIcon:
 
 
 def resolve_ui_directory() -> Path:
-    """Localiza el directorio `ui/` relativo a la raiz del proyecto."""
-    return Path(__file__).resolve().parents[2] / "ui"
+    """Localiza el directorio `ui/` relativo a la raiz del proyecto (o al bundle de PyInstaller)."""
+    return resolve_resource_root() / "ui"
+
+
+def resolve_icon_path() -> Path:
+    """Path of the multi-size application icon shipped in `assets/icon`."""
+    return resolve_asset_path("icon", "app.ico")
+
+
+def resolve_png_icon_path() -> Path:
+    """Path of the PNG version of the application icon."""
+    return resolve_asset_path("icon", "app.png")
+
+
+def _default_autostart() -> AutostartManager | None:
+    """Registry-backed autostart on Windows; None elsewhere (feature unavailable)."""
+    if sys.platform != "win32":
+        return None
+    return WindowsRegistryAutostart()
 
 
 def build_application(
     data_dir: Path | None = None,
+    autostart: AutostartManager | None = None,
 ) -> tuple[LightControlService, WebviewBridge]:
     """Instancia y conecta los repositorios JSON, el controlador UDP, el servicio y el puente JS."""
     storage_dir = data_dir if data_dir is not None else resolve_default_data_dir()
@@ -105,7 +203,10 @@ def build_application(
         audio_sampler=audio_sampler,
         settings_repository=settings_repo,
     )
-    bridge = WebviewBridge(service=service)
+    bridge = WebviewBridge(
+        service=service,
+        autostart=autostart if autostart is not None else _default_autostart(),
+    )
     return service, bridge
 
 
@@ -125,6 +226,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Verify composition root and UI assets without opening the native GUI loop.",
     )
+    parser.add_argument(
+        "--minimized",
+        action="store_true",
+        help="Start hidden in the system tray (used by the Start with Windows entry).",
+    )
     return parser.parse_args(argv)
 
 
@@ -137,7 +243,18 @@ def main(argv: list[str] | None = None) -> int:
     i18n_path = ui_dir / "i18n.js"
     script_path = ui_dir / "app.js"
 
-    _, bridge = build_application()
+    icon_path = resolve_icon_path()
+    png_icon_path = resolve_png_icon_path()
+
+    guard: SingleInstanceGuard | None = None
+    if not args.smoke_test:
+        guard = SingleInstanceGuard()
+        if not guard.acquire():
+            guard.signal_existing_instance()
+            return 0
+
+    autostart = _default_autostart()
+    _, bridge = build_application(autostart=autostart)
 
     if args.smoke_test:
         smoke_tray = TrayController(
@@ -154,11 +271,18 @@ def main(argv: list[str] | None = None) -> int:
         try:
             missing = [
                 str(p)
-                for p in (index_path, styles_path, i18n_path, script_path)
+                for p in (
+                    index_path,
+                    styles_path,
+                    i18n_path,
+                    script_path,
+                    icon_path,
+                    png_icon_path,
+                )
                 if not p.is_file()
             ]
             if missing:
-                print(f"Smoke test failed: missing UI assets: {missing}", file=sys.stderr)
+                print(f"Smoke test failed: missing assets: {missing}", file=sys.stderr)
                 return 1
             smoke_tray.refresh()
             if not smoke_tray.spec:
@@ -172,9 +296,17 @@ def main(argv: list[str] | None = None) -> int:
 
     import webview
 
-    is_window_visible = True
+    # Keep a portable build's autostart entry pointing at the current location.
+    try:
+        if autostart is not None and autostart.refresh_if_stale():
+            _LOGGER.info("Autostart entry was stale and has been refreshed.")
+    except Exception:
+        _LOGGER.exception("Autostart refresh failed.")
+
+    is_window_visible = not args.minimized
     is_quitting = False
     tray: TrayController | None = None
+    menu_sync_requested = threading.Event()
 
     win_width, win_height, win_x, win_y = _compute_initial_window_geometry(webview)
 
@@ -188,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         y=win_y,
         min_size=(WINDOW_MIN_SIZE[0], WINDOW_MIN_SIZE[1]),
         background_color="#0D0F12",
+        hidden=args.minimized,
     )
 
     def _apply_windows_dark_titlebar() -> None:
@@ -223,6 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             _LOGGER.debug("Window restore skipped because window was not minimized.")
         _apply_windows_dark_titlebar()
+        menu_sync_requested.set()
         try:
             native_form = getattr(window, "native", None)
             if native_form is not None:
@@ -243,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         nonlocal is_window_visible
         is_window_visible = False
         window.hide()
+        menu_sync_requested.set()
         if tray is not None:
             tray.request_refresh()
 
@@ -308,24 +443,118 @@ def main(argv: list[str] | None = None) -> int:
         is_window_visible=lambda: is_window_visible,
         notify_ui=notify_ui,
     )
-    bridge.set_state_change_listener(tray.request_refresh)
+    def _current_menu_spec() -> list[AppMenu]:
+        snapshot = bridge.get_tray_snapshot()
+        return build_app_menu(
+            language=str(snapshot.get("language") or "en"),
+            window_visible=is_window_visible,
+            autostart_enabled=bool(bridge.get_autostart().get("enabled")),
+        )
+
+    def _menu_sync_worker() -> None:
+        """Serialize menu updates off the GUI and bridge-loop threads."""
+        while not is_quitting:
+            menu_sync_requested.wait()
+            menu_sync_requested.clear()
+            if is_quitting:
+                break
+            try:
+                _sync_native_menu(window, _current_menu_spec())
+            except Exception:
+                _LOGGER.debug("Menu refresh skipped.", exc_info=True)
+
+    def request_menu_sync() -> None:
+        menu_sync_requested.set()
+
+    def toggle_window() -> None:
+        if is_window_visible:
+            hide_window()
+        else:
+            show_window()
+
+    def show_shortcuts() -> None:
+        show_window()
+        try:
+            window.evaluate_js(
+                "(function(){var d=document.getElementById('shortcuts-dialog');"
+                "if(d&&!d.open){d.showModal();}})()"
+            )
+        except Exception:
+            _LOGGER.debug("Shortcuts dialog could not be opened.")
+
+    def show_about() -> None:
+        language = str(bridge.get_tray_snapshot().get("language") or "en")
+        text = build_about_text(language, resolve_app_version())
+        if sys.platform == "win32":
+            import ctypes
+
+            # MB_OK | MB_ICONINFORMATION
+            ctypes.windll.user32.MessageBoxW(0, text, APP_DISPLAY_NAME, 0x40)
+        else:
+            _LOGGER.info("%s", text)
+
+    def toggle_autostart() -> None:
+        current = bool(bridge.get_autostart().get("enabled"))
+        result = bridge.set_autostart(not current)
+        if not result.get("ok"):
+            _LOGGER.warning("Autostart toggle failed: %s", result.get("error"))
+        request_menu_sync()
+
+    menu_handlers = {
+        ACTION_TOGGLE_WINDOW: toggle_window,
+        ACTION_TOGGLE_AUTOSTART: toggle_autostart,
+        ACTION_EXIT: quit_app,
+        ACTION_SHOW_SHORTCUTS: show_shortcuts,
+        ACTION_SHOW_ABOUT: show_about,
+    }
+
+    def on_menu_action(action_id: str) -> None:
+        handler = menu_handlers.get(action_id)
+        if handler is None:
+            _LOGGER.warning("Unknown menu action: %s", action_id)
+            return
+        try:
+            handler()
+        except Exception:
+            _LOGGER.exception("Menu action '%s' failed.", action_id)
+        if action_id != ACTION_EXIT:
+            request_menu_sync()
+
+    def _on_state_changed() -> None:
+        tray.request_refresh()
+        request_menu_sync()
+
+    bridge.set_state_change_listener(_on_state_changed)
     window.events.shown += _apply_windows_dark_titlebar
+    window.events.shown += request_menu_sync
     window.events.closing += on_closing
     window.events.minimized += on_minimized
     window.events.closed += on_closed
 
+    threading.Thread(target=_menu_sync_worker, name="GestorLucesMenuSync", daemon=True).start()
+    if guard is not None:
+        guard.listen(show_window)
     tray.start()
     try:
         # private_mode=False + storage_path make localStorage (UI prefs, favorite scenes)
         # persist across launches; WebView2 defaults to an ephemeral profile otherwise.
         webview_storage = resolve_default_data_dir() / "webview"
         webview_storage.mkdir(parents=True, exist_ok=True)
+        initial_menu = build_app_menu(
+            language=str(bridge.get_tray_snapshot().get("language") or "en"),
+            window_visible=is_window_visible,
+            autostart_enabled=bool(bridge.get_autostart().get("enabled")),
+        )
         webview.start(
             debug=args.debug,
             private_mode=False,
             storage_path=str(webview_storage),
+            menu=_to_webview_menus(initial_menu, on_menu_action),
+            icon=str(icon_path) if icon_path.is_file() else None,
         )
     finally:
+        if guard is not None:
+            guard.release()
         tray.stop()
         bridge.shutdown()
     return 0

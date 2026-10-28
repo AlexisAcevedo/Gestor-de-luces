@@ -1,5 +1,6 @@
 """Capa de Puertos (Interfaces de la Arquitectura Hexagonal)."""
 
+from gestor_luces.ports.autostart import AutostartManager
 from gestor_luces.ports.repositories import (
     AudioSampler,
     BulbRepository,

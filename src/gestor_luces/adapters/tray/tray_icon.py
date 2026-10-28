@@ -18,9 +18,10 @@ import logging
 import threading
 from typing import Any, Protocol
 
-from PIL import Image, ImageDraw
+from PIL import Image
 import pystray
 
+from gestor_luces.adapters.tray.bulb_icon import render_bulb_image
 from gestor_luces.adapters.tray.menu_model import (
     ACTION_APPLY_PRESET,
     ACTION_CANCEL_SLEEP_TIMER,
@@ -41,7 +42,6 @@ _LOGGER = logging.getLogger(__name__)
 
 ICON_NAME = "gestor_luces"
 ICON_SIZE = 64
-_SUPERSAMPLE = 4
 
 IconFactory = Callable[[str, Image.Image, str, pystray.Menu], Any]
 Executor = Callable[[Callable[[], None]], None]
@@ -62,22 +62,8 @@ class TrayActions(Protocol):
 
 
 def render_icon_image(rgb: tuple[int, int, int], size: int = ICON_SIZE) -> Image.Image:
-    """Dibuja un disco RGBA teñido con el color del haz, sin depender de archivos binarios.
-
-    Se dibuja a mayor resolucion y luego se reduce para obtener bordes suavizados, y se
-    agrega un contorno oscuro para que el disco se distinga en barras de tareas claras.
-    """
-    large = size * _SUPERSAMPLE
-    image = Image.new("RGBA", (large, large), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    inset = large // 16
-    draw.ellipse(
-        (inset, inset, large - inset - 1, large - inset - 1),
-        fill=(*rgb, 255),
-        outline=(13, 15, 18, 255),
-        width=max(1, large // 20),
-    )
-    return image.resize((size, size), Image.Resampling.LANCZOS)
+    """Dibuja la bombilla de la aplicacion teñida con el color del haz (misma forma que el icono de ventana)."""
+    return render_bulb_image(rgb, size)
 
 
 def _default_icon_factory(
