@@ -12,7 +12,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 - Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
-- Pruebas 100% Fuera de Línea: Suite de 48 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+- Pruebas 100% Fuera de Línea: Suite de 73 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
 
 ---
 
@@ -91,7 +91,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 +-----------------------------------------------------------------------------------+
 | ADAPTADORES E INFRAESTRUCTURA                                                     |
 |   WizUdpController   - Comunicación por sockets UDP 38899 vía pywizlight          |
-|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/GestorLuces           |
+|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/GestorDeLuces         |
 |   MssScreenSampler   - Capturador de fotogramas de pantalla de Windows            |
 |   WasapiAudioSampler - Muestreador de audio del sistema mediante WASAPI loopback  |
 +-----------------------------------------------------------------------------------+
@@ -130,6 +130,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   └── build.ps1                # Icono + PyInstaller + ZIP portable + instalador
 ├── pyproject.toml               # Metadatos del proyecto y configuración de pytest
 ├── requirements.txt             # Dependencias fijadas para producción y pruebas
+├── requirements-dev.txt         # Dependencias de desarrollo, auditoría y empaquetado
 ├── README.md                    # Documentación principal en inglés
 ├── README.es.md                 # Traducción de la documentación al español
 ├── docs/
@@ -165,7 +166,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           ├── tray/            # Bandeja del sistema con pystray y render compartido de la bombilla
 │           ├── system/          # Autoinicio de Windows (registro) e instancia única
 │           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
-├── tests/                       # Suite de pruebas automatizadas (48 tests)
+├── tests/                       # Suite de pruebas automatizadas (73 tests)
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
@@ -176,7 +177,8 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   ├── test_ambilight.py        # Pruebas de captura de pantalla y suavizado EMA
 │   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
 │   ├── test_i18n.py             # Pruebas de localización bilingüe
-│   └── test_app_shell.py        # Pruebas del menú, autoinicio, --minimized y assets
+│   ├── test_app_shell.py        # Pruebas del menú, autoinicio, --minimized y assets
+│   └── test_security_hardening.py # Pruebas de regresión de seguridad y rendimiento
 └── ui/                          # Frontend web embebido en WebView2
     ├── index.html               # Estructura visual de la consola
     ├── styles.css               # Estilos de consola fotométrica oscura
@@ -188,14 +190,29 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 
 ## Instalación y Configuración
 
-### Requisitos Previos
+### Opción A — Instalador de Windows o ZIP Portable (Recomendado para Usuarios)
+
+No requiere tener Python instalado. Descargá la última versión desde [**GitHub Releases**](https://github.com/AlexisAcevedo/Gestor-de-luces/releases/latest):
+
+- **Instalador (`GestorDeLuces-Setup-<versión>.exe`)**: Instalación por usuario (sin pedir permisos de administrador) con accesos en el Menú Inicio, icono opcional en el escritorio y registro opcional de "Iniciar con Windows".
+- **Portable (`GestorDeLuces-portable-<versión>.zip`)**: Extraelo en cualquier carpeta y ejecutá `GestorDeLuces.exe` (mantené la carpeta `_internal` junto al ejecutable).
+
+**Requisitos del Sistema:**
+- Windows 10 (Compilación 1809+) o Windows 11 (64 bits).
+- Microsoft Edge WebView2 Evergreen Runtime (preinstalado en Windows 11 y Windows 10 actualizado).
+- Red local (LAN) con los focos Philips WiZ en la misma subred (puerto UDP 38899).
+
+---
+
+### Opción B — Ejecutar desde Código Fuente (Para Desarrolladores)
+
+#### Requisitos Previos
 
 - Sistema Operativo: Windows 10 (Compilación 1809 o superior) o Windows 11.
 - Python: Versión 3.11 o posterior (probado y verificado en Python 3.14).
-- Runtime de WebView2: Microsoft Edge WebView2 Evergreen Runtime (incluido por defecto en Windows 10/11).
-- Red: Red de área local con los focos Philips WiZ conectados a la misma subred (habitualmente Wi-Fi de 2.4 GHz enlazado a la PC host por Ethernet o Wi-Fi).
+- Runtime de WebView2: Microsoft Edge WebView2 Evergreen Runtime.
 
-### Proceso de Instalación
+#### Proceso de Instalación
 
 1. Clonar el repositorio y ubicarse en su carpeta:
    ```bash
@@ -214,14 +231,14 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
    source .venv/Scripts/activate
    ```
 
-3. Instalar las dependencias de producción y pruebas:
+3. Instalar las dependencias (`requirements.txt` para ejecución/pruebas, o `requirements-dev.txt` para incluir auditoría estática y empaquetado):
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
 
 ---
 
-## Ejecución de la Aplicación
+## Ejecución de la Aplicación (Desde Código Fuente)
 
 ### 1. Modo Interfaz Gráfica (GUI)
 
@@ -232,10 +249,9 @@ python -m gestor_luces.main
 ```
 
 Parámetros opcionales aceptados por `main.py`:
-- `--data-dir <RUTA>`: Especifica una carpeta alternativa para guardar `bulbs.json`, `scenes.json` y `settings.json` (por defecto se utiliza `%LOCALAPPDATA%\GestorLuces`).
-- `--debug`: Habilita registros de diagnóstico detallados (nivel `DEBUG`) en todos los hilos del sistema.
+- `--debug`: Habilita el inspector y las herramientas de desarrollo de pywebview.
 - `--minimized`: Inicia oculta en la bandeja del sistema (es el parámetro que registra "Iniciar con Windows").
-- `--smoke-test`: Construye la raíz de composición, inicializa los adaptadores sin abrir ventanas del sistema operativo, verifica la integridad (incluidos los iconos) y finaliza con código de salida 0.
+- `--smoke-test`: Construye la raíz de composición, verifica la integridad de la UI y los iconos sin abrir ventanas nativas, y finaliza con código de salida 0.
 
 ### 2. Modo Diagnóstico por Consola (CLI)
 

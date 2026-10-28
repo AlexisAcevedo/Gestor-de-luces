@@ -75,7 +75,7 @@ The core principle behind this project is **strict isolation of business invaria
 4. **Adapters Layer (`gestor_luces.adapters`)**:
    - Implements ports with real-world infrastructure:
      - `adapters.wiz.udp_controller`: Manages UDP broadcast discovery and unicast JSON-RPC datagrams via `pywizlight`.
-     - `adapters.storage.json_repositories`: Implements filesystem atomic persistence into `%LOCALAPPDATA%\GestorLuces`.
+     - `adapters.storage.json_repositories`: Implements filesystem atomic persistence into `%LOCALAPPDATA%\GestorDeLuces`.
      - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss`.
      - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture and `numpy.fft.rfft`.
      - `adapters.tray.tray_icon`: Implements Windows notification area integration using `pystray`.
@@ -215,19 +215,19 @@ Where $\alpha \in [0.1, 0.4]$ controls the smoothing factor:
 
 Application settings, custom presets, and known bulb configurations are stored locally in the user's application data directory:
 
-$$\text{Path: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorLuces}\backslash$$
+$$\text{Path: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$$
 
 Files managed:
 - `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases.
-- `scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed).
-- `settings.json`: Global user preferences (active language `en` or `es`, last selected bulbs, default window size).
+- `custom_scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed, favorite flag).
+- `settings.json`: Global user preferences (active language `en` or `es`).
 
 ### Atomic File Write Pattern
 
 To prevent JSON corruption in the event of sudden power cuts or process termination, writes follow the atomic replacement protocol:
 1. Serialize JSON payload to an in-memory buffer.
-2. Write buffer to a temporary file in the same directory (`filename.json.tmp`).
-3. Flush and synchronize file descriptor (`flush()` + `os.fsync()`).
+2. Create a unique temporary file in the same directory via `tempfile.mkstemp` (`.<filename>.<random>.tmp`).
+3. Write, flush, and synchronize the file descriptor (`flush()` + `os.fsync()`).
 4. Atomically replace the target file via `os.replace()`, guaranteeing an all-or-nothing filesystem transaction on NTFS.
 
 
@@ -242,7 +242,7 @@ To prevent JSON corruption in the event of sudden power cuts or process terminat
 The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), which writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The registered command is `<exe> --minimized` when frozen and `pythonw -m gestor_luces.main --minimized` in development. On every launch, `refresh_if_stale` rewrites the entry if it points to a different path (for example after moving the portable folder). The registry is injectable, so tests never touch `HKCU`.
 
 ### Single Instance
-`adapters/system/single_instance.py` combines a named mutex with a named event. A second launch signals the event and exits; the first instance reacts by showing its window.
+`adapters/system/single_instance.py` combines a named mutex with a named event protected by an explicit SDDL DACL (`SY`/`BA`/`OW`). A second launch signals the event and exits; the first instance reacts by showing its window.
 
 ### Packaging
-`scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`) and builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights). `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorLuces`.
+`scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`.

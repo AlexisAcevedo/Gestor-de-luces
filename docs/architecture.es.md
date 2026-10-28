@@ -75,7 +75,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 4. **Capa de Adaptadores e Infraestructura (`gestor_luces.adapters`)**:
    - Implementa los puertos conectando con el hardware y el sistema operativo:
      - `adapters.wiz.udp_controller`: Gestiona el descubrimiento por broadcast UDP y los datagramas JSON-RPC unicast mediante `pywizlight`.
-     - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\GestorLuces`.
+     - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\GestorDeLuces`.
      - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows a alta velocidad con `mss`.
      - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` y aplicando `numpy.fft.rfft`.
      - `adapters.tray.tray_icon`: Integra el icono y menú de la bandeja del sistema mediante `pystray`.
@@ -215,19 +215,19 @@ Donde $\alpha \in [0.1, 0.4]$ regula la inercia del color:
 
 Las preferencias de usuario, las escenas personalizadas y el inventario de focos se almacenan localmente en el directorio de datos de aplicación de Windows:
 
-$$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorLuces}\backslash$$
+$$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$$
 
 Archivos gestionados:
 - `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario).
-- `scenes.json`: Presets personalizados creados por el usuario (modo, RGB, CCT, brillo, velocidad).
-- `settings.json`: Configuración global (idioma activo `en` o `es`, focos seleccionados por defecto, etc.).
+- `custom_scenes.json`: Presets personalizados creados por el usuario (modo, RGB, CCT, brillo, velocidad, favorito).
+- `settings.json`: Configuración global (idioma activo `en` o `es`).
 
 ### Patrón de Escritura Atómica en Disco
 
 Para prevenir la corrupción de los archivos JSON ante cortes imprevistos de energía o cierres forzados, todas las escrituras siguen el protocolo atómico:
 1. Se serializa la información JSON a un búfer en memoria.
-2. Se escribe en un archivo temporal en la misma carpeta (`archivo.json.tmp`).
-3. Se sincronizan los descriptores con el sistema de archivos (`flush()` + `os.fsync()`).
+2. Se crea un archivo temporal único en la misma carpeta mediante `tempfile.mkstemp` (`.<archivo>.<aleatorio>.tmp`).
+3. Se vuelcan y sincronizan los descriptores con el sistema de archivos (`flush()` + `os.fsync()`).
 4. Se reemplaza de forma atómica el archivo de destino mediante `os.replace()`, garantizando una transacción de todo o nada en NTFS.
 
 
@@ -242,7 +242,7 @@ Para prevenir la corrupción de los archivos JSON ante cortes imprevistos de ene
 El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` reescribe la entrada si apunta a otra ruta (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
 
 ### Instancia Única
-`adapters/system/single_instance.py` combina un mutex con nombre y un evento con nombre. Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana.
+`adapters/system/single_instance.py` combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`). Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana.
 
 ### Empaquetado
-`scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`) y construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador). `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorLuces`.
+`scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`.

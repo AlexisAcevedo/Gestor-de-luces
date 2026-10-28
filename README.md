@@ -12,7 +12,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 - Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
-- Fully Offline Testable: Suite of 48 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
+- Fully Offline Testable: Suite of 73 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
 
 ---
 
@@ -91,7 +91,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 +-----------------------------------------------------------------------------------+
 | ADAPTERS & INFRASTRUCTURE                                                         |
 |   WizUdpController   - Socket communication over UDP 38899 via pywizlight         |
-|   JsonRepositories   - Persistence in %LOCALAPPDATA%/GestorLuces                  |
+|   JsonRepositories   - Persistence in %LOCALAPPDATA%/GestorDeLuces                |
 |   MssScreenSampler   - Windows desktop frame grabber                              |
 |   WasapiAudioSampler - Windows WASAPI loopback audio stream sampler               |
 +-----------------------------------------------------------------------------------+
@@ -130,6 +130,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   └── build.ps1                # Icon + PyInstaller + portable ZIP + installer
 ├── pyproject.toml               # Project metadata and pytest configuration
 ├── requirements.txt             # Locked production and testing dependencies
+├── requirements-dev.txt         # Dev, static security audit, and build dependencies
 ├── README.md                    # Primary English documentation
 ├── README.es.md                 # Spanish translation of project documentation
 ├── docs/
@@ -165,7 +166,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           ├── tray/            # Pystray tray controller and shared bulb icon renderer
 │           ├── system/          # Windows autostart (registry) and single-instance guard
 │           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
-├── tests/                       # Automated test suite (48 tests)
+├── tests/                       # Automated test suite (73 tests)
 │   ├── simulators/              # In-memory WiZ UDP server simulator
 │   ├── test_domain.py           # Domain validation tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
@@ -176,7 +177,8 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   ├── test_ambilight.py        # Screen capture and EMA streaming tests
 │   ├── test_music_sync.py       # WASAPI and FFT DSP tests
 │   ├── test_i18n.py             # Bilingual localization tests
-│   └── test_app_shell.py        # Menu model, autostart, --minimized and asset tests
+│   ├── test_app_shell.py        # Menu model, autostart, --minimized and asset tests
+│   └── test_security_hardening.py # Security and performance regression tests
 └── ui/                          # Web frontend rendered inside WebView2
     ├── index.html               # Main console markup
     ├── styles.css               # Architectural photometric styling (Dark theme)
@@ -188,14 +190,29 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 
 ## Installation & Setup
 
-### Prerequisites
+### Option A — Windows Installer or Portable ZIP (Recommended for Users)
+
+No Python installation is required. Download the latest release from [**GitHub Releases**](https://github.com/AlexisAcevedo/Gestor-de-luces/releases/latest):
+
+- **Installer (`GestorDeLuces-Setup-<version>.exe`)**: Per-user setup (no administrator rights needed) that creates Start Menu shortcuts, optional desktop icon, and optional "Start with Windows" registration.
+- **Portable (`GestorDeLuces-portable-<version>.zip`)**: Extract anywhere and run `GestorDeLuces.exe` (keep the `_internal` folder next to the executable).
+
+**System Requirements:**
+- Windows 10 (Build 1809+) or Windows 11 (64-bit).
+- Microsoft Edge WebView2 Evergreen Runtime (preinstalled on Windows 11 and up-to-date Windows 10).
+- Local network (LAN) with Philips WiZ bulbs on the same subnet (UDP port 38899).
+
+---
+
+### Option B — Run from Source (For Developers)
+
+#### Prerequisites
 
 - Operating System: Windows 10 (Build 1809+) or Windows 11.
 - Python: Version 3.11 or higher (Python 3.14 fully supported).
-- WebView2 Runtime: Microsoft Edge WebView2 Evergreen Runtime (installed by default on Windows 10/11).
-- Network: Local network with Philips WiZ bulbs connected to the same subnet (typically 2.4 GHz Wi-Fi bridged to the host PC via Ethernet or Wi-Fi).
+- WebView2 Runtime: Microsoft Edge WebView2 Evergreen Runtime.
 
-### Step-by-Step Installation
+#### Step-by-Step Setup
 
 1. Clone the repository and enter its folder:
    ```bash
@@ -214,14 +231,14 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
    source .venv/Scripts/activate
    ```
 
-3. Install production and test dependencies:
+3. Install dependencies (`requirements.txt` for runtime/tests, or `requirements-dev.txt` to include audit and packaging tools):
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
 
 ---
 
-## Running the Application
+## Running the Application (From Source)
 
 ### 1. Graphical User Interface (GUI) Mode
 
@@ -232,10 +249,9 @@ python -m gestor_luces.main
 ```
 
 Supported CLI flags for `main.py`:
-- `--data-dir <PATH>`: Override the storage folder for `bulbs.json`, `scenes.json`, and `settings.json` (defaults to `%LOCALAPPDATA%\GestorLuces`).
-- `--debug`: Enable verbose diagnostic logging (`DEBUG` level) across all application threads.
+- `--debug`: Enable pywebview developer tools and inspector.
 - `--minimized`: Start hidden in the system tray (this is the flag registered by "Start with Windows").
-- `--smoke-test`: Initialize the composition root, instantiate all adapters without opening native GUI windows, run validation checks (including icon assets), and exit with code 0.
+- `--smoke-test`: Initialize the composition root, verify UI and icon assets without opening native GUI windows, and exit with code 0.
 
 ### 2. Low-Level Network CLI Mode
 
