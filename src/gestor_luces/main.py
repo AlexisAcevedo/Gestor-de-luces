@@ -15,6 +15,8 @@ import sys
 import threading
 from typing import Any
 
+from gestor_luces.adapters.ambilight.mss_sampler import MssScreenSampler
+from gestor_luces.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
 from gestor_luces.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
@@ -195,6 +197,8 @@ def build_application(
         bulb_repository=bulb_repo,
         scene_repository=scene_repo,
         settings_repository=settings_repo,
+        screen_sampler_factory=MssScreenSampler,
+        audio_sampler_factory=WasapiLoopbackSampler,
     )
     bridge = WebviewBridge(
         service=service,

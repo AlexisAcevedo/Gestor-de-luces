@@ -127,4 +127,45 @@ async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly() -> None:
     assert controller._stream_sock is None
 
 
+def test_inner_hexagonal_layers_never_import_adapters() -> None:
+    import ast
+
+    src_root = Path(__file__).resolve().parents[1] / "src" / "gestor_luces"
+    for layer in ("domain", "ports", "application"):
+        for py_file in (src_root / layer).rglob("*.py"):
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        assert not alias.name.startswith("gestor_luces.adapters"), (
+                            f"{py_file} imports {alias.name}"
+                        )
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    assert not node.module.startswith("gestor_luces.adapters"), (
+                        f"{py_file} imports from {node.module}"
+                    )
+
+
+def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
+    import threading
+
+    controller = WizUdpController(probe_candidates=[])
+    observed_threads: list[str] = []
+
+    class TrackingService(LightControlService):
+        def list_bulbs(self) -> list[Bulb]:
+            observed_threads.append(threading.current_thread().name)
+            return super().list_bulbs()
+
+    service = TrackingService(controller=controller)
+    bridge = WebviewBridge(service=service)
+    try:
+        resp = bridge.get_sleep_timer_status()
+        assert resp["ok"] is True
+        assert "GestorLucesAsyncLoop" in observed_threads
+    finally:
+        bridge.shutdown()
+
+
+
 

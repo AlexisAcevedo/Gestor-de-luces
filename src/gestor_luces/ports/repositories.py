@@ -66,6 +66,10 @@ class LightController(Protocol):
         """
         ...
 
+    def close(self) -> None:
+        """Libera los recursos de red (sockets reutilizados) asociados al controlador."""
+        ...
+
 
 @runtime_checkable
 class BulbRepository(Protocol):
@@ -110,6 +114,14 @@ class SettingsRepository(Protocol):
 class ScreenSampler(Protocol):
     """Puerto para muestrear el color predominante de la pantalla (modo Ambilight)."""
 
+    def sample_frame(
+        self,
+        monitor_index: int = 1,
+        mode: str = "vibrant",
+    ) -> tuple[Color, int]:
+        """Captura el monitor solicitado y devuelve `(Color, brillo_sugerido_10_a_100)`."""
+        ...
+
     def sample_average_color(self, monitor_index: int = 1, mode: str = "average") -> Color:
         """Captura una version reducida del monitor indicado y devuelve su color representativo."""
         ...
@@ -118,18 +130,32 @@ class ScreenSampler(Protocol):
         """Devuelve la lista de monitores disponibles para el muestreo de pantalla."""
         ...
 
+    def close(self) -> None:
+        """Libera los recursos o caches asociados al muestreador de pantalla."""
+        ...
+
 
 @runtime_checkable
 class AudioSampler(Protocol):
-    """Puerto para analizar el audio del sistema en tiempo real (modo Musica).
+    """Puerto para analizar el audio del sistema en tiempo real (modo Musica)."""
 
-    Ademas de `sample_audio_metrics`, las implementaciones concretas como
-    `WasapiLoopbackSampler` pueden exponer opcionalmente:
-    - `sample_frame(device_index=None, palette_mode="spectrum", sensitivity=1.0) -> dict[str, Any]`
-    - `list_audio_devices() -> list[dict[str, Any]]`
-    - `close() -> None`
-    """
+    def sample_frame(
+        self,
+        device_index: int | None = None,
+        palette_mode: str = "spectrum",
+        sensitivity: float = 1.0,
+    ) -> dict[str, Any]:
+        """Extrae las metricas espectrales y cromaticas de la ventana de audio actual."""
+        ...
 
     def sample_audio_metrics(self) -> tuple[float, Color]:
         """Analiza una ventana de audio y devuelve (energia_normalizada_0_a_1, color_espectral)."""
+        ...
+
+    def list_audio_devices(self) -> list[dict[str, Any]]:
+        """Devuelve la lista de dispositivos de captura de audio disponibles."""
+        ...
+
+    def close(self) -> None:
+        """Cierra de forma segura el flujo de captura de audio activo."""
         ...

@@ -9,6 +9,7 @@ multiples focos en simultaneo de forma concurrente con asyncio.gather.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import ipaddress
 from typing import Any
 from uuid import uuid4
@@ -83,6 +84,8 @@ class LightControlService:
         audio_sampler: AudioSampler | None = None,
         music_manager: MusicSyncStreamManager | None = None,
         settings_repository: SettingsRepository | None = None,
+        screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
+        audio_sampler_factory: Callable[[], AudioSampler] | None = None,
     ) -> None:
         self._controller = controller
         self._bulb_repo = bulb_repository
@@ -91,8 +94,10 @@ class LightControlService:
         self._rate_limiter = rate_limiter or StreamRateLimiter()
         self._sleep_timer = sleep_timer or SleepTimerManager()
         self._screen_sampler = screen_sampler
+        self._screen_sampler_factory = screen_sampler_factory
         self._ambilight = ambilight_manager or AmbilightStreamManager(sampler=screen_sampler)
         self._audio_sampler = audio_sampler
+        self._audio_sampler_factory = audio_sampler_factory
         self._music_sync = music_manager or MusicSyncStreamManager(sampler=audio_sampler)
         self._bulbs: dict[str, Bulb] = {}
         self._selected_ips: list[str] = []
@@ -635,12 +640,10 @@ class LightControlService:
         """Consulta el estado actual del temporizador de apagado."""
         return dict(self._sleep_timer.get_status())
 
-    def _ensure_screen_sampler(self) -> ScreenSampler:
-        """Obtiene el adaptador de pantalla inyectado o instancia el adaptador por defecto."""
-        if self._screen_sampler is None:
-            from gestor_luces.adapters.ambilight.mss_sampler import MssScreenSampler
-
-            self._screen_sampler = MssScreenSampler()
+    def _ensure_screen_sampler(self) -> ScreenSampler | None:
+        """Obtiene el adaptador de pantalla inyectado o lo instancia mediante la fabrica provista."""
+        if self._screen_sampler is None and self._screen_sampler_factory is not None:
+            self._screen_sampler = self._screen_sampler_factory()
             self._ambilight.set_sampler(self._screen_sampler)
         return self._screen_sampler
 
@@ -698,12 +701,10 @@ class LightControlService:
         """Devuelve el estado actual de la sincronizacion Ambilight."""
         return dict(self._ambilight.get_status())
 
-    def _ensure_audio_sampler(self) -> AudioSampler:
-        """Obtiene el adaptador de audio inyectado o instancia el adaptador WASAPI por defecto."""
-        if self._audio_sampler is None:
-            from gestor_luces.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
-
-            self._audio_sampler = WasapiLoopbackSampler()
+    def _ensure_audio_sampler(self) -> AudioSampler | None:
+        """Obtiene el adaptador de audio inyectado o lo instancia mediante la fabrica provista."""
+        if self._audio_sampler is None and self._audio_sampler_factory is not None:
+            self._audio_sampler = self._audio_sampler_factory()
             self._music_sync.set_sampler(self._audio_sampler)
         return self._audio_sampler
 
@@ -774,11 +775,15 @@ class LightControlService:
         return dict(self._music_sync.get_status())
 
     def close_audio_sampler(self) -> None:
-        """Libera de forma segura los recursos del dispositivo WASAPI y del controlador UDP."""
+        """Libera de forma segura los recursos de los muestreadores y del controlador UDP."""
         if self._audio_sampler is not None:
             close_fn = getattr(self._audio_sampler, "close", None)
             if callable(close_fn):
                 close_fn()
+        if self._screen_sampler is not None:
+            screen_close = getattr(self._screen_sampler, "close", None)
+            if callable(screen_close):
+                screen_close()
         ctrl_close = getattr(self._controller, "close", None)
         if callable(ctrl_close):
             ctrl_close()

@@ -60,7 +60,7 @@ class MusicSyncStreamManager:
     def start(
         self,
         *,
-        sampler: AudioSampler,
+        sampler: AudioSampler | None = None,
         target_ips: list[str],
         on_frame: Callable[[Color, int, list[str]], Awaitable[bool]],
         palette_mode: str = "spectrum",

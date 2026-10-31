@@ -189,3 +189,7 @@ class MssScreenSampler:
         """Cumple el contrato `ScreenSampler` devolviendo el color extraido de la pantalla."""
         color, _ = self.sample_frame(monitor_index=monitor_index, mode=mode)
         return color
+
+    def close(self) -> None:
+        """Limpia la cache de monitores del muestreador de pantalla."""
+        self._cached_monitors = None

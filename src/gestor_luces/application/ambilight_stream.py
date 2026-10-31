@@ -56,7 +56,7 @@ class AmbilightStreamManager:
     def start(
         self,
         *,
-        sampler: ScreenSampler,
+        sampler: ScreenSampler | None = None,
         target_ips: list[str],
         on_frame: Callable[[Color, int, list[str]], Awaitable[bool]],
         monitor_index: int = 1,

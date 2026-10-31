@@ -42,6 +42,8 @@ class WebviewBridge:
         # del objeto `js_api`, y un callback interno no debe ser invocable desde la vista.
         self._on_state_changed = on_state_changed
         self._shutdown_lock = threading.Lock()
+        self._monitors_cache: list[dict[str, Any]] | None = None
+        self._audio_devices_cache: list[dict[str, Any]] | None = None
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
         self._closed = False
@@ -75,21 +77,26 @@ class WebviewBridge:
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result(timeout=effective_timeout)
 
-    def _build_response(
+    def _collect_response_snapshot(
         self,
         ok: bool = True,
         error: str | None = None,
     ) -> dict[str, Any]:
-        """Construye un sobre JSON uniforme para sincronizar el estado de la vista JS."""
+        """Lee y serializa de forma atomica el estado del servicio para la vista JS."""
+        if self._monitors_cache is None:
+            self._monitors_cache = list(self._service.list_monitors())
+        if self._audio_devices_cache is None:
+            self._audio_devices_cache = list(self._service.list_audio_devices())
+
         bulbs = [bulb.to_dict() for bulb in self._service.list_bulbs()]
         selected_ips = self._service.get_target_ips()
         scenes = [scene.to_dict() for scene in list_builtin_scenes()]
         custom_scenes = [scene.to_dict() for scene in self._service.list_custom_scenes()]
         sleep_timer = self._service.get_sleep_timer_status()
         ambilight = self._service.get_ambilight_status()
-        monitors = self._service.list_monitors()
+        monitors = list(self._monitors_cache)
         music_sync = self._service.get_music_sync_status()
-        audio_devices = self._service.list_audio_devices()
+        audio_devices = list(self._audio_devices_cache)
         language = self._service.get_language()
         return {
             "ok": ok,
@@ -105,6 +112,27 @@ class WebviewBridge:
             "audio_devices": audio_devices,
             "error": error,
         }
+
+    def _build_response(
+        self,
+        ok: bool = True,
+        error: str | None = None,
+    ) -> dict[str, Any]:
+        """Construye un sobre JSON uniforme sincronizado con el bucle de eventos asincrono."""
+        if (
+            threading.current_thread() is self._thread
+            or self._closed
+            or not self._loop.is_running()
+        ):
+            return self._collect_response_snapshot(ok=ok, error=error)
+
+        async def _snapshot() -> dict[str, Any]:
+            return self._collect_response_snapshot(ok=ok, error=error)
+
+        try:
+            return self._run_async(_snapshot(), timeout=3.0)
+        except Exception:
+            return self._collect_response_snapshot(ok=ok, error=error)
 
     def _success_response(self) -> dict[str, Any]:
         """Notifica el cambio de estado a observadores externos y devuelve el sobre exitoso."""
@@ -196,10 +224,13 @@ class WebviewBridge:
         rapida inicial para poblar la consola automaticamente al abrir la ventana.
         """
         try:
-            if not self._service.list_bulbs():
-                self._run_async(self._service.discover_bulbs(wait_time=1.8), timeout=15.0)
-            else:
-                self._run_async(self._service.refresh_states(), timeout=6.0)
+            async def _init() -> None:
+                if not self._service.list_bulbs():
+                    await self._service.discover_bulbs(wait_time=1.8)
+                else:
+                    await self._service.refresh_states()
+
+            self._run_async(_init(), timeout=15.0)
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
@@ -281,9 +312,12 @@ class WebviewBridge:
     def refresh_states(self) -> dict[str, Any]:
         """Consulta el estado real (getPilot) de todos los focos registrados."""
         try:
-            all_ips = [b.ip for b in self._service.list_bulbs()]
-            if all_ips:
-                self._run_async(self._service.refresh_states(ips=all_ips), timeout=6.0)
+            async def _refresh() -> None:
+                all_ips = [b.ip for b in self._service.list_bulbs()]
+                if all_ips:
+                    await self._service.refresh_states(ips=all_ips)
+
+            self._run_async(_refresh(), timeout=6.0)
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
