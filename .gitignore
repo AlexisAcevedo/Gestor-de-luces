@@ -27,11 +27,13 @@ data/
 *.key
 *.pem
 
-# AI agent configuration (local only)
+# AI agent configuration and local design specs (local only)
 .agent/
 .agents/
 _agent/
 _agents/
+.worktrees/
+docs/ui_redesign_spec*.md
 
 # Editors and OS
 .vscode/
