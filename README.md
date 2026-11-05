@@ -12,7 +12,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 - Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
-- Fully Offline Testable: Suite of 99 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
+- Fully Offline Testable: Suite of 100 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
 
 ---
 
@@ -304,7 +304,7 @@ pytest
 
 Expected output:
 ```
-99 passed in ~2.5s
+100 passed in ~2.5s
 ```
 
 To run static security analysis and dependency vulnerability checks (using `requirements-dev.txt`):

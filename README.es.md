@@ -12,7 +12,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 - Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
-- Pruebas 100% Fuera de Línea: Suite de 99 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+- Pruebas 100% Fuera de Línea: Suite de 100 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
 
 ---
 
@@ -304,7 +304,7 @@ pytest
 
 Resultado esperado:
 ```
-99 passed in ~2.5s
+100 passed in ~2.5s
 ```
 
 Para ejecutar el análisis estático de seguridad y la auditoría de vulnerabilidades en dependencias (usando `requirements-dev.txt`):

@@ -160,3 +160,29 @@ def test_fit_native_window_height_skips_when_disposed_or_handle_not_created() ->
     )
     assert _fit_native_window_height(disposed_window, 700, platform="win32") is False
     assert _fit_native_window_height(uncreated_window, 700, platform="win32") is False
+
+
+def test_scenes_grid_prevents_css_grid_row_collapse() -> None:
+    from pathlib import Path
+    import re
+
+    styles_path = Path(__file__).resolve().parent.parent / "ui" / "styles.css"
+    css_text = styles_path.read_text(encoding="utf-8")
+
+    scenes_grid_match = re.search(r"\.scenes-grid\s*\{([^}]*)\}", css_text)
+    assert scenes_grid_match is not None
+    scenes_grid_body = scenes_grid_match.group(1)
+    assert "grid-auto-rows: max-content" in scenes_grid_body
+    assert "align-content: start" in scenes_grid_body
+
+    scene_card_match = re.search(r"\.scene-card\s*\{([^}]*)\}", css_text)
+    assert scene_card_match is not None
+    scene_card_body = scene_card_match.group(1)
+    assert "min-height: 58px" in scene_card_body
+    assert "overflow: clip" in scene_card_body
+    assert "overflow: hidden" not in scene_card_body
+
+    custom_grid_match = re.search(r"\.custom-scenes-grid\s*\{([^}]*)\}", css_text)
+    assert custom_grid_match is not None
+    assert "grid-auto-rows: max-content" in custom_grid_match.group(1)
+
