@@ -56,19 +56,19 @@ def test_json_settings_repository_persists_and_tolerates_corrupt_files(
 ) -> None:
     """Comprueba la persistencia atomica del idioma y el respaldo seguro a `en`."""
     repo = JsonSettingsRepository(data_dir=tmp_path)
-    assert repo.load_settings() == {"language": "en"}
+    assert repo.load_settings() == {"language": "en", "theme": "architectural-stone"}
 
     repo.save_settings({"language": "es"})
     assert repo.file_path.is_file()
-    assert repo.load_settings() == {"language": "es"}
+    assert repo.load_settings() == {"language": "es", "theme": "architectural-stone"}
 
     # Un codigo no soportado al guardar o leer cae de forma segura a "en"
     repo.file_path.write_text('{"language": "fr"}', encoding="utf-8")
-    assert repo.load_settings() == {"language": "en"}
+    assert repo.load_settings() == {"language": "en", "theme": "architectural-stone"}
 
     # Un archivo JSON corrupto no bloquea el arranque y retorna "en"
     repo.file_path.write_text("{corrupt-json", encoding="utf-8")
-    assert repo.load_settings() == {"language": "en"}
+    assert repo.load_settings() == {"language": "en", "theme": "architectural-stone"}
 
 
 def test_service_language_persistence_and_validation(tmp_path: Path) -> None:
@@ -200,6 +200,16 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     i18n_js = (ui_dir / "i18n.js").read_text(encoding="utf-8")
     index_html = (ui_dir / "index.html").read_text(encoding="utf-8")
     app_js = (ui_dir / "app.js").read_text(encoding="utf-8")
+    themes_css = (ui_dir / "themes.css").read_text(encoding="utf-8")
+
+    assert 'html[data-theme="architectural-stone"]' in themes_css
+    assert 'html[data-theme="atmospheric-dark"]' in themes_css
+    assert 'data-theme="architectural-stone"' in index_html
+    assert 'id="theme-btn-stone"' in index_html
+    assert 'id="theme-btn-dark"' in index_html
+    assert '"theme.switcherAria"' in i18n_js
+    assert '"theme.stoneShort"' in i18n_js
+    assert '"theme.darkShort"' in i18n_js
 
     assert "window.I18N" in i18n_js
     assert '"rail.scanBtn": "Scan network"' in i18n_js

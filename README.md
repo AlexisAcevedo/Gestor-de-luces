@@ -12,7 +12,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 - Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
-- Fully Offline Testable: Suite of 73 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
+- Fully Offline Testable: Suite of 99 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
 
 ---
 
@@ -45,14 +45,15 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 6. Progressive Sleep Timer:
    - Configurable countdown timer (1 to 120 minutes) with progressive brightness dimming down to zero before powering off.
 
-7. Bilingual Desktop Console:
+7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, System Tray and the window menu bar.
+   - Runtime theme switching between **Architectural Stone** (default Light theme inspired by Braun/Lutron hardware keypads) and **Atmospheric Dark** (frosted glass and dynamic `oklab` photometric halo), persisted in `settings.json` with automatic Windows DWM titlebar synchronization.
 
 8. Windows Desktop Integration:
-   - Custom light-bulb icon for the window, taskbar, tray and executable.
+   - Compact widget geometry (`620x760` baseline with automatic content-driven height adjustment) and custom light-bulb icon for the window, taskbar, tray and executable.
    - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About).
    - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
-   - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one.
+   - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one (with `--multi-instance` override for side-by-side diagnostics).
    - Distributed as a per-user installer or a portable ZIP (see [Packaging & Distribution](#packaging--distribution)).
 
 ---
@@ -141,6 +142,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 ├── src/
 │   └── gestor_luces/
 │       ├── __init__.py
+│       ├── __main__.py              # Package entrypoint (python -m gestor_luces)
 │       ├── main.py              # Composition root and application entrypoint
 │       ├── cli.py               # Low-level network probe and CLI diagnostics
 │       ├── resources.py         # Asset/version resolution (dev and PyInstaller-frozen)
@@ -166,7 +168,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           ├── tray/            # Pystray tray controller and shared bulb icon renderer
 │           ├── system/          # Windows autostart (registry) and single-instance guard
 │           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
-├── tests/                       # Automated test suite (73 tests)
+├── tests/                       # Automated test suite (99 tests)
 │   ├── simulators/              # In-memory WiZ UDP server simulator
 │   ├── test_domain.py           # Domain validation tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
@@ -178,10 +180,13 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   ├── test_music_sync.py       # WASAPI and FFT DSP tests
 │   ├── test_i18n.py             # Bilingual localization tests
 │   ├── test_app_shell.py        # Menu model, autostart, --minimized and asset tests
-│   └── test_security_hardening.py # Security and performance regression tests
+│   ├── test_window_geometry.py  # Compact window sizing and work-area clamping tests
+│   ├── test_window_fit.py       # Content-driven dynamic height adjustment and DWM chrome tests
+│   └── test_security_hardening.py # Security, performance, and hexagonal boundary/concurrency regression tests
 └── ui/                          # Web frontend rendered inside WebView2
     ├── index.html               # Main console markup
-    ├── styles.css               # Architectural photometric styling (Dark theme)
+    ├── themes.css               # 3-tier design tokens & theme overrides (Architectural Stone & Atmospheric Dark)
+    ├── styles.css               # Tokenized compact controller layout & components
     ├── app.js                   # Reactive frontend state controller
     └── i18n.js                  # English / Spanish localization dictionaries
 ```
@@ -245,12 +250,15 @@ No Python installation is required. Download the latest release from [**GitHub R
 Launch the desktop management console:
 
 ```bash
+python -m gestor_luces
+# or:
 python -m gestor_luces.main
 ```
 
 Supported CLI flags for `main.py`:
 - `--debug`: Enable pywebview developer tools and inspector.
 - `--minimized`: Start hidden in the system tray (this is the flag registered by "Start with Windows").
+- `--multi-instance`: Bypass the single-instance guard to allow running multiple instances concurrently.
 - `--smoke-test`: Initialize the composition root, verify UI and icon assets without opening native GUI windows, and exit with code 0.
 
 ### 2. Low-Level Network CLI Mode
@@ -296,7 +304,7 @@ pytest
 
 Expected output:
 ```
-73 passed in ~2.0s
+99 passed in ~2.5s
 ```
 
 To run static security analysis and dependency vulnerability checks (using `requirements-dev.txt`):

@@ -23,6 +23,9 @@ from gestor_luces.ports.autostart import AutostartManager
 
 _LOGGER = logging.getLogger(__name__)
 
+FIT_WINDOW_MIN_PX = 200
+FIT_WINDOW_MAX_PX = 4000
+
 
 class WebviewBridge:
     """Adaptador primario que expone los casos de uso de iluminacion a la UI HTML/JS."""
@@ -33,10 +36,12 @@ class WebviewBridge:
         default_timeout: float = 12.0,
         on_state_changed: Callable[[], None] | None = None,
         autostart: AutostartManager | None = None,
+        fit_window_height: Callable[[int], bool] | None = None,
     ) -> None:
         self._service = service
         # Private on purpose (see `_on_state_changed`): never exposed to JavaScript.
         self._autostart = autostart
+        self._fit_window_height = fit_window_height
         self._default_timeout = default_timeout
         # Atributo privado a proposito: PyWebView expone a JavaScript todo atributo publico
         # del objeto `js_api`, y un callback interno no debe ser invocable desde la vista.
@@ -98,9 +103,11 @@ class WebviewBridge:
         music_sync = self._service.get_music_sync_status()
         audio_devices = list(self._audio_devices_cache)
         language = self._service.get_language()
+        theme = self._service.get_theme()
         return {
             "ok": ok,
             "language": language,
+            "theme": theme,
             "bulbs": bulbs,
             "selected_ips": selected_ips,
             "scenes": scenes,
@@ -215,6 +222,7 @@ class WebviewBridge:
             ],
             "sleep_timer_active": bool(self._service.get_sleep_timer_status().get("active")),
             "language": self._service.get_language(),
+            "theme": self._service.get_theme(),
         }
 
     def get_initial_state(self) -> dict[str, Any]:
@@ -245,6 +253,41 @@ class WebviewBridge:
             return self._success_response()
         except Exception as exc:
             return self._build_response(ok=False, error=str(exc))
+
+    def set_theme(self, theme: str) -> dict[str, Any]:
+        """Cambia y persiste el tema visual activo (`architectural-stone` o `atmospheric-dark`)."""
+        if not isinstance(theme, str):
+            return self._build_response(ok=False, error="Theme must be a string.")
+        try:
+            async def _apply() -> None:
+                self._service.set_theme(theme)
+
+            self._run_async(_apply())
+            return self._success_response()
+        except Exception as exc:
+            return self._build_response(ok=False, error=str(exc))
+
+    def set_fit_window_callback(self, callback: Callable[[int], bool] | None) -> None:
+        """Registra o reemplaza el callback nativo para auto-ajustar la altura de la ventana."""
+        self._fit_window_height = callback
+
+    def fit_window_height(self, content_px: int) -> dict[str, Any]:
+        """Solicita al host redimensionar la ventana para que el alto util coincida con `content_px`."""
+        if isinstance(content_px, bool) or not isinstance(content_px, int):
+            return {"ok": False, "error": "content_px must be an integer."}
+        if not FIT_WINDOW_MIN_PX <= content_px <= FIT_WINDOW_MAX_PX:
+            return {
+                "ok": False,
+                "error": f"content_px must be between {FIT_WINDOW_MIN_PX} and {FIT_WINDOW_MAX_PX}.",
+            }
+        callback = getattr(self, "_fit_window_height", None)
+        if callback is None:
+            return {"ok": False, "error": "Window fit callback is not configured."}
+        try:
+            return {"ok": bool(callback(content_px))}
+        except Exception as exc:
+            _LOGGER.debug("Window fit callback failed.", exc_info=True)
+            return {"ok": False, "error": str(exc)}
 
     def get_autostart(self) -> dict[str, Any]:
         """Report whether the app is registered to start with the operating system."""
@@ -662,7 +705,12 @@ class WebviewBridge:
 
 
 JS_API_EXCLUDED: frozenset[str] = frozenset(
-    {"set_state_change_listener", "shutdown", "get_tray_snapshot"}
+    {
+        "set_state_change_listener",
+        "set_fit_window_callback",
+        "shutdown",
+        "get_tray_snapshot",
+    }
 )
 
 
@@ -674,9 +722,36 @@ class JsApi:
     para que el contenido web no pueda cerrar la app ni manipular la bandeja.
     """
 
-    def __init__(self, bridge: WebviewBridge) -> None:
+    def __init__(
+        self,
+        bridge: WebviewBridge,
+        fit_window: Callable[[int], bool] | None = None,
+    ) -> None:
+        self._bridge = bridge
+        self._fit_window = fit_window
         for name in dir(WebviewBridge):
-            if name.startswith("_") or name in JS_API_EXCLUDED:
+            if name.startswith("_") or name in JS_API_EXCLUDED or name == "fit_window_height":
                 continue
             if callable(getattr(WebviewBridge, name, None)):
                 setattr(self, name, getattr(bridge, name))
+
+    def fit_window_height(self, content_px: int) -> dict[str, Any]:
+        """Solicita al host redimensionar la ventana sin exponer el handle nativo a JavaScript."""
+        if isinstance(content_px, bool) or not isinstance(content_px, int):
+            return {"ok": False, "error": "content_px must be an integer."}
+        if not FIT_WINDOW_MIN_PX <= content_px <= FIT_WINDOW_MAX_PX:
+            return {
+                "ok": False,
+                "error": f"content_px must be between {FIT_WINDOW_MIN_PX} and {FIT_WINDOW_MAX_PX}.",
+            }
+        callback = getattr(self, "_fit_window", None)
+        if callback is not None:
+            try:
+                return {"ok": bool(callback(content_px))}
+            except Exception as exc:
+                _LOGGER.debug("Window fit callback failed.", exc_info=True)
+                return {"ok": False, "error": str(exc)}
+        bridge = getattr(self, "_bridge", None)
+        if bridge is not None and hasattr(bridge, "fit_window_height"):
+            return bridge.fit_window_height(content_px)
+        return {"ok": False, "error": "Window fit callback is not configured."}

@@ -1,139 +1,209 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="architectural-stone">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data:; font-src 'self' file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>WiZ Architectural Lighting Console</title>
+  <link rel="stylesheet" href="themes.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="toast-region" id="toast-region" role="region" aria-live="polite" aria-relevant="additions" data-i18n-aria-label="toast.regionLabel" aria-label="Notifications"></div>
-  <div class="console-shell" id="console-shell" data-power="off">
-    <!-- Left Fixture Rail: Network discovery, manual IP entry, and multi-bulb selection -->
-    <aside class="fixture-rail" aria-label="Lighting fixtures" data-i18n-aria-label="rail.ariaLabel">
-      <header class="rail-header">
-        <div class="rail-header-top">
-          <div class="brand-lockup">
-            <span class="aperture-dot" aria-hidden="true"></span>
-            <div>
-              <h1 class="console-title" data-i18n="rail.title">Photometric Console</h1>
-              <p class="console-subtitle" data-i18n="rail.subtitle">Local UDP 38899 Direct Control</p>
-            </div>
-          </div>
-
-          <div
-            class="lang-switcher"
-            role="group"
-            aria-label="Interface language"
-            data-i18n-aria-label="rail.langGroupAria"
-          >
-            <button
-              type="button"
-              class="lang-btn"
-              id="lang-btn-en"
-              data-lang="en"
-              aria-pressed="true"
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              class="lang-btn"
-              id="lang-btn-es"
-              data-lang="es"
-              aria-pressed="false"
-            >
-              ES
-            </button>
-          </div>
-        </div>
-
-        <div class="rail-actions">
-          <button type="button" class="btn btn-secondary" id="scan-network-btn">
-            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M3.5 10a6.5 6.5 0 0 1 11.28-4.42M16.5 10a6.5 6.5 0 0 1-11.28 4.42" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-              <path d="M15 3v3h-3M5 17v-3h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span id="scan-btn-label" data-i18n="rail.scanBtn">Scan network</span>
-          </button>
-
-          <button type="button" class="btn btn-ghost" id="open-add-dialog-btn">
-            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            </svg>
-            <span data-i18n="rail.addByIpBtn">Add by IP</span>
-          </button>
-        </div>
-
-        <div class="selection-bar">
-          <label class="checkbox-control" for="select-all-fixtures">
-            <input type="checkbox" id="select-all-fixtures" checked>
-            <span data-i18n="rail.selectAll">Select all fixtures</span>
-          </label>
-          <span class="fixture-count-badge" id="fixture-count-badge" data-i18n="rail.onlineZero">0 online</span>
-        </div>
-      </header>
-
-      <div
-        class="fixture-list"
-        id="fixture-list"
-        role="region"
-        aria-label="Registered fixtures"
-        data-i18n-aria-label="rail.fixtureListAria"
+  <div class="console-shell" id="console-shell" data-power="off" data-look="architectural-stone">
+    <!-- Top Compact Controller Bar: Fixture Pill Drawer Trigger + Theme Switcher + Quick Language Switcher -->
+    <header class="compact-topbar">
+      <button
+        type="button"
+        class="fixture-pill-trigger"
+        id="fixture-drawer-btn"
+        aria-haspopup="dialog"
+        aria-controls="fixture-drawer"
+        aria-expanded="false"
+        aria-label="Open fixtures and network drawer"
+        data-i18n-aria-label="rail.openDrawerAria"
       >
-        <!-- Populated dynamically by ui/app.js -->
-      </div>
+        <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="status-dot" id="drawer-pill-dot" aria-hidden="true"></span>
+        <span class="drawer-pill-label" id="drawer-pill-label" data-i18n="rail.title">Photometric Console</span>
+        <span class="fixture-count-badge" id="fixture-count-badge" data-i18n="rail.onlineZero">0 online</span>
+      </button>
 
-      <footer class="rail-footer">
-        <div class="sync-controls">
+      <div class="topbar-actions stage-top-actions">
+        <div
+          class="theme-switcher"
+          role="group"
+          aria-label="Interface theme"
+          data-i18n-aria="theme.switcherAria"
+          data-i18n-aria-label="theme.switcherAria"
+        >
           <button
             type="button"
-            class="btn btn-compact"
-            id="sync-now-btn"
-            title="Query getPilot state from all bulbs"
-            data-i18n-title="rail.syncNowTitle"
+            class="theme-btn active"
+            id="theme-btn-stone"
+            data-theme-value="architectural-stone"
+            aria-pressed="true"
+            title="Architectural Stone (Light)"
+            data-i18n-title="theme.stoneTooltip"
           >
-            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M10 3.5a6.5 6.5 0 1 0 6.13 4.33" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              <path d="M16.5 3.5v4.3h-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span data-i18n="rail.syncNowBtn">Sync now</span>
+            <span data-i18n="theme.stoneShort">Stone</span>
           </button>
-
-          <label class="toggle-pill" for="auto-sync-toggle">
-            <input type="checkbox" id="auto-sync-toggle">
-            <span data-i18n="rail.autoSync">Auto-sync (3s)</span>
-          </label>
-
           <button
             type="button"
-            class="btn btn-compact"
-            id="shortcuts-help-btn"
-            aria-keyshortcuts="?"
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts (?)"
-            data-i18n-aria-label="shortcuts.openLabel"
-            data-i18n-title="shortcuts.openTitle"
-          >?</button>
+            class="theme-btn"
+            id="theme-btn-dark"
+            data-theme-value="atmospheric-dark"
+            aria-pressed="false"
+            title="Atmospheric Dark"
+            data-i18n-title="theme.darkTooltip"
+          >
+            <span data-i18n="theme.darkShort">Dark</span>
+          </button>
         </div>
-        <p class="status-banner" id="status-banner" role="status" aria-live="polite" data-i18n="rail.statusReady">
-          Ready for local UDP telemetry.
-        </p>
-      </footer>
-    </aside>
+
+        <div
+          class="lang-switcher"
+          role="group"
+          aria-label="Interface language"
+          data-i18n-aria-label="rail.langGroupAria"
+        >
+          <button
+            type="button"
+            class="lang-btn"
+            id="lang-btn-en"
+            data-lang="en"
+            aria-pressed="true"
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            class="lang-btn"
+            id="lang-btn-es"
+            data-lang="es"
+            aria-pressed="false"
+          >
+            ES
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Slide-Over Fixture Drawer: Network discovery, manual IP entry, and multi-bulb selection -->
+    <dialog id="fixture-drawer" class="fixture-drawer" closedby="any" aria-label="Lighting fixtures" data-i18n-aria-label="rail.ariaLabel">
+      <aside class="fixture-rail" aria-label="Lighting fixtures" data-i18n-aria-label="rail.ariaLabel">
+        <header class="rail-header">
+          <div class="rail-header-top">
+            <div class="brand-lockup">
+              <span class="aperture-dot" aria-hidden="true"></span>
+              <div>
+                <h1 class="console-title" data-i18n="rail.title">Photometric Console</h1>
+                <p class="console-subtitle" data-i18n="rail.subtitle">Local UDP 38899 Direct Control</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-compact btn-ghost"
+              id="close-fixture-drawer-btn"
+              data-close-dialog="fixture-drawer"
+              aria-label="Close fixtures drawer"
+              data-i18n-aria-label="rail.closeDrawerAria"
+            >
+              <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="rail-actions">
+            <button type="button" class="btn btn-secondary" id="scan-network-btn">
+              <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3.5 10a6.5 6.5 0 0 1 11.28-4.42M16.5 10a6.5 6.5 0 0 1-11.28 4.42" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <path d="M15 3v3h-3M5 17v-3h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span id="scan-btn-label" data-i18n="rail.scanBtn">Scan network</span>
+            </button>
+
+            <button type="button" class="btn btn-ghost" id="open-add-dialog-btn">
+              <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+              <span data-i18n="rail.addByIpBtn">Add by IP</span>
+            </button>
+          </div>
+
+          <div class="selection-bar">
+            <label class="checkbox-control" for="select-all-fixtures">
+              <input type="checkbox" id="select-all-fixtures" checked>
+              <span data-i18n="rail.selectAll">Select all fixtures</span>
+            </label>
+          </div>
+        </header>
+
+        <div
+          class="fixture-list"
+          id="fixture-list"
+          role="region"
+          aria-label="Registered fixtures"
+          data-i18n-aria-label="rail.fixtureListAria"
+        >
+          <!-- Populated dynamically by ui/app.js -->
+        </div>
+
+        <footer class="rail-footer">
+          <div class="sync-controls">
+            <button
+              type="button"
+              class="btn btn-compact"
+              id="sync-now-btn"
+              title="Query getPilot state from all bulbs"
+              data-i18n-title="rail.syncNowTitle"
+            >
+              <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 3.5a6.5 6.5 0 1 0 6.13 4.33" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M16.5 3.5v4.3h-4.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span data-i18n="rail.syncNowBtn">Sync now</span>
+            </button>
+
+            <label class="toggle-pill" for="auto-sync-toggle">
+              <input type="checkbox" id="auto-sync-toggle">
+              <span data-i18n="rail.autoSync">Auto-sync (3s)</span>
+            </label>
+
+            <button
+              type="button"
+              class="btn btn-compact"
+              id="shortcuts-help-btn"
+              aria-keyshortcuts="?"
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+              data-i18n-aria-label="shortcuts.openLabel"
+              data-i18n-title="shortcuts.openTitle"
+            >?</button>
+          </div>
+          <p class="status-banner" id="status-banner" role="status" aria-live="polite" data-i18n="rail.statusReady">
+            Ready for local UDP telemetry.
+          </p>
+        </footer>
+      </aside>
+    </dialog>
 
     <!-- Central Photometric Stage: Live state readout, dimming, and mode panels -->
     <main class="photometric-stage" aria-label="Light parameter controls" data-i18n-aria-label="stage.ariaLabel">
-      <!-- Live Photometric Header -->
+      <!-- Live Photometric Header (Primary Hero Control) -->
       <header class="stage-header">
         <div class="stage-identity">
           <div class="photometric-aperture" id="photometric-aperture" aria-hidden="true"></div>
           <div>
             <p class="target-summary" id="target-summary" data-i18n="stage.noFixture">No fixture selected</p>
             <div class="readout-row">
-              <span class="state-pill" id="live-state-pill" data-i18n="stage.stateOff">OFF</span>
-              <span class="telemetry-meta" id="telemetry-meta">UDP 38899</span>
+              <span class="state-pill" id="live-state-pill" data-i18n="stage.stateOff">Off</span>
+              <span class="telemetry-meta" id="telemetry-meta"></span>
             </div>
           </div>
         </div>
@@ -141,7 +211,7 @@
         <div class="master-power-group">
           <button
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-secondary btn-compact"
             id="quick-save-preset-btn"
             title="Save current bulb state as a custom preset"
             data-i18n-title="stage.saveStateTitle"
@@ -162,7 +232,7 @@
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M10 2.75v6.5M6.1 4.85a6.5 6.5 0 1 0 7.8 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
             </svg>
-            <span id="master-power-label" data-i18n="stage.turnOn">Turn ON</span>
+            <span id="master-power-label" data-i18n="stage.turnOn">Turn on</span>
           </button>
         </div>
       </header>
@@ -175,7 +245,7 @@
               <circle cx="10" cy="10" r="3.4" stroke="currentColor" stroke-width="1.5"/>
               <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
-            <h2 id="dimming-heading" class="well-title" data-i18n="dimming.title">Luminous Flux (Dimming)</h2>
+            <h2 id="dimming-heading" class="well-title" data-i18n="dimming.title">Brightness</h2>
           </div>
           <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
         </div>
@@ -203,40 +273,40 @@
         </div>
       </section>
 
-      <!-- Mode Switcher Tabs -->
+      <!-- Quiet Segmented Mode Dock (Kelvin / White First) -->
       <div class="mode-tabs" role="tablist" aria-label="Lighting emission mode" data-i18n-aria-label="tabs.ariaLabel">
-        <button
-          type="button"
-          role="tab"
-          id="tab-btn-rgb"
-          class="mode-tab"
-          aria-selected="true"
-          aria-controls="panel-rgb"
-          tabindex="0"
-          data-mode="rgb"
-        >
-          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5"/>
-            <circle cx="10" cy="10" r="2.2" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
-          <span data-i18n="tabs.rgb">Chromatic (RGB)</span>
-        </button>
-
         <button
           type="button"
           role="tab"
           id="tab-btn-temperature"
           class="mode-tab"
-          aria-selected="false"
+          aria-selected="true"
           aria-controls="panel-temperature"
-          tabindex="-1"
+          tabindex="0"
           data-mode="temperature"
         >
           <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M10 3v10.5M7 6.5h6M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <circle cx="10" cy="15" r="2.5" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          <span data-i18n="tabs.temperature">White (Kelvin)</span>
+          <span data-i18n="tabs.temperature">White</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="tab-btn-rgb"
+          class="mode-tab"
+          aria-selected="false"
+          aria-controls="panel-rgb"
+          tabindex="-1"
+          data-mode="rgb"
+        >
+          <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="10" cy="10" r="2.2" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span data-i18n="tabs.rgb">Color</span>
         </button>
 
         <button
@@ -255,7 +325,7 @@
             <rect x="3" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
             <rect x="11" y="11" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          <span data-i18n="tabs.scene">WiZ Scenes (36)</span>
+          <span data-i18n="tabs.scene">Scenes</span>
         </button>
 
         <button
@@ -271,7 +341,7 @@
           <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v11.5L10 13.25 3.5 16.5V5A1.5 1.5 0 0 1 5 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
           </svg>
-          <span id="custom-tab-label" data-i18n="tabs.custom">Custom Presets</span>
+          <span id="custom-tab-label" data-i18n="tabs.custom">Presets</span>
         </button>
 
         <button
@@ -305,95 +375,17 @@
           <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M3.5 12.5v-5M7.5 15.5v-11M11.5 13.5v-7M15.5 16.5v-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           </svg>
-          <span data-i18n="tabs.music">Music Sync</span>
+          <span data-i18n="tabs.music">Music</span>
           <span class="tab-stream-dot" id="tab-music-dot" hidden aria-hidden="true"></span>
         </button>
       </div>
 
-      <!-- Panel 1: Chromatic RGB -->
-      <section
-        id="panel-rgb"
-        role="tabpanel"
-        aria-labelledby="tab-btn-rgb"
-        class="mode-panel"
-      >
-        <div class="rgb-workbench">
-          <div class="wheel-column">
-            <div class="wheel-frame">
-              <canvas
-                id="color-wheel-canvas"
-                width="240"
-                height="240"
-                aria-label="Interactive HSV color wheel"
-                data-i18n-aria-label="rgb.wheelAria"
-              ></canvas>
-              <div id="wheel-reticle" class="wheel-reticle" aria-hidden="true"></div>
-            </div>
-          </div>
-
-          <div class="rgb-controls-column">
-            <div class="channel-grid">
-              <div class="field-group">
-                <label for="input-r" data-i18n="rgb.redLabel">Red (0-255)</label>
-                <input type="number" id="input-r" min="0" max="255" value="255">
-              </div>
-              <div class="field-group">
-                <label for="input-g" data-i18n="rgb.greenLabel">Green (0-255)</label>
-                <input type="number" id="input-g" min="0" max="255" value="140">
-              </div>
-              <div class="field-group">
-                <label for="input-b" data-i18n="rgb.blueLabel">Blue (0-255)</label>
-                <input type="number" id="input-b" min="0" max="255" value="66">
-              </div>
-              <div class="field-group">
-                <label for="input-hex" data-i18n="rgb.hexLabel">Hex Code</label>
-                <div class="hex-input-row">
-                  <input type="text" id="input-hex" value="#ff8c42" maxlength="7" spellcheck="false">
-                  <button type="button" class="btn btn-primary" id="apply-rgb-btn" data-i18n="rgb.applyBtn">Apply RGB</button>
-                </div>
-              </div>
-            </div>
-
-            <details class="swatch-section" data-persist-open="swatches">
-              <summary class="section-caption" data-i18n="rgb.swatchesCaption">Reference Chromatic Swatches</summary>
-              <div class="swatch-grid" id="swatch-grid" role="group" aria-label="Curated RGB swatches" data-i18n-aria-label="rgb.swatchesAria">
-                <button type="button" class="color-swatch" data-r="255" data-g="94" data-b="58" style="--swatch-rgb: rgb(255, 94, 58)">
-                  <span class="swatch-dot" aria-hidden="true"></span>
-                  <span data-i18n="rgb.swatchSodium">Sodium Amber</span>
-                </button>
-                <button type="button" class="color-swatch" data-r="255" data-g="36" data-b="82" style="--swatch-rgb: rgb(255, 36, 82)">
-                  <span class="swatch-dot" aria-hidden="true"></span>
-                  <span data-i18n="rgb.swatchCrimson">Crimson Laser</span>
-                </button>
-                <button type="button" class="color-swatch" data-r="168" data-g="85" data-b="247" style="--swatch-rgb: rgb(168, 85, 247)">
-                  <span class="swatch-dot" aria-hidden="true"></span>
-                  <span data-i18n="rgb.swatchUltraviolet">Ultraviolet</span>
-                </button>
-                <button type="button" class="color-swatch" data-r="56" data-g="189" data-b="248" style="--swatch-rgb: rgb(56, 189, 248)">
-                  <span class="swatch-dot" aria-hidden="true"></span>
-                  <span data-i18n="rgb.swatchCerulean">Cerulean Sky</span>
-                </button>
-                <button type="button" class="color-swatch" data-r="16" data-g="185" data-b="129" style="--swatch-rgb: rgb(16, 185, 129)">
-                  <span class="swatch-dot" aria-hidden="true"></span>
-                  <span data-i18n="rgb.swatchMint">Phosphor Mint</span>
-                </button>
-                <button type="button" class="color-swatch" data-r="250" data-g="204" data-b="21" style="--swatch-rgb: rgb(250, 204, 21)">
-                  <span class="swatch-dot" aria-hidden="true"></span>
-                  <span data-i18n="rgb.swatchHalogen">Halogen Gold</span>
-                </button>
-              </div>
-            </details>
-          </div>
-        </div>
-      </section>
-
-      <!-- Panel 2: White Balance (Kelvin) -->
+      <!-- Panel 1 (Default Active): White Balance (Kelvin) -->
       <section
         id="panel-temperature"
         role="tabpanel"
         aria-labelledby="tab-btn-temperature"
         class="mode-panel"
-        hidden
       >
         <div class="control-well kelvin-well">
           <div class="well-header">
@@ -448,6 +440,87 @@
               <span class="kelvin-value">6500 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset6500">Cool Daylight</span>
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Chromatic RGB -->
+      <section
+        id="panel-rgb"
+        role="tabpanel"
+        aria-labelledby="tab-btn-rgb"
+        class="mode-panel"
+        hidden
+      >
+        <div class="rgb-workbench">
+          <div class="wheel-column">
+            <div class="wheel-frame">
+              <canvas
+                id="color-wheel-canvas"
+                width="240"
+                height="240"
+                aria-label="Interactive HSV color wheel"
+                data-i18n-aria-label="rgb.wheelAria"
+              ></canvas>
+              <div id="wheel-reticle" class="wheel-reticle" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <div class="rgb-controls-column">
+            <details class="swatch-section" data-persist-open="swatches" open>
+              <summary class="section-caption" data-i18n="rgb.swatchesCaption">Reference chromatic swatches</summary>
+              <div class="swatch-grid" id="swatch-grid" role="group" aria-label="Curated RGB swatches" data-i18n-aria-label="rgb.swatchesAria">
+                <button type="button" class="color-swatch" data-r="255" data-g="94" data-b="58">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span data-i18n="rgb.swatchSodium">Sodium Amber</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="255" data-g="36" data-b="82">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span data-i18n="rgb.swatchCrimson">Crimson Laser</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="168" data-g="85" data-b="247">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span data-i18n="rgb.swatchUltraviolet">Ultraviolet</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="56" data-g="189" data-b="248">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span data-i18n="rgb.swatchCerulean">Cerulean Sky</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="16" data-g="185" data-b="129">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span data-i18n="rgb.swatchMint">Phosphor Mint</span>
+                </button>
+                <button type="button" class="color-swatch" data-r="250" data-g="204" data-b="21">
+                  <span class="swatch-dot" aria-hidden="true"></span>
+                  <span data-i18n="rgb.swatchHalogen">Halogen Gold</span>
+                </button>
+              </div>
+            </details>
+
+            <details class="swatch-section rgb-manual-details" data-persist-open="rgb-manual">
+              <summary class="section-caption" data-i18n="rgb.manualCaption">Precision RGB &amp; hex values</summary>
+              <div class="channel-grid">
+                <div class="field-group">
+                  <label for="input-r" data-i18n="rgb.redLabel">Red (0-255)</label>
+                  <input type="number" id="input-r" min="0" max="255" value="255">
+                </div>
+                <div class="field-group">
+                  <label for="input-g" data-i18n="rgb.greenLabel">Green (0-255)</label>
+                  <input type="number" id="input-g" min="0" max="255" value="140">
+                </div>
+                <div class="field-group">
+                  <label for="input-b" data-i18n="rgb.blueLabel">Blue (0-255)</label>
+                  <input type="number" id="input-b" min="0" max="255" value="66">
+                </div>
+                <div class="field-group">
+                  <label for="input-hex" data-i18n="rgb.hexLabel">Hex code</label>
+                  <div class="hex-input-row">
+                    <input type="text" id="input-hex" value="#ff8c42" maxlength="7" spellcheck="false">
+                    <button type="button" class="btn btn-primary" id="apply-rgb-btn" data-i18n="rgb.applyBtn">Apply RGB</button>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </section>
@@ -615,33 +688,30 @@
               <div class="slider-scale-anchored" role="group" aria-label="EMA alpha presets">
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-0"
                   data-target-slider="ambilight-smoothing-slider"
                   data-value="0.15"
                   data-align="start"
-                  style="--pos: 0%"
                   data-i18n="ambi.scaleCinematic"
                 >
                   0.15 Cinematic
                 </button>
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-38"
                   data-target-slider="ambilight-smoothing-slider"
                   data-value="0.38"
                   data-align="center"
-                  style="--pos: 38.33%"
                   data-i18n="ambi.scaleBalanced"
                 >
                   0.38 Balanced
                 </button>
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-100"
                   data-target-slider="ambilight-smoothing-slider"
                   data-value="0.75"
                   data-align="end"
-                  style="--pos: 100%"
                   data-i18n="ambi.scaleFast"
                 >
                   0.75 Fast Response
@@ -815,33 +885,30 @@
               <div class="slider-scale-anchored" role="group" aria-label="Beat sensitivity presets">
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-0"
                   data-target-slider="music-sensitivity-slider"
                   data-value="0.4"
                   data-align="start"
-                  style="--pos: 0%"
                   data-i18n="music.scaleSubtle"
                 >
                   0.4x Subtle
                 </button>
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-28"
                   data-target-slider="music-sensitivity-slider"
                   data-value="1.0"
                   data-align="center"
-                  style="--pos: 28.57%"
                   data-i18n="music.scaleBalanced"
                 >
                   1.0x Balanced
                 </button>
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-100"
                   data-target-slider="music-sensitivity-slider"
                   data-value="2.5"
                   data-align="end"
-                  style="--pos: 100%"
                   data-i18n="music.scaleHighGain"
                 >
                   2.5x High Gain
@@ -866,33 +933,30 @@
               <div class="slider-scale-anchored" role="group" aria-label="Music EMA smoothing presets">
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-0"
                   data-target-slider="music-smoothing-slider"
                   data-value="0.20"
                   data-align="start"
-                  style="--pos: 0%"
                   data-i18n="music.scaleSmooth"
                 >
                   0.20 Smooth
                 </button>
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-46"
                   data-target-slider="music-smoothing-slider"
                   data-value="0.50"
                   data-align="center"
-                  style="--pos: 46.15%"
                   data-i18n="music.scalePunchy"
                 >
                   0.50 Punchy
                 </button>
                 <button
                   type="button"
-                  class="scale-preset-btn"
+                  class="scale-preset-btn pos-100"
                   data-target-slider="music-smoothing-slider"
                   data-value="0.85"
                   data-align="end"
-                  style="--pos: 100%"
                   data-i18n="music.scaleInstant"
                 >
                   0.85 Instant Beat

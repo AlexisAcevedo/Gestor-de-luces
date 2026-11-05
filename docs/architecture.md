@@ -51,20 +51,21 @@ The core principle behind this project is **strict isolation of business invaria
 ### Layer Separation
 
 1. **Domain Layer (`gestor_luces.domain`)**:
-   - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`) and Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`).
+   - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), and global UI preference invariants in `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`), and `DEFAULT_THEME` (`"architectural-stone"`)).
    - Completely devoid of dependencies on external packages, operating system APIs, network libraries, or serialization frameworks.
-   - Enforces business validation rules (e.g., RGB integers between 0 and 255, Kelvin bounds between 2,200K and 6,500K, and bulb identification constraints).
+   - Enforces business validation rules (e.g., RGB integers between 0 and 255, Kelvin bounds between 2,200K and 6,500K, bulb identification constraints, and supported language/theme tokens).
 
 2. **Ports Layer (`gestor_luces.ports`)**:
    - Defines structural typing contracts using Python's `typing.Protocol` with `@runtime_checkable`.
    - Driven ports specify external requirements without binding to specific drivers:
-     - `LightController`: Defines network primitives (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`).
+     - `LightController`: Defines network primitives (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
      - `BulbRepository`, `SceneRepository`, `SettingsRepository`: Contract for loading and storing application state.
-     - `ScreenSampler`: Contract for capturing monitor pixels and computing dominant color.
-     - `AudioSampler`: Contract for sampling system audio energy and frequency spectrum.
+     - `ScreenSampler`: Contract for capturing monitor pixels and computing dominant color (`sample_frame`, `sample_average_color`, `list_monitors`, `close`).
+     - `AudioSampler`: Contract for sampling system audio energy and frequency spectrum (`sample_frame`, `sample_audio_metrics`, `list_audio_devices`, `close`).
 
 3. **Application Layer (`gestor_luces.application`)**:
    - Coordinates business workflows through `LightControlService`.
+   - Receives lazy sampler factories (`screen_sampler_factory`, `audio_sampler_factory`) injected from the composition root (`main.py`) so inner layers (`domain`, `ports`, `application`) never import `adapters` (enforced via AST static verification in `tests/test_security_hardening.py`).
    - Manages asynchronous orchestration across single or multiple bulbs concurrently using `asyncio.gather`.
    - Houses specialized domain services:
      - `StreamRateLimiter`: Enforces maximum transmission pacing (10 Hz) for high-frequency streams.
@@ -79,7 +80,7 @@ The core principle behind this project is **strict isolation of business invaria
      - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss`.
      - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture and `numpy.fft.rfft`.
      - `adapters.tray.tray_icon`: Implements Windows notification area integration using `pystray`.
-     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2.
+     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApiFacade` whitelist) so internal methods and callbacks cannot be invoked from JavaScript.
 
 ---
 
@@ -120,10 +121,11 @@ The desktop application spans four distinct thread contexts that must interact s
    - Runs the Win32/WinForms window loop and hosts Microsoft Edge Chromium (WebView2).
    - Any long-running or blocking call on this thread immediately freezes the user interface.
 
-2. **Asyncio Bridge Worker Thread**:
+2. **Asyncio Bridge Worker Thread (`GestorLucesAsyncLoop`)**:
    - Created at application startup in `WebviewBridge.start_event_loop()`.
    - Owns an isolated, long-running `asyncio.AbstractEventLoop`.
    - JavaScript calls invoked via the `window.pywebview.api` interface are routed through `asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)` with a guarded timeout to prevent indefinitely blocking the UI thread on network timeouts.
+   - Synchronizes state snapshots (`_build_response()`): marshals state reads (`_collect_response_snapshot()`) onto the dedicated `GestorLucesAsyncLoop` worker thread (with hardware monitor and audio device lists cached after initial enumeration) to prevent cross-thread data races between the UI thread and async operations.
 
 3. **System Tray Daemon Thread**:
    - Initialized via `pystray.Icon.run_detached()`.
@@ -220,7 +222,7 @@ $$\text{Path: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$
 Files managed:
 - `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases.
 - `custom_scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed, favorite flag).
-- `settings.json`: Global user preferences (active language `en` or `es`).
+- `settings.json`: Global user preferences (`language`: `"en"` or `"es"`, and `theme`: `"architectural-stone"` or `"atmospheric-dark"`).
 
 ### Atomic File Write Pattern
 
@@ -242,7 +244,12 @@ To prevent JSON corruption in the event of sudden power cuts or process terminat
 The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), which writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The registered command is `<exe> --minimized` when frozen and `pythonw -m gestor_luces.main --minimized` in development. On every launch, `refresh_if_stale` rewrites the entry if it points to a different path (for example after moving the portable folder). The registry is injectable, so tests never touch `HKCU`.
 
 ### Single Instance
-`adapters/system/single_instance.py` combines a named mutex with a named event protected by an explicit SDDL DACL (`SY`/`BA`/`OW`). A second launch signals the event and exits; the first instance reacts by showing its window.
+`adapters/system/single_instance.py` combines a named mutex with a named event protected by an explicit SDDL DACL (`SY`/`BA`/`OW`). A second launch signals the event and exits; the first instance reacts by showing its window (unless bypassed via `--multi-instance` for side-by-side diagnostics).
+
+### Multi-Theme Engine & Dynamic Widget Geometry
+- **3-Tier CSS Token Architecture**: `ui/themes.css` defines primitive, semantic, and component-level tokens for both `"architectural-stone"` (default warm mineral Light theme) and `"atmospheric-dark"` (translucent glass Dark theme with `oklab` photometric halo), consumed by the layout and component rules in `ui/styles.css`.
+- **Native Window Chrome Synchronization (`THEME_WINDOW_CHROME`)**: `main.py` reads the persisted theme before creating the PyWebView window to set the initial WebView2 `background_color` (`#F4F1EA` or `#08090C`) and synchronizes the Windows DWM titlebar attribute (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` with `0` for light or `1` for dark) both on startup and bidirectionally at runtime when the user switches themes.
+- **Content-Driven Window Height Auto-Fit**: `main.py` implements `_fit_native_window_height` using 64-bit-safe Win32 `ctypes` (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) marshaled onto the WinForms UI thread (`BeginInvoke`), clamped to the active monitor's work area via `WebviewBridge.resize_window_to_content`.
 
 ### Packaging
 `scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`.

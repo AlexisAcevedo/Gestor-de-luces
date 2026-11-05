@@ -99,7 +99,7 @@ class SceneRepository(Protocol):
 
 @runtime_checkable
 class SettingsRepository(Protocol):
-    """Puerto para persistir las preferencias globales del usuario (como el idioma de la consola)."""
+    """Puerto para persistir las preferencias globales del usuario (`"language"` y `"theme"`)."""
 
     def load_settings(self) -> dict[str, Any]:
         """Carga el diccionario de preferencias almacenadas."""

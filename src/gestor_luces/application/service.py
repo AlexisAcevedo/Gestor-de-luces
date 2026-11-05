@@ -21,11 +21,17 @@ from gestor_luces.application.sleep_timer import AwaitableStatusDict, SleepTimer
 from gestor_luces.domain.models import Bulb, LightState
 from gestor_luces.domain.scenes import CustomScene, get_builtin_scene
 from gestor_luces.domain.value_objects import (
+    DEFAULT_LANGUAGE,
+    DEFAULT_THEME,
+    SUPPORTED_LANGUAGES,
+    SUPPORTED_THEMES,
     Brightness,
     Color,
     ColorTemperature,
     LightMode,
     SceneSpeed,
+    normalize_language,
+    normalize_theme,
 )
 from gestor_luces.ports.repositories import (
     AudioSampler,
@@ -36,7 +42,6 @@ from gestor_luces.ports.repositories import (
     SettingsRepository,
 )
 
-SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
 MAX_EXPLICIT_TARGETS = 64
 MAX_DISPLAY_NAME_LEN = 80
 
@@ -102,7 +107,8 @@ class LightControlService:
         self._bulbs: dict[str, Bulb] = {}
         self._selected_ips: list[str] = []
         self._custom_scenes: dict[str, CustomScene] = {}
-        self._language: str = "en"
+        self._language: str = DEFAULT_LANGUAGE
+        self._theme: str = DEFAULT_THEME
 
         if self._bulb_repo is not None:
             for saved_bulb in self._bulb_repo.load_bulbs():
@@ -115,9 +121,8 @@ class LightControlService:
 
         if self._settings_repo is not None:
             loaded_settings = self._settings_repo.load_settings()
-            candidate_lang = str(loaded_settings.get("language", "en")).strip().lower()
-            if candidate_lang in SUPPORTED_LANGUAGES:
-                self._language = candidate_lang
+            self._language = normalize_language(loaded_settings.get("language", DEFAULT_LANGUAGE))
+            self._theme = normalize_theme(loaded_settings.get("theme", DEFAULT_THEME))
 
     def get_language(self) -> str:
         """Devuelve el codigo de idioma activo (`en` o `es`) de la consola."""
@@ -131,6 +136,16 @@ class LightControlService:
         self._language = cleaned
         self._persist_settings()
         return self._language
+
+    def get_theme(self) -> str:
+        """Devuelve el identificador del tema visual activo (`architectural-stone` o `atmospheric-dark`)."""
+        return self._theme
+
+    def set_theme(self, theme: str) -> str:
+        """Normaliza, actualiza y persiste el tema visual activo de la consola."""
+        self._theme = normalize_theme(theme)
+        self._persist_settings()
+        return self._theme
 
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
@@ -820,5 +835,7 @@ class LightControlService:
     def _persist_settings(self) -> None:
         """Delega el guardado de preferencias globales si hay un repositorio configurado."""
         if self._settings_repo is not None:
-            self._settings_repo.save_settings({"language": self._language})
+            self._settings_repo.save_settings(
+                {"language": self._language, "theme": self._theme}
+            )
 

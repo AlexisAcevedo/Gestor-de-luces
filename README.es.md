@@ -12,7 +12,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 - Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
-- Pruebas 100% Fuera de Línea: Suite de 73 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+- Pruebas 100% Fuera de Línea: Suite de 99 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
 
 ---
 
@@ -45,14 +45,15 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 6. Temporizador de Apagado Progresivo (Sleep Timer):
    - Cuenta regresiva configurable (1 a 120 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
 
-7. Consola de Escritorio Bilingüe:
+7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo y dinámico en la UI, el menú de la bandeja y la barra de menú de la ventana.
+   - Cambio de tema en tiempo de ejecución entre **Architectural Stone** (tema claro predeterminado inspirado en botoneras de hardware Braun/Lutron) y **Atmospheric Dark** (cristal esmerilado y halo fotométrico dinámico en espacio `oklab`), persistido en `settings.json` con sincronización automática de la barra de título de Windows DWM.
 
 8. Integración con el Escritorio de Windows:
-   - Icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
+   - Geometría de widget compacta (base de `620x760` con ajuste dinámico de altura según el contenido) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
    - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de).
    - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
-   - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra.
+   - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).
    - Se distribuye como instalador por usuario o como ZIP portable (ver [Empaquetado y Distribución](#empaquetado-y-distribución)).
 
 ---
@@ -141,6 +142,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 ├── src/
 │   └── gestor_luces/
 │       ├── __init__.py
+│       ├── __main__.py              # Punto de entrada del paquete (python -m gestor_luces)
 │       ├── main.py              # Raíz de composición y punto de entrada de la app
 │       ├── cli.py               # Herramienta de sondeo y diagnóstico de red por CLI
 │       ├── resources.py         # Resolución de assets y versión (dev y congelado con PyInstaller)
@@ -166,7 +168,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           ├── tray/            # Bandeja del sistema con pystray y render compartido de la bombilla
 │           ├── system/          # Autoinicio de Windows (registro) e instancia única
 │           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
-├── tests/                       # Suite de pruebas automatizadas (73 tests)
+├── tests/                       # Suite de pruebas automatizadas (99 tests)
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
@@ -178,10 +180,13 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
 │   ├── test_i18n.py             # Pruebas de localización bilingüe
 │   ├── test_app_shell.py        # Pruebas del menú, autoinicio, --minimized y assets
-│   └── test_security_hardening.py # Pruebas de regresión de seguridad y rendimiento
+│   ├── test_window_geometry.py  # Pruebas de dimensiones de ventana compacta y área de trabajo
+│   ├── test_window_fit.py       # Pruebas de ajuste dinámico de altura y barra de título DWM
+│   └── test_security_hardening.py # Pruebas de regresión de seguridad, rendimiento y límites hexagonales/concurrencia
 └── ui/                          # Frontend web embebido en WebView2
     ├── index.html               # Estructura visual de la consola
-    ├── styles.css               # Estilos de consola fotométrica oscura
+    ├── themes.css               # Tokens de diseño de 3 niveles y temas (Architectural Stone y Atmospheric Dark)
+    ├── styles.css               # Disposición de controlador compacto y componentes tokenizados
     ├── app.js                   # Controlador de estado reactivo de la interfaz
     └── i18n.js                  # Diccionarios de localización en inglés y español
 ```
@@ -245,12 +250,15 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
 Inicia la consola de escritorio completa:
 
 ```bash
+python -m gestor_luces
+# o bien:
 python -m gestor_luces.main
 ```
 
 Parámetros opcionales aceptados por `main.py`:
 - `--debug`: Habilita el inspector y las herramientas de desarrollo de pywebview.
 - `--minimized`: Inicia oculta en la bandeja del sistema (es el parámetro que registra "Iniciar con Windows").
+- `--multi-instance`: Omite el bloqueo de instancia única para permitir ejecutar múltiples instancias simultáneamente.
 - `--smoke-test`: Construye la raíz de composición, verifica la integridad de la UI y los iconos sin abrir ventanas nativas, y finaliza con código de salida 0.
 
 ### 2. Modo Diagnóstico por Consola (CLI)
@@ -296,7 +304,7 @@ pytest
 
 Resultado esperado:
 ```
-73 passed in ~2.0s
+99 passed in ~2.5s
 ```
 
 Para ejecutar el análisis estático de seguridad y la auditoría de vulnerabilidades en dependencias (usando `requirements-dev.txt`):

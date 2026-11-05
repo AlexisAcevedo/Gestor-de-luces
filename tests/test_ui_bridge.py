@@ -137,3 +137,42 @@ def test_main_composition_root_smoke_test() -> None:
     """Ejecuta el smoke test del punto de entrada principal para validar rutas y ensamblado."""
     exit_code = run_main(["--smoke-test"])
     assert exit_code == 0
+
+
+async def test_webview_bridge_theme_and_fit_window_height(tmp_path) -> None:
+    """Verifica `set_theme` y `fit_window_height` expuestos en `WebviewBridge`."""
+    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
+
+    fit_calls: list[int] = []
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+    service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        settings_repository=settings_repo,
+    )
+    bridge = WebviewBridge(
+        service=service,
+        fit_window_height=lambda px: fit_calls.append(px) or True,
+    )
+    try:
+        initial = await asyncio.to_thread(bridge.get_initial_state)
+        assert initial["ok"] is True
+        assert initial["theme"] == "architectural-stone"
+
+        dark_resp = await asyncio.to_thread(bridge.set_theme, "atmospheric-dark")
+        assert dark_resp["ok"] is True
+        assert dark_resp["theme"] == "atmospheric-dark"
+        assert bridge.get_tray_snapshot()["theme"] == "atmospheric-dark"
+
+        invalid_type_resp = await asyncio.to_thread(bridge.set_theme, 123)  # type: ignore[arg-type]
+        assert invalid_type_resp["ok"] is False
+        assert invalid_type_resp["error"] is not None
+
+        assert bridge.fit_window_height(640) == {"ok": True}
+        assert fit_calls == [640]
+        assert bridge.fit_window_height(True)["ok"] is False  # type: ignore[arg-type]
+        assert bridge.fit_window_height(100)["ok"] is False
+        assert bridge.fit_window_height(5000)["ok"] is False
+        assert fit_calls == [640]
+    finally:
+        bridge.shutdown()
+

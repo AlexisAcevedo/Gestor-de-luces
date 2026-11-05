@@ -167,5 +167,9 @@ def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
         bridge.shutdown()
 
 
+def test_index_html_has_no_inline_style_attributes() -> None:
+    import re
+    from gestor_luces.main import resolve_ui_directory
 
-
+    index_html = (resolve_ui_directory() / "index.html").read_text(encoding="utf-8")
+    assert re.search(r"\bstyle\s*=", index_html, flags=re.IGNORECASE) is None

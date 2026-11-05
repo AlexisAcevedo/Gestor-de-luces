@@ -51,20 +51,21 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 ### Separación de Responsabilidades por Capa
 
 1. **Capa de Dominio (`gestor_luces.domain`)**:
-   - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`) y los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`).
+   - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`) y las invariantes de preferencias globales de interfaz en `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`) y `DEFAULT_THEME` (`"architectural-stone"`)).
    - Libre de dependencias externas: no importa librerías de red, APIs de Windows ni frameworks de interfaz de usuario.
-   - Aplica invariantes de negocio (enteros RGB entre 0 y 255, rangos de temperatura Kelvin entre 2.200 K y 6.500 K, y restricciones de identificación de focos).
+   - Aplica invariantes de negocio (enteros RGB entre 0 y 255, rangos de temperatura Kelvin entre 2.200 K y 6.500 K, restricciones de identificación de focos y validación de códigos de idioma y tema).
 
 2. **Capa de Puertos (`gestor_luces.ports`)**:
    - Define contratos mediante `typing.Protocol` con el decorador `@runtime_checkable` (tipado estructural estático).
    - Los puertos salientes especifican qué necesita la aplicación del exterior sin atarse a tecnologías concretas:
-     - `LightController`: Define las operaciones de red (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`).
+     - `LightController`: Define las operaciones de red (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
      - `BulbRepository`, `SceneRepository`, `SettingsRepository`: Contratos para lectura y escritura del estado persistente.
-     - `ScreenSampler`: Contrato para capturar fotogramas y calcular el color representativo de pantalla.
-     - `AudioSampler`: Contrato para muestrear la energía y el espectro frecuencial del audio del sistema.
+     - `ScreenSampler`: Contrato para capturar fotogramas y calcular el color representativo de pantalla (`sample_frame`, `sample_average_color`, `list_monitors`, `close`).
+     - `AudioSampler`: Contrato para muestrear la energía y el espectro frecuencial del audio del sistema (`sample_frame`, `sample_audio_metrics`, `list_audio_devices`, `close`).
 
 3. **Capa de Aplicación (`gestor_luces.application`)**:
    - Orquesta los casos de uso a través de `LightControlService`.
+   - Recibe fábricas perezosas de muestreo (`screen_sampler_factory`, `audio_sampler_factory`) inyectadas desde la raíz de composición (`main.py`) de modo que las capas internas (`domain`, `ports`, `application`) nunca importan `adapters` (verificado estáticamente vía AST en `tests/test_security_hardening.py`).
    - Administra operaciones concurrentes hacia múltiples focos mediante `asyncio.gather`.
    - Incluye servicios de dominio especializados:
      - `StreamRateLimiter`: Asegura una cadencia máxima de 10 Hz para transmisiones de alta frecuencia.
@@ -79,7 +80,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
      - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows a alta velocidad con `mss`.
      - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` y aplicando `numpy.fft.rfft`.
      - `adapters.tray.tray_icon`: Integra el icono y menú de la bandeja del sistema mediante `pystray`.
-     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2.
+     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApiFacade`), impidiendo la invocación de métodos o callbacks internos desde JavaScript.
 
 ---
 
@@ -120,10 +121,11 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
    - Controla el bucle de mensajes de la ventana Win32/WinForms y hospeda Microsoft Edge Chromium (WebView2).
    - Cualquier operación pesada o bloqueante en este hilo congela de inmediato la interfaz.
 
-2. **Hilo Asíncrono de Trabajo (`_bridge_worker`)**:
+2. **Hilo Asíncrono de Trabajo (`_bridge_worker` / `GestorLucesAsyncLoop`)**:
    - Se crea durante el arranque de la aplicación en `WebviewBridge.start_event_loop()`.
    - Contiene un `asyncio.AbstractEventLoop` independiente de larga duración.
    - Las invocaciones de JavaScript (`window.pywebview.api`) se despachan con `asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)` con un tiempo límite de protección para no bloquear la interfaz en caso de problemas de red.
+   - Sincroniza las instantáneas de estado (`_build_response()`): canaliza las lecturas de estado (`_collect_response_snapshot()`) hacia el hilo de trabajo dedicado `GestorLucesAsyncLoop` (manteniendo en caché las listas de monitores y dispositivos de audio tras su enumeración inicial) para prevenir condiciones de carrera entre el hilo de la interfaz y las operaciones asíncronas.
 
 3. **Hilo Demonio de la Bandeja del Sistema**:
    - Se inicia mediante `pystray.Icon.run_detached()`.
@@ -220,7 +222,7 @@ $$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$
 Archivos gestionados:
 - `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario).
 - `custom_scenes.json`: Presets personalizados creados por el usuario (modo, RGB, CCT, brillo, velocidad, favorito).
-- `settings.json`: Configuración global (idioma activo `en` o `es`).
+- `settings.json`: Preferencias globales de usuario (`language`: `"en"` o `"es"`, y `theme`: `"architectural-stone"` o `"atmospheric-dark"`).
 
 ### Patrón de Escritura Atómica en Disco
 
@@ -242,7 +244,12 @@ Para prevenir la corrupción de los archivos JSON ante cortes imprevistos de ene
 El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` reescribe la entrada si apunta a otra ruta (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
 
 ### Instancia Única
-`adapters/system/single_instance.py` combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`). Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana.
+`adapters/system/single_instance.py` combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`). Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana (salvo que se indique `--multi-instance` para ejecución simultánea de diagnóstico).
+
+### Motor Multitema y Geometría Dinámica de Widget
+- **Arquitectura de Tokens CSS de 3 Niveles**: `ui/themes.css` define tokens primitivos, semánticos y de componente tanto para `"architectural-stone"` (tema claro predeterminado en piedra mineral cálida) como para `"atmospheric-dark"` (tema oscuro en cristal esmerilado con halo fotométrico `oklab`), consumidos por las reglas estructurales de `ui/styles.css`.
+- **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `main.py` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`) y sincroniza de forma bidireccional la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) tanto en el arranque como al cambiar el tema en tiempo de ejecución.
+- **Autoajuste Dinámico de Altura según Contenido**: `main.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`BeginInvoke`) y acotadas al área de trabajo del monitor activo a través de `WebviewBridge.resize_window_to_content`.
 
 ### Empaquetado
 `scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`.

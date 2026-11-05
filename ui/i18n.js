@@ -18,6 +18,11 @@
       "rail.title": "Photometric Console",
       "rail.subtitle": "Local UDP 38899 Direct Control",
       "rail.langGroupAria": "Interface language",
+      "theme.switcherAria": "Interface theme",
+      "theme.stoneShort": "Stone",
+      "theme.darkShort": "Dark",
+      "theme.stoneTooltip": "Architectural Stone (Light theme)",
+      "theme.darkTooltip": "Atmospheric Dark (Dark theme)",
       "rail.scanBtn": "Scan network",
       "rail.scanningBtn": "Scanning...",
       "rail.addByIpBtn": "Add by IP",
@@ -40,6 +45,8 @@
       "rail.syncNowTitle": "Query getPilot state from all bulbs",
       "rail.autoSync": "Auto-sync (3s)",
       "rail.statusReady": "Ready for local UDP telemetry.",
+      "rail.openDrawerAria": "Open fixtures and network drawer",
+      "rail.closeDrawerAria": "Close fixtures drawer",
 
       /* Cabecera del escenario fotometrico */
       "stage.ariaLabel": "Light parameter controls",
@@ -47,19 +54,19 @@
       "stage.controllingOne": "Controlling 1 fixture: {name}",
       "stage.controllingMany": "Controlling {count} fixtures ({name} primary)",
       "stage.controllingList": "Controlling {count} fixtures: {names}",
-      "stage.stateOffline": "OFFLINE",
-      "stage.stateOff": "OFF",
-      "stage.stateOffStandby": "OFF · Standby ({brightness}%)",
-      "stage.stateOnRgb": "ON · RGB ({r}, {g}, {b}) · {brightness}%",
-      "stage.stateOnScene": "ON · Scene: {scene} · {brightness}%",
-      "stage.stateOnKelvin": "ON · {kelvin} K · {brightness}%",
+      "stage.stateOffline": "Offline",
+      "stage.stateOff": "Off",
+      "stage.stateOffStandby": "Off · Standby ({brightness}%)",
+      "stage.stateOnRgb": "On · RGB ({r}, {g}, {b}) · {brightness}%",
+      "stage.stateOnScene": "On · Scene: {scene} · {brightness}%",
+      "stage.stateOnKelvin": "On · {kelvin} K · {brightness}%",
       "stage.saveStateBtn": "Save current state",
       "stage.saveStateTitle": "Save current bulb state as a custom preset",
-      "stage.turnOn": "Turn ON",
-      "stage.turnOff": "Turn OFF",
+      "stage.turnOn": "Turn on",
+      "stage.turnOff": "Turn off",
 
       /* Temporizador de apagado (Sleep Timer) */
-      "sleep.title": "Sleep Timer (Progressive Fade)",
+      "sleep.title": "Sleep timer",
       "sleep.description": "Gradually dims fixtures during the final 30% of the countdown before powering off.",
       "sleep.badgeInactive": "Timer inactive",
       "sleep.badgeActive": "Sleep timer: {countdown} remaining · {phase}",
@@ -68,33 +75,34 @@
       "sleep.quickPresetsAria": "Sleep timer quick durations",
       "sleep.durationLabel": "Timer duration in minutes (1 to 240)",
       "sleep.customMinutesAria": "Custom sleep timer minutes",
-      "sleep.startBtn": "Start Timer",
-      "sleep.cancelBtn": "Cancel Timer",
+      "sleep.startBtn": "Start timer",
+      "sleep.cancelBtn": "Cancel timer",
       "sleep.cancelBtnActive": "Cancel ({countdown})",
 
       /* Atenuacion maestra (Dimming) */
-      "dimming.title": "Luminous Flux (Dimming)",
+      "dimming.title": "Brightness",
       "dimming.sliderAria": "Master brightness percentage",
       "dimming.presetsAria": "Quick dimming presets",
 
       /* Pestanas de modo */
       "tabs.ariaLabel": "Lighting emission mode",
-      "tabs.rgb": "Chromatic (RGB)",
-      "tabs.temperature": "White (Kelvin)",
-      "tabs.scene": "WiZ Scenes (36)",
-      "tabs.custom": "Custom Presets",
+      "tabs.rgb": "Color",
+      "tabs.temperature": "White",
+      "tabs.scene": "Scenes",
+      "tabs.custom": "Presets",
       "tabs.customWithCount": "Presets ({count})",
       "tabs.ambilight": "Ambilight",
-      "tabs.music": "Music Sync",
+      "tabs.music": "Music",
 
       /* Panel 1: RGB */
       "rgb.wheelAria": "Interactive HSV color wheel",
+      "rgb.manualCaption": "Precision RGB & hex values",
       "rgb.redLabel": "Red (0-255)",
       "rgb.greenLabel": "Green (0-255)",
       "rgb.blueLabel": "Blue (0-255)",
-      "rgb.hexLabel": "Hex Code",
+      "rgb.hexLabel": "Hex code",
       "rgb.applyBtn": "Apply RGB",
-      "rgb.swatchesCaption": "Reference Chromatic Swatches",
+      "rgb.swatchesCaption": "Reference chromatic swatches",
       "rgb.swatchesAria": "Curated RGB swatches",
       "rgb.swatchSodium": "Sodium Amber",
       "rgb.swatchCrimson": "Crimson Laser",
@@ -305,6 +313,11 @@
       "rail.title": "Consola Fotométrica",
       "rail.subtitle": "Control Directo UDP Local 38899",
       "rail.langGroupAria": "Idioma de la interfaz",
+      "theme.switcherAria": "Tema de la interfaz",
+      "theme.stoneShort": "Piedra",
+      "theme.darkShort": "Oscuro",
+      "theme.stoneTooltip": "Piedra Arquitectónica (Tema claro)",
+      "theme.darkTooltip": "Oscuro Atmosférico (Tema oscuro)",
       "rail.scanBtn": "Escanear red",
       "rail.scanningBtn": "Escaneando...",
       "rail.addByIpBtn": "Agregar por IP",
@@ -327,6 +340,8 @@
       "rail.syncNowTitle": "Consultar el estado getPilot de todas las luminarias",
       "rail.autoSync": "Auto-sinc (3s)",
       "rail.statusReady": "Listo para telemetría UDP local.",
+      "rail.openDrawerAria": "Abrir panel de luminarias y red",
+      "rail.closeDrawerAria": "Cerrar panel de luminarias",
 
       /* Cabecera del escenario fotometrico */
       "stage.ariaLabel": "Controles de parámetros lumínicos",
@@ -334,19 +349,19 @@
       "stage.controllingOne": "Controlando 1 luminaria: {name}",
       "stage.controllingMany": "Controlando {count} luminarias ({name} principal)",
       "stage.controllingList": "Controlando {count} luminarias: {names}",
-      "stage.stateOffline": "SIN CONEXIÓN",
-      "stage.stateOff": "APAGADO",
-      "stage.stateOffStandby": "APAGADO · En espera ({brightness}%)",
-      "stage.stateOnRgb": "ENCENDIDO · RGB ({r}, {g}, {b}) · {brightness}%",
-      "stage.stateOnScene": "ENCENDIDO · Escena: {scene} · {brightness}%",
-      "stage.stateOnKelvin": "ENCENDIDO · {kelvin} K · {brightness}%",
+      "stage.stateOffline": "Sin conexión",
+      "stage.stateOff": "Apagado",
+      "stage.stateOffStandby": "Apagado · En espera ({brightness}%)",
+      "stage.stateOnRgb": "Encendido · RGB ({r}, {g}, {b}) · {brightness}%",
+      "stage.stateOnScene": "Encendido · Escena: {scene} · {brightness}%",
+      "stage.stateOnKelvin": "Encendido · {kelvin} K · {brightness}%",
       "stage.saveStateBtn": "Guardar estado actual",
       "stage.saveStateTitle": "Guardar el estado actual de la luminaria como escena personalizada",
       "stage.turnOn": "Encender",
       "stage.turnOff": "Apagar",
 
       /* Temporizador de apagado (Sleep Timer) */
-      "sleep.title": "Temporizador de Apagado (Atenuación Progresiva)",
+      "sleep.title": "Temporizador de apagado",
       "sleep.description": "Atenúa gradualmente las luminarias durante el último 30% de la cuenta regresiva antes de apagarlas.",
       "sleep.badgeInactive": "Temporizador inactivo",
       "sleep.badgeActive": "Temporizador: {countdown} restantes · {phase}",
@@ -360,28 +375,29 @@
       "sleep.cancelBtnActive": "Cancelar ({countdown})",
 
       /* Atenuacion maestra (Dimming) */
-      "dimming.title": "Flujo Luminoso (Brillo)",
+      "dimming.title": "Brillo",
       "dimming.sliderAria": "Porcentaje de brillo maestro",
       "dimming.presetsAria": "Niveles rápidos de brillo",
 
       /* Pestanas de modo */
       "tabs.ariaLabel": "Modo de emisión lumínica",
-      "tabs.rgb": "Cromático (RGB)",
-      "tabs.temperature": "Blanco (Kelvin)",
-      "tabs.scene": "Escenas WiZ (36)",
-      "tabs.custom": "Presets Guardados",
+      "tabs.rgb": "Color",
+      "tabs.temperature": "Blanco",
+      "tabs.scene": "Escenas",
+      "tabs.custom": "Presets",
       "tabs.customWithCount": "Presets ({count})",
       "tabs.ambilight": "Ambilight",
-      "tabs.music": "Sincro Musical",
+      "tabs.music": "Música",
 
       /* Panel 1: RGB */
       "rgb.wheelAria": "Rueda de color HSV interactiva",
+      "rgb.manualCaption": "Valores RGB y código hex de precisión",
       "rgb.redLabel": "Rojo (0-255)",
       "rgb.greenLabel": "Verde (0-255)",
       "rgb.blueLabel": "Azul (0-255)",
-      "rgb.hexLabel": "Código Hex",
+      "rgb.hexLabel": "Código hex",
       "rgb.applyBtn": "Aplicar RGB",
-      "rgb.swatchesCaption": "Muestras Cromáticas de Referencia",
+      "rgb.swatchesCaption": "Muestras cromáticas de referencia",
       "rgb.swatchesAria": "Muestras RGB seleccionadas",
       "rgb.swatchSodium": "Ámbar Sodio",
       "rgb.swatchCrimson": "Láser Carmesí",
@@ -654,6 +670,13 @@
         el.setAttribute("aria-label", t(key));
       }
     });
+
+    scope.querySelectorAll("[data-i18n-aria]").forEach((el) => {
+      const key = el.getAttribute("data-i18n-aria");
+      if (key) {
+        el.setAttribute("aria-label", t(key));
+      }
+    });
   }
 
   window.I18N = {
@@ -664,4 +687,3 @@
     translateDom
   };
 })();
-

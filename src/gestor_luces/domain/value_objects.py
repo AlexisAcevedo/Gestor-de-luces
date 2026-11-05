@@ -12,6 +12,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
+DEFAULT_LANGUAGE: str = "en"
+SUPPORTED_THEMES: tuple[str, ...] = ("architectural-stone", "atmospheric-dark")
+DEFAULT_THEME: str = "architectural-stone"
+
+
+def normalize_language(value: object) -> str:
+    """Normaliza un codigo de idioma hacia uno de los idiomas soportados."""
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in SUPPORTED_LANGUAGES:
+            return cleaned
+    return DEFAULT_LANGUAGE
+
+
+def normalize_theme(value: object) -> str:
+    """Normaliza un identificador de tema hacia uno de los temas soportados."""
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in SUPPORTED_THEMES:
+            return cleaned
+    return DEFAULT_THEME
+
+
 
 class LightMode(str, Enum):
     """Define los modos de operacion mutuamente excluyentes de un foco WiZ."""

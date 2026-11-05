@@ -137,9 +137,12 @@
     return scene.name;
   }
 
+  const ALLOWED_THEMES = new Set(["architectural-stone", "atmospheric-dark"]);
+  const DEFAULT_THEME = "architectural-stone";
   /* Estado reactivo local de la interfaz */
   const appState = {
     language: "en",
+    theme: DEFAULT_THEME,
     bulbs: [],
     selectedIps: [],
     scenes: FALLBACK_SCENES.slice(),
@@ -204,7 +207,7 @@
         is_default: true
       }
     ],
-    activeTab: "rgb",
+    activeTab: "temperature",
     sceneCategory: "all",
     autoSyncTimer: null,
     sleepPollTimer: null,
@@ -218,6 +221,7 @@
   /* Simulador en memoria cuando no existe el contenedor nativo de PyWebView */
   function createBrowserMockApi() {
     let mockLanguage = "en";
+    let mockTheme = DEFAULT_THEME;
     let mockBulbs = [
       {
         ip: "192.168.0.34",
@@ -337,6 +341,7 @@
       return Promise.resolve({
         ok: true,
         language: mockLanguage,
+        theme: mockTheme,
         bulbs: JSON.parse(JSON.stringify(mockBulbs)),
         selected_ips: mockSelected.slice(),
         scenes: FALLBACK_SCENES.slice(),
@@ -366,6 +371,12 @@
       set_language: (lang) => {
         const cleaned = String(lang || "en").trim().toLowerCase();
         mockLanguage = cleaned === "es" ? "es" : "en";
+        return buildMockEnvelope();
+      },
+      set_theme: (theme) => {
+        if (typeof theme === "string" && ALLOWED_THEMES.has(theme.trim().toLowerCase())) {
+          mockTheme = theme.trim().toLowerCase();
+        }
         return buildMockEnvelope();
       },
       discover_bulbs: () => buildMockEnvelope(),
@@ -962,9 +973,12 @@
     return telemetrySlot.fps || nominalFps;
   }
 
+  let invalidateWindowFitBaseline = null;
+
   /* Sincroniza el selector visual de idioma (EN | ES) y traduce el arbol DOM estatico */
   function syncLanguageUi(lang) {
     const normalized = String(lang || "en").trim().toLowerCase() === "es" ? "es" : "en";
+    const prevLang = appState.language;
     appState.language = normalized;
     if (window.I18N) {
       window.I18N.setLanguage(normalized);
@@ -974,6 +988,52 @@
       const isMatch = btn.getAttribute("data-lang") === normalized;
       btn.setAttribute("aria-pressed", String(isMatch));
     });
+    if (prevLang !== normalized && typeof invalidateWindowFitBaseline === "function") {
+      invalidateWindowFitBaseline();
+    }
+  }
+
+  function normalizeTheme(theme) {
+    if (typeof theme === "string") {
+      const candidate = theme.trim().toLowerCase();
+      if (ALLOWED_THEMES.has(candidate)) {
+        return candidate;
+      }
+    }
+    return DEFAULT_THEME;
+  }
+
+  function syncThemeUi(theme, { persist = true } = {}) {
+    const normalized = normalizeTheme(theme);
+    const prevTheme = appState.theme;
+    const prevDomTheme = document.documentElement.dataset.theme;
+    appState.theme = normalized;
+    document.documentElement.dataset.theme = normalized;
+    const consoleShell = document.getElementById("console-shell");
+    if (consoleShell) {
+      consoleShell.dataset.look = normalized;
+    }
+    const stoneBtn = document.getElementById("theme-btn-stone");
+    if (stoneBtn) {
+      const isStone = normalized === "architectural-stone";
+      stoneBtn.classList.toggle("active", isStone);
+      stoneBtn.setAttribute("aria-pressed", isStone ? "true" : "false");
+    }
+    const darkBtn = document.getElementById("theme-btn-dark");
+    if (darkBtn) {
+      const isDark = normalized === "atmospheric-dark";
+      darkBtn.classList.toggle("active", isDark);
+      darkBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
+    }
+    if (persist) {
+      saveUiPref("theme", normalized);
+    }
+    if ((prevTheme !== normalized || prevDomTheme !== normalized) && typeof invalidateWindowFitBaseline === "function") {
+      invalidateWindowFitBaseline();
+      if (typeof requestFit === "function") {
+        requestFit(true);
+      }
+    }
   }
 
   /* Actualiza la variable CSS `--beam-color` y toda la interfaz a partir del sobre del backend */
@@ -981,6 +1041,9 @@
     if (!envelope) return;
     if (typeof envelope.language === "string") {
       syncLanguageUi(envelope.language);
+    }
+    if (typeof envelope.theme === "string") {
+      syncThemeUi(envelope.theme);
     }
     if (Array.isArray(envelope.bulbs)) {
       appState.bulbs = envelope.bulbs;
@@ -1216,20 +1279,33 @@
 
     const primary = getPrimaryBulb();
     const aperture = document.getElementById("photometric-aperture");
+    const drawerPillLabel = document.getElementById("drawer-pill-label");
+    const drawerPillDot = document.getElementById("drawer-pill-dot");
     if (!primary) {
       if (shell) shell.setAttribute("data-power", "off");
-      document.documentElement.style.setProperty("--beam-color", "#2A303C");
+      document.documentElement.style.setProperty("--beam-color", "var(--beam-standby)");
       if (aperture) {
-        aperture.style.backgroundColor = "#232832";
-        aperture.style.boxShadow = "none";
+        aperture.style.removeProperty("background-color");
+        aperture.style.removeProperty("box-shadow");
+        aperture.style.setProperty("--aperture-glow-radius", "0px");
+        aperture.style.setProperty("--aperture-glow-alpha", "0%");
       }
       if (targetSummary) targetSummary.textContent = t("stage.noFixture");
+      if (drawerPillLabel) drawerPillLabel.textContent = t("stage.noFixture");
+      if (drawerPillDot) drawerPillDot.classList.add("is-offline");
       if (statePill) statePill.textContent = t("stage.stateOffline");
       updateAllSlidersFill();
       return;
     }
 
     const selectedCount = appState.selectedIps.length || appState.bulbs.length;
+    if (drawerPillDot) {
+      drawerPillDot.classList.toggle("is-offline", !primary.is_online);
+    }
+    if (drawerPillLabel) {
+      drawerPillLabel.textContent =
+        selectedCount > 1 ? `${primary.name} (+${selectedCount - 1})` : primary.name;
+    }
     if (targetSummary) {
       /* Destinos reales de los comandos: los seleccionados (o todos si no hay seleccion) */
       const targets = appState.selectedIps.length
@@ -1238,7 +1314,7 @@
       const names = targets.map((b) => b.name);
       let summary;
       if (selectedCount === 1) {
-        summary = t("stage.controllingOne", { name: primary.name });
+        summary = primary.name;
       } else if (selectedCount <= 3 && names.length === selectedCount) {
         summary = t("stage.controllingList", { count: selectedCount, names: names.join(", ") });
       } else {
@@ -1271,7 +1347,7 @@
     });
 
     /* Calculo del color fotometrico (`--beam-color`) segun el modo activo */
-    let beamCss = "#2A303C";
+    let beamCss = "var(--beam-standby)";
     let modeReadout = t("stage.stateOff");
 
     if (isOn) {
@@ -1309,15 +1385,17 @@
 
     document.documentElement.style.setProperty("--beam-color", beamCss);
     if (aperture) {
+      aperture.style.removeProperty("background-color");
+      aperture.style.removeProperty("box-shadow");
       if (isOn) {
         const briNorm = Math.max(0, Math.min(1, ((Number(st.brightness) || 100) - 10) / 90));
-        const glowRadius = Math.round(12 + briNorm * 24);
-        const glowAlpha = Math.round(28 + briNorm * 52);
-        aperture.style.backgroundColor = beamCss;
-        aperture.style.boxShadow = `0 0 ${glowRadius}px color-mix(in oklab, ${beamCss} ${glowAlpha}%, transparent)`;
+        const glowRadius = Math.round(16 + briNorm * 28);
+        const glowAlpha = Math.round(36 + briNorm * 52);
+        aperture.style.setProperty("--aperture-glow-radius", `${glowRadius}px`);
+        aperture.style.setProperty("--aperture-glow-alpha", `${glowAlpha}%`);
       } else {
-        aperture.style.backgroundColor = "#232832";
-        aperture.style.boxShadow = "none";
+        aperture.style.setProperty("--aperture-glow-radius", "0px");
+        aperture.style.setProperty("--aperture-glow-alpha", "0%");
       }
     }
     if (statePill) {
@@ -2167,6 +2245,7 @@
         const sections = current.openSections && typeof current.openSections === "object" ? current.openSections : {};
         sections[key] = el.open;
         saveUiPref("openSections", sections);
+        requestFit(true);
       });
     });
 
@@ -2175,6 +2254,24 @@
       (tab) => tab.dataset.mode === savedTab
     );
     if (known) activateTab(savedTab, false);
+
+    if (typeof prefs.theme === "string" && ALLOWED_THEMES.has(prefs.theme)) {
+      syncThemeUi(prefs.theme, { persist: false });
+    } else {
+      syncThemeUi(DEFAULT_THEME, { persist: false });
+    }
+  }
+
+  async function handleSetTheme(theme) {
+    const normalized = normalizeTheme(theme);
+    syncThemeUi(normalized);
+    if (backendApi && typeof backendApi.set_theme === "function") {
+      await invokeApi(
+        () => backendApi.set_theme(normalized),
+        null,
+        { silent: true }
+      );
+    }
   }
 
   /* Gestion de pestanas accesibles (WAI-ARIA Tabs con navegacion por flechas) */
@@ -2195,6 +2292,15 @@
         panel.hidden = !isMatch;
       }
     });
+    if (modeName === "rgb") {
+      requestAnimationFrame(() => {
+        const r = clampInt(document.getElementById("input-r")?.value ?? 255, 0, 255);
+        const g = clampInt(document.getElementById("input-g")?.value ?? 140, 0, 255);
+        const b = clampInt(document.getElementById("input-b")?.value ?? 66, 0, 255);
+        positionReticleFromRgb(r, g, b);
+      });
+    }
+    requestFit(true);
   }
 
   function openRenameDialog(bulb) {
@@ -2338,6 +2444,31 @@
   function bindEvents() {
     setupDialogLightDismissFallbacks();
     setupGlobalShortcuts();
+
+    /* Slide-over Fixture Drawer trigger */
+    const drawerBtn = document.getElementById("fixture-drawer-btn");
+    const fixtureDrawer = document.getElementById("fixture-drawer");
+    if (drawerBtn && fixtureDrawer) {
+      drawerBtn.addEventListener("click", () => {
+        if (!fixtureDrawer.open) {
+          fixtureDrawer.showModal();
+          drawerBtn.setAttribute("aria-expanded", "true");
+        }
+      });
+      fixtureDrawer.addEventListener("close", () => {
+        drawerBtn.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    /* Selector segmentado de tema (Architectural Stone | Atmospheric Dark) */
+    const themeBtnStone = document.getElementById("theme-btn-stone");
+    if (themeBtnStone) {
+      themeBtnStone.addEventListener("click", () => handleSetTheme("architectural-stone"));
+    }
+    const themeBtnDark = document.getElementById("theme-btn-dark");
+    if (themeBtnDark) {
+      themeBtnDark.addEventListener("click", () => handleSetTheme("atmospheric-dark"));
+    }
 
     /* Selector segmentado de idioma (EN | ES) */
     document.querySelectorAll(".lang-btn").forEach((btn) => {
@@ -2484,6 +2615,14 @@
       brightnessSlider.addEventListener("input", () => {
         brightnessOutput.textContent = `${brightnessSlider.value}%`;
         updateSliderFill(brightnessSlider);
+        const aperture = document.getElementById("photometric-aperture");
+        if (aperture) {
+          const briNorm = Math.max(0, Math.min(1, ((Number(brightnessSlider.value) || 100) - 10) / 90));
+          const glowRadius = Math.round(16 + briNorm * 28);
+          const glowAlpha = Math.round(36 + briNorm * 52);
+          aperture.style.setProperty("--aperture-glow-radius", `${glowRadius}px`);
+          aperture.style.setProperty("--aperture-glow-alpha", `${glowAlpha}%`);
+        }
       });
       brightnessSlider.addEventListener("change", () => {
         const val = clampInt(brightnessSlider.value, 10, 100);
@@ -2559,10 +2698,6 @@
         positionReticleFromRgb(rgb.r, rgb.g, rgb.b);
         const beamCss = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         document.documentElement.style.setProperty("--beam-color", beamCss);
-        const aperture = document.getElementById("photometric-aperture");
-        if (aperture) {
-          aperture.style.backgroundColor = beamCss;
-        }
 
         if (commitImmediate) {
           if (appState.wheelThrottleTimer) {
@@ -2655,10 +2790,11 @@
     }
 
     document.querySelectorAll(".color-swatch").forEach((swatch) => {
+      const r = clampInt(swatch.dataset.r, 0, 255);
+      const g = clampInt(swatch.dataset.g, 0, 255);
+      const b = clampInt(swatch.dataset.b, 0, 255);
+      swatch.style.setProperty("--swatch-rgb", `rgb(${r}, ${g}, ${b})`);
       swatch.addEventListener("click", () => {
-        const r = clampInt(swatch.dataset.r, 0, 255);
-        const g = clampInt(swatch.dataset.g, 0, 255);
-        const b = clampInt(swatch.dataset.b, 0, 255);
         invokeApi(
           () => backendApi.set_color(r, g, b, null, null),
           () => t("status.swatchApplied", { r, g, b })
@@ -3049,8 +3185,8 @@
     /* Botones de preajuste alineados matematicamente bajo los sliders de Ambilight y Music Sync */
     document.querySelectorAll(".scale-preset-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const targetId = btn.dataset.sliderTarget;
-        const presetValue = btn.dataset.presetValue;
+        const targetId = btn.dataset.targetSlider || btn.dataset.sliderTarget;
+        const presetValue = btn.dataset.value !== undefined ? btn.dataset.value : btn.dataset.presetValue;
         const slider = targetId ? document.getElementById(targetId) : null;
         if (!slider || presetValue === undefined) return;
         slider.value = presetValue;
@@ -3083,6 +3219,132 @@
     });
   }
 
+  /*
+   * Window auto-fit ("widget" behavior): the native window height is
+   * max(baseline, natural content height). The baseline is the natural height of the
+   * White tab with every collapsible closed, so the window never shrinks below it.
+   * Heights are summed from the stage children (never scrollHeight, which reports the
+   * stretched stage itself) while `.is-measuring` disables stretching, all in one task.
+   */
+  const FIT_THRESHOLD_PX = 2;
+  const FIT_RETRY_MS = 180;
+  const FIT_OWN_RESIZE_WINDOW_MS = 800;
+  let fitFrame = 0;
+  let fitForced = false;
+  let fitLastSent = 0;
+  let fitLastSentAt = 0;
+  let fitBaseline = { width: -1, value: 0 };
+
+  function readNaturalHeight(stage) {
+    const topbar = document.querySelector(".compact-topbar");
+    const style = window.getComputedStyle(stage);
+    const gap = parseFloat(style.rowGap) || 0;
+    const children = Array.from(stage.children).filter((el) => el.getClientRects().length > 0);
+    const childrenHeight = children.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
+    const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const gaps = Math.max(children.length - 1, 0) * gap;
+    const topbarHeight = topbar ? topbar.getBoundingClientRect().height : 0;
+    return Math.ceil(topbarHeight + padding + gaps + childrenHeight);
+  }
+
+  function measureNaturalHeight(stage) {
+    stage.classList.add("is-measuring");
+    try {
+      return readNaturalHeight(stage);
+    } finally {
+      stage.classList.remove("is-measuring");
+    }
+  }
+
+  function measureBaseline(stage) {
+    const width = Math.round(stage.getBoundingClientRect().width);
+    if (fitBaseline && fitBaseline.width === width && fitBaseline.value > 0) return fitBaseline.value;
+    const panels = Array.from(stage.querySelectorAll(":scope > .mode-panel"));
+    const previousHidden = panels.map((panel) => panel.hidden);
+    panels.forEach((panel) => {
+      panel.hidden = panel.id !== "panel-temperature";
+    });
+    stage.classList.add("is-measuring-baseline");
+    let value = 0;
+    try {
+      value = measureNaturalHeight(stage);
+    } finally {
+      stage.classList.remove("is-measuring-baseline");
+      panels.forEach((panel, index) => {
+        panel.hidden = previousHidden[index];
+      });
+    }
+    fitBaseline = { width, value };
+    return value;
+  }
+
+  function runFit() {
+    fitFrame = 0;
+    const forced = fitForced;
+    const root = document.documentElement;
+    if (root.classList.contains("is-resizing")) {
+      const own = performance.now() - fitLastSentAt < FIT_OWN_RESIZE_WINDOW_MS;
+      if (forced || own) {
+        fitForced = forced;
+        window.setTimeout(scheduleFit, FIT_RETRY_MS);
+      }
+      return;
+    }
+    fitForced = false;
+    const api = backendApi;
+    const stage = document.querySelector(".photometric-stage");
+    if (!stage || !api || typeof api.fit_window_height !== "function") return;
+    const target = Math.max(measureBaseline(stage), measureNaturalHeight(stage));
+    if (target < 200 || Math.abs(target - fitLastSent) < FIT_THRESHOLD_PX) return;
+    fitLastSent = target;
+    fitLastSentAt = performance.now();
+    try {
+      Promise.resolve(api.fit_window_height(target)).catch(() => {});
+    } catch (err) {
+      /* the feature degrades to a regular fixed-size window */
+    }
+  }
+
+  function scheduleFit() {
+    if (!fitFrame) fitFrame = requestAnimationFrame(runFit);
+  }
+
+  function requestFit(force) {
+    if (force) fitForced = true;
+    scheduleFit();
+  }
+
+  function setupWindowFit() {
+    const stage = document.querySelector(".photometric-stage");
+    if (!stage) return;
+    invalidateWindowFitBaseline = () => {
+      fitBaseline = null;
+    };
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(() => requestFit(false));
+      Array.from(stage.children).forEach((el) => observer.observe(el));
+    }
+    if (typeof MutationObserver === "function") {
+      const mutations = new MutationObserver(() => requestFit(false));
+      ["scenes-grid", "custom-scenes-grid"].forEach((id) => {
+        const grid = document.getElementById(id);
+        if (grid) mutations.observe(grid, { childList: true });
+      });
+    }
+    window.addEventListener("resize", () => {
+      if (fitBaseline && Math.abs(stage.clientWidth - fitBaseline.width) > 1) {
+        fitBaseline = null;
+      }
+    }, { passive: true });
+    requestFit(true);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        fitBaseline = null;
+        requestFit(true);
+      });
+    }
+  }
+
   /* Inicializacion principal al cargar el DOM */
   document.addEventListener("DOMContentLoaded", async () => {
     syncLanguageUi("en");
@@ -3091,6 +3353,7 @@
     bindEvents();
     restoreUiPrefs();
     backendApi = await resolveBackendApi();
+    setupWindowFit();
     await invokeApi(
       () => backendApi.get_initial_state(),
       () => t("status.connected")

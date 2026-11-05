@@ -222,6 +222,17 @@ En un bucle interactivo de streaming, esperar el ACK de cada paquete introduce u
 2. Despacha el paquete directamente al socket UDP.
 3. Retorna el control de ejecución inmediatamente sin bloquearse en `sock.recvfrom()`.
 
+### Reutilización de Socket y Ciclo de Vida
+
+En lugar de asignar y cerrar un nuevo socket del sistema operativo en cada fotograma de 10 Hz durante los modos Ambilight o Música, `WizUdpController` inicializa de forma perezosa y reutiliza un socket UDP persistente no bloqueante (`_stream_sock`) a lo largo de los fotogramas de streaming, liberando limpiamente el recurso mediante `close()`.
+
+### Endurecimiento Defensivo de UDP
+
+Para proteger el bucle de eventos frente a tráfico de red local malformado o inesperado, `WizUdpController` aplica validaciones de transporte estrictas:
+- **Límite de Tamaño de Datagramas Entrantes**: Los datagramas UDP recibidos se limitan a `4.096` bytes para evitar agotamiento de memoria por paquetes sobredimensionados.
+- **Validación de IP de Destino**: Las direcciones de los focos se validan como direcciones IPv4 unicast estrictas antes de transmitir paquetes al socket.
+- **Resiliencia ante Cargas Malformadas**: Las respuestas JSON de `getPilot` y `getSystemConfig` truncadas o con estructura inválida se descartan de forma segura sin interrumpir el bucle de eventos `asyncio`.
+
 ### Restricción de Frecuencia por Hardware (Límite de 10 Hz)
 
 Los microcontroladores integrados en los focos WiZ (generalmente Espressif ESP8266 o ESP32) disponen de un búfer de recepción en anillo de capacidad reducida.

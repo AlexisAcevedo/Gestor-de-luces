@@ -18,6 +18,14 @@ from typing import Any
 
 from gestor_luces.domain.models import Bulb
 from gestor_luces.domain.scenes import CustomScene
+from gestor_luces.domain.value_objects import (
+    DEFAULT_LANGUAGE,
+    DEFAULT_THEME,
+    SUPPORTED_LANGUAGES,
+    SUPPORTED_THEMES,
+    normalize_language,
+    normalize_theme,
+)
 
 
 def resolve_default_data_dir() -> Path:
@@ -147,12 +155,14 @@ class JsonSceneRepository:
         _atomic_write_json(self._file_path, payload)
 
 
-SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
-DEFAULT_SETTINGS: dict[str, Any] = {"language": "en"}
+DEFAULT_SETTINGS: dict[str, Any] = {
+    "language": DEFAULT_LANGUAGE,
+    "theme": DEFAULT_THEME,
+}
 
 
 class JsonSettingsRepository:
-    """Persiste las preferencias globales de la consola (como el idioma) en `settings.json`."""
+    """Persiste las preferencias globales de la consola (`language` y `theme`) en `settings.json`."""
 
     def __init__(self, data_dir: Path | None = None, filename: str = "settings.json") -> None:
         self._data_dir = data_dir if data_dir is not None else resolve_default_data_dir()
@@ -166,8 +176,8 @@ class JsonSettingsRepository:
     def load_settings(self) -> dict[str, Any]:
         """Recupera las preferencias guardadas tolerando archivos inexistentes o corruptos.
 
-        Si el archivo no existe, contiene sintaxis JSON invalida o un codigo de idioma
-        desconocido, retorna el idioma por defecto (`en`) para garantizar un arranque seguro.
+        Si el archivo no existe, contiene sintaxis JSON invalida o valores desconocidos,
+        retorna los valores por defecto (`en` y `architectural-stone`) para garantizar un arranque seguro.
         """
         if not self._file_path.is_file():
             return dict(DEFAULT_SETTINGS)
@@ -180,19 +190,21 @@ class JsonSettingsRepository:
         if not isinstance(parsed, dict):
             return dict(DEFAULT_SETTINGS)
 
-        raw_lang = str(parsed.get("language", "en")).strip().lower()
-        language = raw_lang if raw_lang in SUPPORTED_LANGUAGES else "en"
+        language = normalize_language(parsed.get("language", DEFAULT_LANGUAGE))
+        theme = normalize_theme(parsed.get("theme", DEFAULT_THEME))
         merged = dict(DEFAULT_SETTINGS)
         merged.update(parsed)
         merged["language"] = language
+        merged["theme"] = theme
         return merged
 
     def save_settings(self, settings: dict[str, Any]) -> None:
         """Valida y persiste atomicamente el diccionario de preferencias."""
-        raw_lang = str(settings.get("language", "en")).strip().lower()
-        language = raw_lang if raw_lang in SUPPORTED_LANGUAGES else "en"
+        language = normalize_language(settings.get("language", DEFAULT_LANGUAGE))
+        theme = normalize_theme(settings.get("theme", DEFAULT_THEME))
         payload = dict(DEFAULT_SETTINGS)
         payload.update(settings)
         payload["language"] = language
+        payload["theme"] = theme
         _atomic_write_json(self._file_path, payload)
 

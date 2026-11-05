@@ -1,0 +1,610 @@
+/*
+ * Sistema de Tokens de Diseno de 3 Niveles y Sobreescrituras de Material (WiZ Desktop UI).
+ *
+ * Unifica las dos direcciones visuales del rediseno sobre el mismo DOM compacto:
+ * - Tema por defecto (`architectural-stone` — Light): Minimal Precision / Braun & Lutron Palladiom.
+ *   Chasis de piedra caliza / papel mineral calido (`#F4F1EA`), cavidades rebajadas (`#DDD7CD`)
+ *   y teclas fisicas de ceramica blanca mate (`#FFFFFF`) con apertura optica mecanizada.
+ * - Tema secundario (`atmospheric-dark` — Dark): Atmospheric Glass & Light.
+ *   Chasis de carbono mate profundo (`#08090C`), superficies de vidrio ahumado translucido
+ *   (`rgba(22, 25, 32, 0.72)` + `backdrop-filter: blur(24px) saturate(140%)`) y halo fotometrico
+ *   radial proyectado detras del escenario cuando `#console-shell[data-power="on"]`.
+ */
+
+@layer reset, tokens, base, layout, components, theme-overrides, utilities;
+
+@layer tokens {
+  :root {
+    /* Interpolacion cromatica perceptual segura con respaldo (modern-web-guidance: visual-effects) */
+    --in-oklab: ;
+    --in-oklch: ;
+
+    /* Pilas tipograficas del sistema con numeros tabulares reservados a telemetria */
+    --font-sans: "Segoe UI Variable Display", "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "Cascadia Mono", "JetBrains Mono", "Consolas", monospace;
+
+    /* ==========================================================================
+     * TIER 1: Constantes Fotometricas de Dominio (Invariantes al tema)
+     * ========================================================================== */
+    --kelvin-2200k: #FFB46B;
+    --kelvin-2700k: #FF9E44;
+    --kelvin-3500k: #FFD6A5;
+    --kelvin-4200k: #FFF1E0;
+    --kelvin-5000k: #F4F6FF;
+    --kelvin-6500k: #D6E8FF;
+    --kelvin-track-gradient: linear-gradient(90deg, #FFB46B 0%, #FFF1E0 50%, #D6E8FF 100%);
+
+    /* Muestras estaticas de preajuste RGB */
+    --swatch-rgb-warm-amber: #FF5E3A;
+    --swatch-rgb-crimson-laser: #FF2452;
+    --swatch-rgb-ultraviolet: #A855F7;
+    --swatch-rgb-cerulean-sky: #38BDF8;
+    --swatch-rgb-phosphor-mint: #10B981;
+    --swatch-rgb-halogen-gold: #FACC15;
+
+    /* Gradientes de vista previa para paletas musicales */
+    --palette-spectrum-gradient: linear-gradient(135deg, #FF4D6D 0%, #10B981 50%, #3B82F6 100%);
+    --palette-party-gradient: linear-gradient(135deg, #FF007F 0%, #FF9E00 50%, #A855F7 100%);
+    --palette-warm-gradient: linear-gradient(135deg, #FF9E44 0%, #FF5E3A 50%, #FACC15 100%);
+    --palette-ocean-gradient: linear-gradient(135deg, #00B4D8 0%, #10B981 50%, #4361EE 100%);
+  }
+
+  @supports (background: linear-gradient(in oklab, white, black)) {
+    :root {
+      --in-oklab: in oklab;
+      --in-oklch: in oklch;
+    }
+  }
+
+  /* ==========================================================================
+   * TIER 2: Tokens Semanticos de Tema — Default Light (`architectural-stone`)
+   * ========================================================================== */
+  :root,
+  html[data-theme="architectural-stone"] {
+    color-scheme: light;
+
+    /* Lienzo y jerarquia de superficies (piedra caliza calida y ceramica blanca mate) */
+    --bg-canvas: #F4F1EA;
+    --surface-chassis-alt: #EFECE6;
+    --surface-step-1: #E9E4DC;
+    --surface-1: #EFECE6;
+    --surface-2: #E5E0D8;
+    --surface-3: #FFFFFF;
+    --surface-well-recessed: #DDD7CD;
+    --surface-well-deep: #E2DDD4;
+    --surface-keycap-top: #FAF8F4;
+    --surface-keycap-gradient: linear-gradient(180deg, #FAF8F4 0%, #EFECE6 100%);
+    --surface-card-gradient: linear-gradient(180deg, #FFFFFF 0%, #FAF8F4 100%);
+    --surface-drawer: #F4F1EA;
+    --surface-modal: #FAF8F4;
+    --surface-backdrop: rgba(20, 18, 15, 0.36);
+    --glass-backdrop: none;
+
+    /* Tipografia y tintas de alto contraste */
+    --ink-1: #181715;
+    --ink-2: #5C5852;
+    --ink-3: #8C877E;
+    --ink-on-dark-key: #FAF8F4;
+
+    /* Alias semanticos heredados */
+    --surface-chassis: var(--bg-canvas);
+    --surface-panel: var(--surface-1);
+    --surface-well: var(--surface-2);
+    --surface-interactive: var(--surface-3);
+    --text-primary: var(--ink-1);
+    --text-secondary: var(--ink-2);
+    --text-muted: var(--ink-3);
+
+    /* Bordes y reflejos superiores */
+    --border-subtle: rgba(20, 18, 15, 0.08);
+    --border-muted: rgba(20, 18, 15, 0.13);
+    --border-structural: rgba(20, 18, 15, 0.14);
+    --border-strong: rgba(20, 18, 15, 0.22);
+    --border-focus: #181715;
+    --surface-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+
+    /* Sombras fisicas de teclas, cavidades y marcos */
+    --shadow-keycap: 0 1px 2px rgba(20, 18, 15, 0.08), 0 0 0 1px rgba(20, 18, 15, 0.06), inset 0 1px 0 #FFFFFF;
+    --shadow-keycap-hover: 0 2px 5px rgba(20, 18, 15, 0.12), 0 0 0 1px rgba(20, 18, 15, 0.14), inset 0 1px 0 #FFFFFF;
+    --shadow-keycap-active: 0 0 1px rgba(20, 18, 15, 0.12), 0 0 0 1px rgba(20, 18, 15, 0.12), inset 0 1px 2px rgba(20, 18, 15, 0.08);
+    --shadow-keycap-pressed: var(--shadow-keycap-active);
+    --shadow-well-recessed: inset 0 1px 2px rgba(20, 18, 15, 0.12), inset 0 0 0 1px rgba(20, 18, 15, 0.06);
+    --shadow-frame-elevated: 0 1px 2px rgba(20, 18, 15, 0.06), 0 10px 24px -14px rgba(20, 18, 15, 0.16), inset 0 1px 0 #FFFFFF;
+    --shadow-modal: 0 20px 48px rgba(20, 18, 15, 0.24), 0 0 0 1px rgba(20, 18, 15, 0.08), inset 0 1px 0 #FFFFFF;
+    --shadow-drawer: 16px 0 42px rgba(20, 18, 15, 0.22);
+
+    /* Acentos semanticos y controles */
+    --status-online: #1F8A5B;
+    --status-offline: #C83E37;
+    --braun-signal: #D9531E;
+    --accent-favorite: #C27803;
+    --accent-favorite-bg: rgba(194, 120, 3, 0.12);
+    --danger-bg: #FFF1F0;
+    --danger-border: rgba(200, 62, 55, 0.35);
+    --danger-ink: #9E2620;
+    --beam-standby: #DDD7CD;
+    --beam-color: var(--beam-standby);
+    --beam-surface-tint: color-mix(in oklab, var(--beam-color) 16%, #FFFFFF);
+    --beam-border-tint: color-mix(in oklab, var(--beam-color) 62%, #4A433B);
+    --beam-track-fill: color-mix(in oklab, var(--beam-color) 76%, #C88A4B);
+    --aperture-off-bg: #232832;
+    --slider-track-bg: #DDD7CD;
+    --slider-thumb-bg: #FFFFFF;
+    --slider-thumb-border: rgba(20, 18, 15, 0.24);
+    --power-btn-bg: linear-gradient(180deg, #2B2926 0%, #181715 100%);
+    --power-btn-ink: #FAF8F4;
+    --fft-bass-gradient: linear-gradient(90deg, #D9531E, #F59E0B);
+    --fft-mid-gradient: linear-gradient(90deg, #1F8A5B, #0EA5E9);
+    --fft-treble-gradient: linear-gradient(90deg, #2563EB, #7C3AED);
+    --fft-rms-gradient: linear-gradient(90deg, #5C5852, #181715);
+
+    /* Geometria de bordes tactiles */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-slider: 6px;
+  }
+
+  /* ==========================================================================
+   * TIER 2: Tokens Semanticos de Tema — Secondary Dark (`atmospheric-dark`)
+   * ========================================================================== */
+  html[data-theme="atmospheric-dark"] {
+    color-scheme: dark;
+
+    /* Lienzo de carbono mate y superficies de vidrio ahumado */
+    --bg-canvas: #08090C;
+    --surface-chassis-alt: #0B0D12;
+    --surface-step-1: #0E1117;
+    --surface-1: rgba(22, 25, 32, 0.72);
+    --surface-2: rgba(32, 37, 48, 0.78);
+    --surface-3: rgba(44, 51, 66, 0.84);
+    --surface-well-recessed: rgba(14, 17, 23, 0.88);
+    --surface-well-deep: rgba(10, 12, 18, 0.92);
+    --surface-keycap-top: rgba(38, 44, 58, 0.82);
+    --surface-keycap-gradient: linear-gradient(180deg, rgba(36, 42, 55, 0.84) 0%, rgba(22, 25, 32, 0.78) 100%);
+    --surface-card-gradient: linear-gradient(180deg, rgba(32, 37, 48, 0.82) 0%, rgba(22, 25, 32, 0.74) 100%);
+    --surface-drawer: rgba(16, 19, 25, 0.88);
+    --surface-modal: rgba(18, 21, 28, 0.94);
+    --surface-backdrop: rgba(5, 6, 9, 0.68);
+    --glass-backdrop: blur(24px) saturate(140%);
+
+    /* Tipografia y tintas sobre fondo oscuro */
+    --ink-1: #F3F5F8;
+    --ink-2: #9AA3B5;
+    --ink-3: #646E82;
+    --ink-on-dark-key: #F3F5F8;
+
+    /* Alias semanticos heredados */
+    --surface-chassis: var(--bg-canvas);
+    --surface-panel: var(--surface-1);
+    --surface-well: var(--surface-step-1);
+    --surface-interactive: var(--surface-2);
+    --text-primary: var(--ink-1);
+    --text-secondary: var(--ink-2);
+    --text-muted: var(--ink-3);
+
+    /* Bordes especulares y reflejos superiores */
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border-muted: rgba(255, 255, 255, 0.12);
+    --border-structural: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --border-focus: rgba(255, 255, 255, 0.45);
+    --surface-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+    /* Sombras atmosfericas y reflejos de vidrio */
+    --shadow-keycap: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+    --shadow-keycap-hover: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.16), 0 6px 16px -2px rgba(0, 0, 0, 0.55);
+    --shadow-keycap-active: inset 0 1px 2px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.12);
+    --shadow-keycap-pressed: var(--shadow-keycap-active);
+    --shadow-well-recessed: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 2px 6px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.07);
+    --shadow-frame-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 42px -14px rgba(0, 0, 0, 0.62), 0 4px 12px -2px rgba(0, 0, 0, 0.42);
+    --shadow-modal: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 24px 60px rgba(0, 0, 0, 0.74);
+    --shadow-drawer: inset 0 1px 0 rgba(255, 255, 255, 0.08), 20px 0 56px rgba(0, 0, 0, 0.72);
+
+    /* Acentos semanticos y controles */
+    --status-online: #34D399;
+    --status-offline: #F87171;
+    --braun-signal: var(--beam-color);
+    --accent-favorite: #FACC15;
+    --accent-favorite-bg: rgba(250, 204, 21, 0.14);
+    --danger-bg: rgba(244, 63, 94, 0.16);
+    --danger-border: rgba(244, 63, 94, 0.42);
+    --danger-ink: #FFE4E6;
+    --beam-standby: #2A303C;
+    --beam-color: var(--beam-standby);
+    --beam-halo-tint: color-mix(in oklab, var(--beam-color) 35%, transparent);
+    --beam-surface-tint: color-mix(in oklab, var(--beam-color) 18%, rgba(22, 25, 32, 0.76));
+    --beam-border-tint: color-mix(in oklab, var(--beam-color) 56%, rgba(255, 255, 255, 0.75));
+    --beam-track-fill: color-mix(in oklab, var(--beam-color) 78%, #FFFFFF);
+    --aperture-off-bg: #181C24;
+    --slider-track-bg: rgba(14, 17, 23, 0.88);
+    --slider-thumb-bg: #F8FAFC;
+    --slider-thumb-border: rgba(0, 0, 0, 0.45);
+    --power-btn-bg: radial-gradient(circle at 32% 28%, rgba(56, 66, 86, 0.95), rgba(22, 26, 35, 0.98));
+    --power-btn-ink: #F3F5F8;
+    --fft-bass-gradient: linear-gradient(90deg, #F97316, #EF4444);
+    --fft-mid-gradient: linear-gradient(90deg, #10B981, #06B6D4);
+    --fft-treble-gradient: linear-gradient(90deg, #6366F1, #EC4899);
+    --fft-rms-gradient: linear-gradient(90deg, #94A3B8, #F8FAFC);
+
+    /* Geometria de bordes atmosfericos */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-slider: 14px;
+  }
+}
+
+/* ==========================================================================
+ * TIER 3: Sobreescrituras Especificas de Material (`@layer theme-overrides`)
+ * ========================================================================== */
+@layer theme-overrides {
+  /* ------------------------------------------------------------------------
+   * Material A: Architectural Stone (Braun / Lutron Palladiom Hardware)
+   * ------------------------------------------------------------------------ */
+  html[data-theme="architectural-stone"] .console-shell {
+    background:
+      radial-gradient(ellipse at 50% 0%, #FAF8F3 0%, transparent 70%),
+      linear-gradient(180deg, var(--bg-canvas) 0%, var(--surface-chassis-alt) 100%);
+  }
+
+  /* Anillo optico grabado interno dentro de la apertura rebajada */
+  html[data-theme="architectural-stone"] .photometric-aperture::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+  }
+
+  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture {
+    background: radial-gradient(circle at 40% 35%, #EAE6DE 0%, var(--beam-standby) 100%);
+    border-color: var(--surface-2);
+    box-shadow:
+      inset 0 2px 4px rgba(20, 18, 15, 0.18),
+      inset 0 0 0 1px rgba(20, 18, 15, 0.08),
+      0 1px 0 #FFFFFF;
+  }
+
+  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture::after {
+    border-color: rgba(20, 18, 15, 0.08);
+  }
+
+  /* Indicador LED fisico estilo Braun en la pildora de estado */
+  html[data-theme="architectural-stone"] .state-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--braun-signal);
+    flex-shrink: 0;
+  }
+
+  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .state-pill::before {
+    background-color: var(--ink-3);
+  }
+
+  /* Senal industrial Braun en la tarjeta Kelvin activa */
+  html[data-theme="architectural-stone"] .kelvin-card.active::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--braun-signal);
+  }
+
+  /* Pistas de deslizadores con marcas de escala grabadas y cursor fader de ceramica */
+  html[data-theme="architectural-stone"] .console-slider {
+    --slider-track-size: 16px;
+    --slider-thumb-size: 22px;
+    --slider-thumb-width: 18px;
+    background:
+      repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(10% - 1px),
+        rgba(24, 23, 21, 0.12) calc(10% - 1px),
+        rgba(24, 23, 21, 0.12) 10%
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--fill-color) 72%, #FFFDF8) 0%,
+        var(--fill-color) var(--slider-progress),
+        var(--slider-track-bg) var(--slider-progress),
+        var(--slider-track-bg) 100%
+      );
+    border: 1px solid rgba(20, 18, 15, 0.16);
+    box-shadow:
+      inset 0 1px 2px rgba(20, 18, 15, 0.16),
+      0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+
+  html[data-theme="architectural-stone"] .console-slider.kelvin-track {
+    background:
+      repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(12.5% - 1px),
+        rgba(24, 23, 21, 0.16) calc(12.5% - 1px),
+        rgba(24, 23, 21, 0.16) 12.5%
+      ),
+      var(--kelvin-track-gradient);
+  }
+
+  html[data-theme="architectural-stone"] .console-slider::-webkit-slider-thumb {
+    border-radius: 5px;
+    background:
+      linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 43%,
+        rgba(24, 23, 21, 0.38) 43%,
+        rgba(24, 23, 21, 0.38) 57%,
+        transparent 57%,
+        transparent 100%
+      ),
+      linear-gradient(180deg, #FFFFFF 0%, #F2EFE9 100%);
+    border: 1px solid var(--slider-thumb-border);
+    box-shadow:
+      0 2px 4px rgba(20, 18, 15, 0.18),
+      inset 0 1px 0 #FFFFFF;
+  }
+
+  html[data-theme="architectural-stone"] .console-slider::-moz-range-thumb {
+    border-radius: 5px;
+    background:
+      linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 43%,
+        rgba(24, 23, 21, 0.38) 43%,
+        rgba(24, 23, 21, 0.38) 57%,
+        transparent 57%,
+        transparent 100%
+      ),
+      linear-gradient(180deg, #FFFFFF 0%, #F2EFE9 100%);
+    border: 1px solid var(--slider-thumb-border);
+    box-shadow:
+      0 2px 4px rgba(20, 18, 15, 0.18),
+      inset 0 1px 0 #FFFFFF;
+  }
+
+  /* Desplazamiento mecanico tactil de 1px al presionar teclas fisicas */
+  html[data-theme="architectural-stone"] :is(
+    .fixture-pill-trigger,
+    .lang-btn,
+    .theme-btn,
+    .btn,
+    .chip-btn,
+    .btn-power,
+    .kelvin-card,
+    .scene-card,
+    .color-swatch,
+    .mode-tab,
+    .btn-fixture-power,
+    .btn-icon-rename
+  ):active {
+    transform: translateY(1px);
+  }
+
+  html[data-theme="architectural-stone"] .btn-power[aria-pressed="true"],
+  html[data-theme="architectural-stone"] #master-power-btn[aria-pressed="true"] {
+    background: var(--power-btn-bg);
+    color: var(--power-btn-ink);
+    box-shadow:
+      0 2px 6px rgba(20, 18, 15, 0.24),
+      0 0 0 1px #181715,
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  html[data-theme="architectural-stone"] .btn-power[aria-pressed="true"] .icon,
+  html[data-theme="architectural-stone"] #master-power-btn[aria-pressed="true"] .icon {
+    color: var(--braun-signal);
+  }
+
+  /* ------------------------------------------------------------------------
+   * Material B: Atmospheric Dark (Atmospheric Glass & Radial Projection Halo)
+   * ------------------------------------------------------------------------ */
+  html[data-theme="atmospheric-dark"] #console-shell {
+    background-color: var(--bg-canvas);
+  }
+
+  /* Halo fotometrico radial proyectado tras la cabecera y escenario principal */
+  html[data-theme="atmospheric-dark"] #console-shell::before {
+    content: "";
+    position: fixed;
+    inset: -12% -10% 0 -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        68% 50% at 50% 6%,
+        color-mix(in oklab, var(--beam-color) 35%, transparent) 0%,
+        color-mix(in oklab, var(--beam-color) 16%, transparent) 46%,
+        transparent 78%
+      ),
+      radial-gradient(
+        52% 44% at 50% 24%,
+        color-mix(in oklab, var(--beam-color) 22%, transparent) 0%,
+        transparent 72%
+      );
+    opacity: 0;
+    transition:
+      opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      background 220ms ease;
+  }
+
+  html[data-theme="atmospheric-dark"] #console-shell[data-power="on"]::before {
+    opacity: 1;
+  }
+
+  /* Superficies en vidrio ahumado con desenfoque y borde especular */
+  html[data-theme="atmospheric-dark"] :is(
+    .fixture-pill-trigger,
+    .lang-switcher,
+    .theme-switcher,
+    .stage-header,
+    .control-well,
+    .mode-tabs,
+    .rgb-workbench,
+    .kelvin-card,
+    .scenes-toolbar,
+    .scene-card,
+    .custom-scene-card,
+    .ambilight-workbench,
+    .music-workbench,
+    .toast,
+    .btn-power,
+    #master-power-btn
+  ) {
+    backdrop-filter: var(--glass-backdrop);
+    -webkit-backdrop-filter: var(--glass-backdrop);
+  }
+
+  html[data-theme="atmospheric-dark"] .stage-header {
+    background:
+      radial-gradient(
+        90% 140% at 12% 50%,
+        color-mix(in oklab, var(--beam-color) 24%, transparent) 0%,
+        transparent 72%
+      ),
+      var(--surface-1);
+    box-shadow:
+      var(--surface-edge-highlight),
+      0 20px 48px -16px color-mix(in oklab, var(--beam-color) 26%, rgba(0, 0, 0, 0.72)),
+      0 4px 14px -2px rgba(0, 0, 0, 0.45);
+  }
+
+  html[data-theme="atmospheric-dark"] #console-shell[data-power="off"] .stage-header {
+    background: var(--surface-1);
+    box-shadow: var(--shadow-frame-elevated);
+  }
+
+  /* Lente optica luminosa y estado en reposo sobre vidrio oscuro */
+  html[data-theme="atmospheric-dark"] .photometric-aperture {
+    background:
+      radial-gradient(
+        circle at 34% 30%,
+        color-mix(in oklab, var(--beam-color) 52%, #FFFFFF) 0%,
+        var(--beam-color) 50%,
+        color-mix(in oklab, var(--beam-color) 74%, var(--bg-canvas)) 100%
+      );
+    border: 1.5px solid color-mix(in oklab, var(--beam-color) 65%, rgba(255, 255, 255, 0.88));
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 0.48),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.36),
+      0 0 var(--aperture-glow-radius, 28px) color-mix(in oklab, var(--beam-color) var(--aperture-glow-alpha, 64%), transparent),
+      0 0 46px color-mix(in oklab, var(--beam-color) 35%, transparent);
+  }
+
+  html[data-theme="atmospheric-dark"] #console-shell[data-power="off"] .photometric-aperture {
+    background:
+      radial-gradient(
+        circle at 32% 28%,
+        rgba(255, 255, 255, 0.10) 0%,
+        var(--aperture-off-bg) 54%,
+        var(--bg-canvas) 100%
+      );
+    border: 1px solid var(--border-subtle);
+    box-shadow:
+      inset 0 1px 2px rgba(255, 255, 255, 0.08),
+      inset 0 -3px 6px rgba(0, 0, 0, 0.72),
+      0 2px 8px rgba(0, 0, 0, 0.45);
+  }
+
+  /* Pistas deslizadoras tactiles en forma de pildora luminosa */
+  html[data-theme="atmospheric-dark"] .slider-row,
+  html[data-theme="atmospheric-dark"] .kelvin-track-wrapper {
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  html[data-theme="atmospheric-dark"] .console-slider {
+    --fill-color: color-mix(in oklab, var(--beam-color) 78%, #FFFFFF);
+    --fill-start: color-mix(in oklab, var(--beam-color) 28%, rgba(22, 25, 32, 0.95));
+    --slider-track-size: 32px;
+    --slider-thumb-width: 14px;
+    --slider-thumb-size: 24px;
+    padding: 0 5px;
+    background: linear-gradient(
+      90deg var(--in-oklab),
+      var(--fill-start) 0%,
+      var(--fill-color) var(--slider-progress),
+      var(--slider-track-bg) var(--slider-progress),
+      var(--slider-track-bg) 100%
+    );
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-slider);
+    box-shadow:
+      var(--surface-edge-highlight),
+      inset 0 2px 6px rgba(0, 0, 0, 0.48);
+  }
+
+  html[data-theme="atmospheric-dark"] #brightness-slider,
+  html[data-theme="atmospheric-dark"] #kelvin-slider {
+    --slider-track-size: 34px;
+    --slider-thumb-size: 26px;
+  }
+
+  html[data-theme="atmospheric-dark"] .console-slider.kelvin-track {
+    background: var(--kelvin-track-gradient);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.24),
+      inset 0 -1px 4px rgba(0, 0, 0, 0.35),
+      0 0 22px color-mix(in oklab, var(--beam-color) 18%, transparent);
+  }
+
+  html[data-theme="atmospheric-dark"] .console-slider::-webkit-slider-thumb {
+    border-radius: 9px;
+    background: linear-gradient(180deg, #FFFFFF 0%, var(--slider-thumb-bg) 100%);
+    border: 1.5px solid var(--slider-thumb-border);
+    box-shadow:
+      0 0 14px color-mix(in oklab, var(--beam-color) 75%, rgba(255, 255, 255, 0.6)),
+      0 2px 6px rgba(0, 0, 0, 0.65),
+      inset 0 1px 0 #FFFFFF;
+  }
+
+  html[data-theme="atmospheric-dark"] .console-slider::-moz-range-thumb {
+    border-radius: 9px;
+    background: linear-gradient(180deg, #FFFFFF 0%, var(--slider-thumb-bg) 100%);
+    border: 1.5px solid var(--slider-thumb-border);
+    box-shadow:
+      0 0 14px color-mix(in oklab, var(--beam-color) 75%, rgba(255, 255, 255, 0.6)),
+      0 2px 6px rgba(0, 0, 0, 0.65),
+      inset 0 1px 0 #FFFFFF;
+  }
+
+  /* Orbe luminoso de encendido maestro en tema oscuro */
+  html[data-theme="atmospheric-dark"] .btn-power,
+  html[data-theme="atmospheric-dark"] #master-power-btn,
+  html[data-theme="atmospheric-dark"] .power-button {
+    background: var(--power-btn-bg);
+    color: var(--power-btn-ink);
+    border: 1px solid var(--border-muted);
+    border-radius: 999px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 8px 22px -6px rgba(0, 0, 0, 0.65);
+  }
+
+  html[data-theme="atmospheric-dark"] .btn-power[aria-pressed="true"],
+  html[data-theme="atmospheric-dark"] #master-power-btn[aria-pressed="true"],
+  html[data-theme="atmospheric-dark"] #console-shell[data-power="on"] .power-button {
+    background: linear-gradient(
+      180deg var(--in-oklab),
+      color-mix(in oklab, var(--beam-color) 48%, rgba(32, 37, 48, 0.88)) 0%,
+      color-mix(in oklab, var(--beam-color) 28%, rgba(22, 25, 32, 0.94)) 100%
+    );
+    border-color: color-mix(in oklab, var(--beam-color) 62%, rgba(255, 255, 255, 0.38));
+    color: #FFFFFF;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      0 0 24px color-mix(in oklab, var(--beam-color) 42%, transparent),
+      0 8px 24px -6px rgba(0, 0, 0, 0.65);
+  }
+}

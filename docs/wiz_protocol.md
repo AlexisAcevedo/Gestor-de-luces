@@ -222,6 +222,17 @@ In an interactive streaming loop, waiting for an ACK on every frame introduces t
 2. Transmits the UDP packet directly onto the network socket.
 3. Immediately returns control to the caller without blocking on `sock.recvfrom()`.
 
+### Socket Reuse & Lifecycle Management
+
+Rather than allocating and closing a new OS socket on every 10 Hz Ambilight or Music Sync frame, `WizUdpController` lazily initializes and reuses a persistent non-blocking UDP socket (`_stream_sock`) across streaming frames, releasing the underlying socket handle cleanly via `close()`.
+
+### Defensive UDP Hardening
+
+To protect the event loop against malformed or untrusted local network traffic, `WizUdpController` enforces strict transport validation:
+- **Inbound Datagram Size Cap**: Incoming UDP datagrams are capped at `4,096` bytes to prevent memory exhaustion from oversized packets.
+- **Target IP Validation**: Target bulb addresses are validated as strict IPv4 unicast addresses before socket transmission.
+- **Malformed Payload Resilience**: Malformed or truncated `getPilot` and `getSystemConfig` JSON responses are safely rejected without crashing the `asyncio` event loop.
+
 ### The 10 Hz Rate Limit Constraint
 
 WiZ bulb microcontrollers (typically Espressif ESP8266 or ESP32) maintain a small internal ring buffer for incoming UDP packets. 

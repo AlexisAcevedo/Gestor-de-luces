@@ -16,15 +16,26 @@ import asyncio
 from pathlib import Path
 
 from gestor_luces.adapters.storage.json_repositories import (
+    DEFAULT_SETTINGS,
     JsonBulbRepository,
     JsonSceneRepository,
+    JsonSettingsRepository,
 )
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.models import Bulb, LightState
 from gestor_luces.domain.scenes import CustomScene
-from gestor_luces.domain.value_objects import Color, LightMode
+from gestor_luces.domain.value_objects import (
+    DEFAULT_LANGUAGE,
+    DEFAULT_THEME,
+    SUPPORTED_LANGUAGES,
+    SUPPORTED_THEMES,
+    Color,
+    LightMode,
+    normalize_language,
+    normalize_theme,
+)
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 
 
@@ -270,3 +281,49 @@ async def test_webview_bridge_custom_scenes_and_sleep_timer(tmp_path: Path) -> N
             assert deleted_env["custom_scenes"] == []
         finally:
             bridge.shutdown()
+
+
+def test_settings_repository_and_service_theme_persistence(tmp_path: Path) -> None:
+    """Verifica el valor por defecto `architectural-stone`, normalizacion y persistencia de `theme`."""
+    assert DEFAULT_LANGUAGE == "en"
+    assert DEFAULT_THEME == "architectural-stone"
+    assert SUPPORTED_LANGUAGES == ("en", "es")
+    assert SUPPORTED_THEMES == ("architectural-stone", "atmospheric-dark")
+    assert DEFAULT_SETTINGS == {"language": "en", "theme": "architectural-stone"}
+
+    assert normalize_language("ES") == "es"
+    assert normalize_language("fr") == "en"
+    assert normalize_language(None) == "en"
+    assert normalize_theme("  Atmospheric-Dark ") == "atmospheric-dark"
+    assert normalize_theme("invalid-theme") == "architectural-stone"
+    assert normalize_theme(123) == "architectural-stone"
+
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+    assert settings_repo.load_settings() == {
+        "language": "en",
+        "theme": "architectural-stone",
+    }
+
+    settings_repo.save_settings(
+        {"language": "es", "theme": "atmospheric-dark", "custom_flag": True}
+    )
+    loaded = settings_repo.load_settings()
+    assert loaded == {
+        "language": "es",
+        "theme": "atmospheric-dark",
+        "custom_flag": True,
+    }
+
+    controller = WizUdpController(probe_candidates=[])
+    service = LightControlService(controller=controller, settings_repository=settings_repo)
+    assert service.get_language() == "es"
+    assert service.get_theme() == "atmospheric-dark"
+
+    assert service.set_theme("architectural-stone") == "architectural-stone"
+    assert service.get_theme() == "architectural-stone"
+    assert settings_repo.load_settings()["theme"] == "architectural-stone"
+
+    # Un tema desconocido cae de forma segura a DEFAULT_THEME
+    assert service.set_theme("neon-pink") == "architectural-stone"
+    assert service.get_theme() == "architectural-stone"
+

@@ -34,6 +34,7 @@ _agent/
 _agents/
 .worktrees/
 docs/ui_redesign_spec*.md
+launch-*.cmd
 
 # Editors and OS
 .vscode/
