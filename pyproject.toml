@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "0.3.1"
 description = "Hexagonal desktop light manager for Philips WiZ smart bulbs over local UDP."
 requires-python = ">=3.11"
 authors = [{ name = "AlexisAcevedo", email = "alexis.acevedo@outlook.com" }]
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     # Core WiZ light communication (UDP 38899)
     "pywizlight==0.6.6",
