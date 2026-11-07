@@ -305,12 +305,7 @@ Expected output:
 100 passed in ~2.5s
 ```
 
-To run static security analysis and dependency vulnerability checks (installed with the `dev` extra):
-
-```bash
-python -m bandit -r src -q
-python -m pip_audit
-```
+Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
 ---
 

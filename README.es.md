@@ -305,12 +305,7 @@ Resultado esperado:
 100 passed in ~2.5s
 ```
 
-Para ejecutar el análisis estático de seguridad y la auditoría de vulnerabilidades en dependencias (instaladas con el extra `dev`):
-
-```bash
-python -m bandit -r src -q
-python -m pip_audit
-```
+El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 
 ---
 

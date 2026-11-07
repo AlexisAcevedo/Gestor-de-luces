@@ -33,3 +33,19 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+      - name: Static security analysis (bandit, informational)
+        continue-on-error: true
+        run: python -m bandit -r src -q -f json -o bandit-report.json
+
+      - name: Dependency audit (pip-audit, informational)
+        continue-on-error: true
+        run: python -m pip_audit
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report-py${{ matrix.python-version }}
+          path: bandit-report.json
+          if-no-files-found: ignore
