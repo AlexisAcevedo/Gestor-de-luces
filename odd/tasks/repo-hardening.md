@@ -18,8 +18,8 @@ usuario.
 | --- | --- | --- | --- |
 | T-0.1 CI mínimo | S3 | inline | `4355052` |
 | T-0.2 Ruff + baseline de formato | S3 | worker | — |
-| T-0.3 pyproject fuente de deps | S3 | worker (lanzado) | — |
-| T-0.4 requirements-dev limpio | S3 | worker (lanzado) | — |
+| T-0.3 pyproject fuente de deps | S3 | inline | `5774335` |
+| T-0.4 requirements-dev limpio | S3 | inline (absorbido por T-0.3) | `5774335` |
 | T-0.5 bandit/pip-audit en CI | S3 | inline | — |
 | T-1.1 docs ignoradas + `.atl/` | S2, S3 | inline | — |
 | T-1.2 un solo número de tests | S3 | inline | — |
@@ -62,3 +62,4 @@ usuario.
 - L4 (2026-11-08): rama `feature/repo-hardening` creada desde `main` (`075825b`) con worktree `.worktrees/repo-hardening`; `PLAN.md` (antes untracked) se versiona en la rama con las enmiendas.
 - L5 (2026-11-08): T-0.1 implementado inline (`.github/workflows/ci.yml`); su aceptación completa (PR de prueba verde + branch protection) requiere push, que es decisión del usuario (S4).
 - L6 (2026-11-08): límite de slice registrado — el commit `4dc0840` (752 líneas) es el documento del plan + enmiendas §11, no código; los slices de ~400 líneas se aplican desde acá hacia adelante a las unidades de implementación (T-0.2 en adelante). Suite verificada verde desde el worktree (100 passed) con `PYTHONPATH=<worktree>/src` y el venv del repo principal.
+- L7 (2026-11-08): T-0.3/T-0.4 implementados inline (launcher de writers rechazó el launch sin `Spec:`/`workspace_root`; próximo worker se lanza con ambos). Aceptación verificada: (a) `pip install -e ".[dev]"` en venv nuevo del worktree OK; (b) 100 passed; (c) `gestor-luces --help` exit 0; (d) venv sin extras instala las 7 deps runtime (importables) y `pip show pytest` falla; (e) `pip check` limpio en ambos. (f) build congelado + `--smoke-test` corriendo en background. VERIFICADO (f): `scripts/build.ps1` completo (instalador + SHA256SUMS) y `dist/GestorDeLuces/GestorDeLuces.exe --smoke-test` exit 0; T-0.3/T-0.4 commiteados en `5774335`. `requirements.txt`/`requirements-dev.txt` eliminados (fuente única: `pyproject.toml`); README EN/ES actualizado en las 4 líneas que instruían instalar por requirements. PENDIENTE: campo `license` de `[project]` no definido — no existe archivo LICENSE en el repo y elegir una licencia es decisión del usuario. GOTCHA: el paquete `pywebview==6.2.1` se importa como `webview` (no `pywebview`); verificar imports con el nombre real (`webview, pywizlight, pystray, mss, numpy, PIL, pyaudiowpatch`).
