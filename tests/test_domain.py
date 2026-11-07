@@ -12,7 +12,6 @@ from gestor_luces.domain import (
     Color,
     ColorTemperature,
     CustomScene,
-    Group,
     LightMode,
     LightState,
     SceneSpeed,
@@ -89,7 +88,7 @@ def test_builtin_scenes_catalog_matches_pywizlight() -> None:
 
 
 def test_custom_scene_and_bulb_serialization() -> None:
-    """Verifica la serializacion a diccionario de Bulb, LightState, Group y CustomScene."""
+    """Verifica la serializacion a diccionario de Bulb, LightState y CustomScene."""
     bulb = Bulb(ip="192.168.1.38", mac="a8bb50df9029")
     assert bulb.name == "WiZ Bulb (192.168.1.38)"
 
@@ -113,6 +112,3 @@ def test_custom_scene_and_bulb_serialization() -> None:
     )
     restored = CustomScene.from_dict(custom.to_dict())
     assert restored == custom
-
-    group = Group(id="desk", name="Escritorio", bulb_ips=["192.168.1.38", "192.168.1.39"])
-    assert group.to_dict()["bulb_ips"] == ["192.168.1.38", "192.168.1.39"]

@@ -1,4 +1,4 @@
-"""Herramienta de linea de comandos (Fase 1) para verificar la comunicacion UDP con focos WiZ.
+"""Herramienta de linea de comandos para verificar la comunicacion UDP con focos WiZ.
 
 Este modulo permite comprobar de punta a punta que la PC (conectada por Ethernet)
 puede descubrir y controlar el foco WiZ (conectado por WiFi 2.4 GHz) en la misma LAN
