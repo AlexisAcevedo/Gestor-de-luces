@@ -130,8 +130,9 @@ Si la verificación de A falla, el plan cae a B sin cambiar el resto.
 usuario.
 
 **T-0.1 — CI mínimo (build + tests)**
-- Crear `.github/workflows/ci.yml`: `windows-latest`, matriz Python `3.11` y `3.14`,
-  `pip install -r requirements-dev.txt`, `pytest`.
+- Crear `.github/workflows/ci.yml`: `windows-latest`, matriz Python `3.12` y `3.14`
+  (amendado §11/L12: `numpy==2.5.4` exige `>=3.12`; el piso 3.11 original era imposible),
+  `pip install -e ".[dev]"`, `pytest`.
 - Cachear `~/.cache/pip`.
 - **Aceptación:** el workflow corre verde en un PR de prueba y el merge queda bloqueado si
   falla (branch protection).
