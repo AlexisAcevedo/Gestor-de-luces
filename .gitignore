@@ -28,12 +28,12 @@ data/
 *.pem
 
 # AI agent configuration and local design specs (local only)
+.atl/
 .agent/
 .agents/
 _agent/
 _agents/
 .worktrees/
-docs/ui_redesign_spec*.md
 launch-*.cmd
 
 # Editors and OS
