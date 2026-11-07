@@ -7,8 +7,8 @@ module is injectable so tests never touch the real registry.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)

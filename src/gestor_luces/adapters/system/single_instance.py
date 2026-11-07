@@ -7,10 +7,10 @@ instance can bring its window to the front.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import sys
 import threading
+from collections.abc import Callable
 
 _LOGGER = logging.getLogger(__name__)
 

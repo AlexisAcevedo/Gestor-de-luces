@@ -10,7 +10,7 @@ sin riesgo de efectos secundarios.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
 DEFAULT_LANGUAGE: str = "en"
@@ -36,8 +36,7 @@ def normalize_theme(value: object) -> str:
     return DEFAULT_THEME
 
 
-
-class LightMode(str, Enum):
+class LightMode(StrEnum):
     """Define los modos de operacion mutuamente excluyentes de un foco WiZ."""
 
     RGB = "rgb"
@@ -122,7 +121,8 @@ class ColorTemperature:
             or not (2200 <= self.kelvin <= 6500)
         ):
             raise ValueError(
-                f"Color temperature must be an integer between 2200 and 6500 K, got {self.kelvin!r}."
+                f"Color temperature must be an integer between 2200 and 6500 K, "
+                f"got {self.kelvin!r}."
             )
 
 

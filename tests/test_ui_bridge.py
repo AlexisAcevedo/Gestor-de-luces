@@ -175,4 +175,3 @@ async def test_webview_bridge_theme_and_fit_window_height(tmp_path) -> None:
         assert fit_calls == [640]
     finally:
         bridge.shutdown()
-

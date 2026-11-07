@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +23,8 @@ def resolve_asset_path(*parts: str) -> Path:
 
 
 def resolve_app_version() -> str:
-    """Return the installed package version, or the `pyproject.toml` one when running from source."""
+    """Return the installed package version, or the `pyproject.toml` one when running from
+    source."""
     try:
         from importlib.metadata import PackageNotFoundError, version
 
@@ -32,7 +33,9 @@ def resolve_app_version() -> str:
         except PackageNotFoundError:
             _LOGGER.debug("Package 'gestor-luces' not installed; reading pyproject.toml.")
     except Exception:
-        _LOGGER.debug("Could not query importlib.metadata; falling back to pyproject.toml.", exc_info=True)
+        _LOGGER.debug(
+            "Could not query importlib.metadata; falling back to pyproject.toml.", exc_info=True
+        )
     pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
     try:
         import tomllib

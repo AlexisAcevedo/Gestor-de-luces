@@ -284,7 +284,8 @@ async def test_webview_bridge_custom_scenes_and_sleep_timer(tmp_path: Path) -> N
 
 
 def test_settings_repository_and_service_theme_persistence(tmp_path: Path) -> None:
-    """Verifica el valor por defecto `architectural-stone`, normalizacion y persistencia de `theme`."""
+    """Verifica el valor por defecto `architectural-stone`, normalizacion y persistencia de
+    `theme`."""
     assert DEFAULT_LANGUAGE == "en"
     assert DEFAULT_THEME == "architectural-stone"
     assert SUPPORTED_LANGUAGES == ("en", "es")
@@ -326,4 +327,3 @@ def test_settings_repository_and_service_theme_persistence(tmp_path: Path) -> No
     # Un tema desconocido cae de forma segura a DEFAULT_THEME
     assert service.set_theme("neon-pink") == "architectural-stone"
     assert service.get_theme() == "architectural-stone"
-

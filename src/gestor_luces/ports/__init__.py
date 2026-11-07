@@ -12,6 +12,7 @@ from gestor_luces.ports.repositories import (
 
 __all__ = [
     "AudioSampler",
+    "AutostartManager",
     "BulbRepository",
     "LightController",
     "SceneRepository",

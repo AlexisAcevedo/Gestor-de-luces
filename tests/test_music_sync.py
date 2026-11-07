@@ -285,7 +285,8 @@ def test_wasapi_loopback_sampler_non_blocking_silence_timeout() -> None:
 
 
 async def test_music_sync_stream_and_mutual_exclusion_with_ambilight() -> None:
-    """Verifica la emision UDP de Music Sync y la exclusion mutua frente a Ambilight y control manual."""
+    """Verifica la emision UDP de Music Sync y la exclusion mutua frente a Ambilight y control
+    manual."""
     async with FakeWizBulbServer(mac="a8bb50df9029") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         audio_sampler = CyclingAudioSampler(
@@ -373,7 +374,8 @@ async def test_music_sync_stream_and_mutual_exclusion_with_ambilight() -> None:
 
 
 async def test_webview_bridge_music_sync_lifecycle() -> None:
-    """Comprueba start_music_sync, get_music_sync_status y stop_music_sync a traves de WebviewBridge."""
+    """Comprueba start_music_sync, get_music_sync_status y stop_music_sync a traves de
+    WebviewBridge."""
     async with FakeWizBulbServer(mac="a8bb50445566") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         audio_sampler = CyclingAudioSampler(
@@ -444,4 +446,3 @@ async def test_webview_bridge_music_sync_lifecycle() -> None:
         finally:
             bridge.shutdown()
             assert audio_sampler.closed is True
-

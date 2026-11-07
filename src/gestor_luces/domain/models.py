@@ -56,7 +56,11 @@ class LightState:
             else None
         )
         raw_mode = data.get("mode", LightMode.TEMPERATURE.value)
-        mode = LightMode(raw_mode) if raw_mode in {m.value for m in LightMode} else LightMode.TEMPERATURE
+        mode = (
+            LightMode(raw_mode)
+            if raw_mode in {m.value for m in LightMode}
+            else LightMode.TEMPERATURE
+        )
         return cls(
             is_on=bool(data.get("is_on", False)),
             brightness=int(data.get("brightness", 100)),

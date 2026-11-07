@@ -11,4 +11,3 @@ __all__ = [
     "WasapiLoopbackSampler",
     "analyze_pcm_audio_frame",
 ]
-

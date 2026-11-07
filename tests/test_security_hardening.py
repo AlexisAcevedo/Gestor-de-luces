@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
 from gestor_luces.adapters.storage.json_repositories import _atomic_write_json
@@ -14,8 +17,6 @@ from gestor_luces.application.service import (
     validate_local_endpoint,
 )
 from gestor_luces.domain.models import Bulb
-from pathlib import Path
-from types import SimpleNamespace
 
 
 @pytest.mark.parametrize("value", [float("inf"), "abc", None, [], {}])
@@ -68,7 +69,9 @@ def test_js_api_hides_lifecycle_methods() -> None:
     assert "set_power" in public
 
 
-async def test_discover_ignores_broadcast_hits_when_probe_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_discover_ignores_broadcast_hits_when_probe_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     controller = WizUdpController()
 
     async def fake_discover_lights(*_a: object, **_kw: object) -> list[object]:
@@ -169,6 +172,7 @@ def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
 
 def test_index_html_has_no_inline_style_attributes() -> None:
     import re
+
     from gestor_luces.main import resolve_ui_directory
 
     index_html = (resolve_ui_directory() / "index.html").read_text(encoding="utf-8")

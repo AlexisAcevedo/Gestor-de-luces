@@ -1,4 +1,5 @@
-"""Tests for window auto-fit: pure height math, JsApi/WebviewBridge validation, 64-bit Win32 and InvokeRequired."""
+"""Tests for window auto-fit: pure height math, JsApi/WebviewBridge validation, 64-bit Win32 and
+InvokeRequired."""
 
 from __future__ import annotations
 
@@ -152,9 +153,7 @@ def test_fit_native_window_height_handles_64bit_hwnd_and_invoke_required() -> No
 
 
 def test_fit_native_window_height_skips_when_disposed_or_handle_not_created() -> None:
-    disposed_window = SimpleNamespace(
-        native=SimpleNamespace(IsDisposed=True, IsHandleCreated=True)
-    )
+    disposed_window = SimpleNamespace(native=SimpleNamespace(IsDisposed=True, IsHandleCreated=True))
     uncreated_window = SimpleNamespace(
         native=SimpleNamespace(IsDisposed=False, IsHandleCreated=False)
     )
@@ -163,8 +162,8 @@ def test_fit_native_window_height_skips_when_disposed_or_handle_not_created() ->
 
 
 def test_scenes_grid_prevents_css_grid_row_collapse() -> None:
-    from pathlib import Path
     import re
+    from pathlib import Path
 
     styles_path = Path(__file__).resolve().parent.parent / "ui" / "styles.css"
     css_text = styles_path.read_text(encoding="utf-8")
@@ -185,4 +184,3 @@ def test_scenes_grid_prevents_css_grid_row_collapse() -> None:
     custom_grid_match = re.search(r"\.custom-scenes-grid\s*\{([^}]*)\}", css_text)
     assert custom_grid_match is not None
     assert "grid-auto-rows: max-content" in custom_grid_match.group(1)
-
