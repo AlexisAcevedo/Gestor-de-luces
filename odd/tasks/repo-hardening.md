@@ -16,7 +16,7 @@ usuario.
 
 | ID | Spec | Route | Commit |
 | --- | --- | --- | --- |
-| T-0.1 CI mínimo | S3 | inline | pendiente |
+| T-0.1 CI mínimo | S3 | inline | `4355052` |
 | T-0.2 Ruff + baseline de formato | S3 | worker | — |
 | T-0.3 pyproject fuente de deps | S3 | worker (lanzado) | — |
 | T-0.4 requirements-dev limpio | S3 | worker (lanzado) | — |
@@ -61,3 +61,4 @@ usuario.
 - L3 (2026-11-08, usuario): decisiones resueltas D1 = A, D2 = A, D3 = A, D4 = A.
 - L4 (2026-11-08): rama `feature/repo-hardening` creada desde `main` (`075825b`) con worktree `.worktrees/repo-hardening`; `PLAN.md` (antes untracked) se versiona en la rama con las enmiendas.
 - L5 (2026-11-08): T-0.1 implementado inline (`.github/workflows/ci.yml`); su aceptación completa (PR de prueba verde + branch protection) requiere push, que es decisión del usuario (S4).
+- L6 (2026-11-08): límite de slice registrado — el commit `4dc0840` (752 líneas) es el documento del plan + enmiendas §11, no código; los slices de ~400 líneas se aplican desde acá hacia adelante a las unidades de implementación (T-0.2 en adelante). Suite verificada verde desde el worktree (100 passed) con `PYTHONPATH=<worktree>/src` y el venv del repo principal.
