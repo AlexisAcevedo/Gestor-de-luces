@@ -13,13 +13,13 @@ Decisiones de hilos (verificadas con pystray 0.19.5 y pywebview 6.2.1 en Windows
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import threading
+from collections.abc import Callable
 from typing import Any, Protocol
 
-from PIL import Image
 import pystray
+from PIL import Image
 
 from gestor_luces.adapters.tray.bulb_icon import render_bulb_image
 from gestor_luces.adapters.tray.menu_model import (
@@ -62,7 +62,8 @@ class TrayActions(Protocol):
 
 
 def render_icon_image(rgb: tuple[int, int, int], size: int = ICON_SIZE) -> Image.Image:
-    """Dibuja la bombilla de la aplicacion teñida con el color del haz (misma forma que el icono de ventana)."""
+    """Dibuja la bombilla de la aplicacion teñida con el color del haz (misma forma que el icono de
+    ventana)."""
     return render_bulb_image(rgb, size)
 
 

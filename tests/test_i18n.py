@@ -228,6 +228,13 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     assert "SCENE_CHROMATIC_MAP" in app_js
     assert "gestor_luces_fav_scenes" in app_js
     # Los nombres de las 36 escenas nativas de WiZ se mantienen en su denominacion original
-    for builtin_name in ("Ocean", "Romance", "Sunset", "Fireplace", "Daylight", "Steampunk", "Plantgrowth"):
+    for builtin_name in (
+        "Ocean",
+        "Romance",
+        "Sunset",
+        "Fireplace",
+        "Daylight",
+        "Steampunk",
+        "Plantgrowth",
+    ):
         assert f'name: "{builtin_name}"' in app_js
-

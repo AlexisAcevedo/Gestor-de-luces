@@ -10,10 +10,9 @@ aplican de forma consistente sin bloquear la interfaz grafica ni saturar el bus 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import inspect
 import logging
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from gestor_luces.application.sleep_timer import AwaitableStatusDict
 from gestor_luces.domain.value_objects import Brightness, Color
@@ -70,7 +69,8 @@ class AmbilightStreamManager:
         normalized_mode = str(color_mode).strip().lower()
         if normalized_mode not in VALID_AMBILIGHT_MODES:
             raise ValueError(
-                f"Invalid Ambilight color mode '{color_mode}'. Expected one of {VALID_AMBILIGHT_MODES}."
+                f"Invalid Ambilight color mode '{color_mode}'. "
+                f"Expected one of {VALID_AMBILIGHT_MODES}."
             )
         parsed_alpha = float(smoothing_alpha)
         if not (0.05 <= parsed_alpha <= 1.0):
@@ -123,11 +123,7 @@ class AmbilightStreamManager:
 
     def get_status(self) -> AwaitableStatusDict:
         """Devuelve una fotografia serializable del estado actual del flujo Ambilight."""
-        is_running = (
-            self._active
-            and self._task is not None
-            and not self._task.done()
-        )
+        is_running = self._active and self._task is not None and not self._task.done()
         if not is_running:
             self._active = False
 

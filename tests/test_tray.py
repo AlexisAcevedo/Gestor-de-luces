@@ -89,8 +89,7 @@ def test_closest_brightness_level_and_preset_selection() -> None:
 
     # Sin favoritos marcados, se ofrecen hasta FALLBACK_PRESET_LIMIT presets de respaldo
     many_non_favorites = [
-        TrayPreset(id=f"p{idx}", name=f"Preset {idx}", is_favorite=False)
-        for idx in range(12)
+        TrayPreset(id=f"p{idx}", name=f"Preset {idx}", is_favorite=False) for idx in range(12)
     ]
     fallback = select_tray_presets(many_non_favorites)
     assert len(fallback) == FALLBACK_PRESET_LIMIT
@@ -156,20 +155,17 @@ def test_resolve_icon_rgb_and_render_icon_image() -> None:
         resolve_icon_rgb(is_on=False, mode="rgb", color=[255, 0, 0], temperature=None)
         == OFF_ICON_RGB
     )
-    assert resolve_icon_rgb(
-        is_on=True, mode="rgb", color=[12, 200, 95], temperature=None
-    ) == (12, 200, 95)
+    assert resolve_icon_rgb(is_on=True, mode="rgb", color=[12, 200, 95], temperature=None) == (
+        12,
+        200,
+        95,
+    )
     assert (
-        resolve_icon_rgb(is_on=True, mode="scene", color=None, temperature=None)
-        == SCENE_ICON_RGB
+        resolve_icon_rgb(is_on=True, mode="scene", color=None, temperature=None) == SCENE_ICON_RGB
     )
 
-    warm_rgb = resolve_icon_rgb(
-        is_on=True, mode="temperature", color=None, temperature=2200
-    )
-    cool_rgb = resolve_icon_rgb(
-        is_on=True, mode="temperature", color=None, temperature=6500
-    )
+    warm_rgb = resolve_icon_rgb(is_on=True, mode="temperature", color=None, temperature=2200)
+    cool_rgb = resolve_icon_rgb(is_on=True, mode="temperature", color=None, temperature=6500)
     assert warm_rgb == (255, 180, 107)
     assert cool_rgb == (214, 232, 255)
 
@@ -203,9 +199,7 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
         quit_count = 0
         ui_notifications = 0
 
-        def fake_icon_factory(
-            name: str, image: Any, title: str, menu: Any
-        ) -> FakeTrayIcon:
+        def fake_icon_factory(name: str, image: Any, title: str, menu: Any) -> FakeTrayIcon:
             icon = FakeTrayIcon(name, image, title, menu)
             created_icons.append(icon)
             return icon
@@ -249,9 +243,7 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             await asyncio.to_thread(bridge.save_custom_scene, "Crimson Pulse")
             await asyncio.to_thread(bridge.set_color, 10, 210, 140, 65)
             scenes_env = await asyncio.to_thread(bridge.save_custom_scene, "Mint Focus")
-            fav_id = next(
-                s["id"] for s in scenes_env["custom_scenes"] if s["name"] == "Mint Focus"
-            )
+            fav_id = next(s["id"] for s in scenes_env["custom_scenes"] if s["name"] == "Mint Focus")
             await asyncio.to_thread(bridge.set_custom_scene_favorite, fav_id, True)
 
             await asyncio.to_thread(tray.start)
@@ -301,14 +293,10 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             # 5. Iniciar temporizador desde la UI y cancelarlo desde la bandeja
             await asyncio.to_thread(bridge.start_sleep_timer, 15)
             await asyncio.to_thread(tray.refresh)
-            assert any(
-                e.action_id == ACTION_CANCEL_SLEEP_TIMER for e in tray.spec
-            )
+            assert any(e.action_id == ACTION_CANCEL_SLEEP_TIMER for e in tray.spec)
 
             await asyncio.to_thread(tray.dispatch, ACTION_CANCEL_SLEEP_TIMER)
-            assert all(
-                e.action_id != ACTION_CANCEL_SLEEP_TIMER for e in tray.spec
-            )
+            assert all(e.action_id != ACTION_CANCEL_SLEEP_TIMER for e in tray.spec)
 
             # 6. Verificar que un cambio originado en la UI dispare el listener de bandeja
             prev_updates = fake_icon.update_menu_count

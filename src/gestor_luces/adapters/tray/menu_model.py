@@ -204,7 +204,7 @@ def kelvin_to_rgb(kelvin: int) -> tuple[int, int, int]:
     else:
         t = (k - 4200) / (6500 - 4200)
         start, end = (255, 241, 224), (214, 232, 255)
-    r, g, b = (round(a + (z - a) * t) for a, z in zip(start, end))
+    r, g, b = (round(a + (z - a) * t) for a, z in zip(start, end, strict=True))
     return (r, g, b)
 
 

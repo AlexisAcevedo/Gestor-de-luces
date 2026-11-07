@@ -18,10 +18,10 @@ de brillo de cortesia (`12%`) sin bloquear nunca el bucle de eventos.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -76,12 +76,14 @@ def _map_bands_to_color(
 
     normalized = palette_mode.strip().lower() if isinstance(palette_mode, str) else "spectrum"
     if normalized == "club":
-        # Paleta Club: graves en magenta/carmesi, medios en cian electrico y agudos en violeta/dorado.
+        # Paleta Club: graves en magenta/carmesi, medios en cian electrico y agudos en
+        # violeta/dorado.
         raw_r = (rel_bass * 1.00 + rel_treble * 0.72 + rel_mid * 0.08) * 255.0
         raw_g = (rel_mid * 0.92 + rel_treble * 0.35 + rel_bass * 0.05) * 255.0
         raw_b = (rel_mid * 0.95 + rel_treble * 0.95 + rel_bass * 0.42) * 255.0
     elif normalized == "chill":
-        # Paleta Chill (Aurora/Oceano): azul profundo en graves, esmeralda/turquesa en medios y lavanda en agudos.
+        # Paleta Chill (Aurora/Oceano): azul profundo en graves, esmeralda/turquesa en medios y
+        # lavanda en agudos.
         raw_r = (rel_treble * 0.68 + rel_bass * 0.10 + rel_mid * 0.06) * 255.0
         raw_g = (rel_mid * 0.92 + rel_bass * 0.38 + rel_treble * 0.45) * 255.0
         raw_b = (rel_bass * 0.95 + rel_treble * 0.98 + rel_mid * 0.68) * 255.0
@@ -188,7 +190,7 @@ def analyze_pcm_audio_frame(
             100,
             round(
                 STANDBY_BRIGHTNESS_FLOOR
-                + (normalized_rms ** 0.85) * (100.0 - STANDBY_BRIGHTNESS_FLOOR)
+                + (normalized_rms**0.85) * (100.0 - STANDBY_BRIGHTNESS_FLOOR)
             ),
         ),
     )
@@ -204,7 +206,9 @@ def analyze_pcm_audio_frame(
     mid_mask = (freqs >= 250.0) & (freqs < 2000.0)
     treble_mask = (freqs >= 2000.0) & (freqs <= 12000.0)
 
-    bass_energy = float(np.sqrt(np.sum(np.square(spectrum[bass_mask])))) if np.any(bass_mask) else 0.0
+    bass_energy = (
+        float(np.sqrt(np.sum(np.square(spectrum[bass_mask])))) if np.any(bass_mask) else 0.0
+    )
     mid_energy = float(np.sqrt(np.sum(np.square(spectrum[mid_mask])))) if np.any(mid_mask) else 0.0
     treble_energy = (
         float(np.sqrt(np.sum(np.square(spectrum[treble_mask])))) if np.any(treble_mask) else 0.0
@@ -306,7 +310,9 @@ class WasapiLoopbackSampler:
                 try:
                     pa.terminate()
                 except Exception:
-                    _LOGGER.debug("Ignoring PyAudio terminate error during device enumeration.", exc_info=True)
+                    _LOGGER.debug(
+                        "Ignoring PyAudio terminate error during device enumeration.", exc_info=True
+                    )
 
         if not devices:
             fallback = [

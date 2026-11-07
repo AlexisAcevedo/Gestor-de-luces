@@ -9,6 +9,7 @@ simuladores locales en 127.0.0.1 sin requerir hardware fisico ni permisos de adm
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import socket
@@ -105,10 +106,8 @@ class WizUdpController:
     def close(self) -> None:
         """Cierra el socket UDP reutilizado por `stream_pilot` si fue inicializado."""
         if self._stream_sock is not None:
-            try:
+            with contextlib.suppress(OSError):
                 self._stream_sock.close()
-            except OSError:
-                pass
             self._stream_sock = None
 
     def _resolve_endpoint(self, ip_or_endpoint: str) -> tuple[str, int]:

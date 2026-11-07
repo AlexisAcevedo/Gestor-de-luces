@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 import sys
 import threading
+from pathlib import Path
 from typing import Any
 
 from gestor_luces.adapters.ambilight.mss_sampler import MssScreenSampler
@@ -140,7 +140,8 @@ def _set_windows_dark_titlebar_attribute(
 def _compute_initial_window_geometry(
     webview_module: object,
 ) -> tuple[int, int, int | None, int | None]:
-    """Return (width, height, x, y) sized to WINDOW_DEFAULT_SIZE, clamped to screen bounds, and centered.
+    """Return (width, height, x, y) sized to WINDOW_DEFAULT_SIZE, clamped to screen
+    bounds, and centered.
 
     Falls back to WINDOW_DEFAULT_SIZE (OS-centered) when screen info is unavailable.
     """
@@ -299,9 +300,9 @@ def _fit_native_window_height(
 
         outer = wintypes.RECT()
         client = wintypes.RECT()
-        if not target_user32.GetWindowRect(hwnd, ctypes.byref(outer)) or not target_user32.GetClientRect(
-            hwnd, ctypes.byref(client)
-        ):
+        if not target_user32.GetWindowRect(
+            hwnd, ctypes.byref(outer)
+        ) or not target_user32.GetClientRect(hwnd, ctypes.byref(client)):
             return False
         outer_h = outer.bottom - outer.top
         chrome_phys = outer_h - (client.bottom - client.top)
@@ -589,7 +590,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--multi-instance",
         action="store_true",
-        help="Bypass single-instance mutex and use an isolated WebView2 profile for side-by-side comparison.",
+        help=(
+            "Bypass single-instance mutex and use an isolated WebView2 profile "
+            "for side-by-side comparison."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -612,7 +616,8 @@ def main(argv: list[str] | None = None) -> int:
         guard = SingleInstanceGuard()
         if not guard.acquire():
             print(
-                "An existing Gestor de luces instance is already running; bringing it to the foreground. "
+                "An existing Gestor de luces instance is already running; "
+                "bringing it to the foreground. "
                 "(Pass --multi-instance to launch a side-by-side window.)",
                 flush=True,
             )
@@ -899,7 +904,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # private_mode=False + storage_path make localStorage (UI prefs, favorite scenes)
         # persist across launches; WebView2 defaults to an ephemeral profile otherwise.
-        profile_suffix = f"webview-{ui_dir.parent.name}" if getattr(args, "multi_instance", False) else "webview"
+        profile_suffix = (
+            f"webview-{ui_dir.parent.name}" if getattr(args, "multi_instance", False) else "webview"
+        )
         webview_storage = resolve_default_data_dir() / profile_suffix
         webview_storage.mkdir(parents=True, exist_ok=True)
         print(f"Opening UI window ({win_width}x{win_height}) -> {index_path}", flush=True)

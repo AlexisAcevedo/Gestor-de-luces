@@ -9,8 +9,8 @@ multiples focos en simultaneo de forma concurrente con asyncio.gather.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 import ipaddress
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
@@ -24,7 +24,6 @@ from gestor_luces.domain.value_objects import (
     DEFAULT_LANGUAGE,
     DEFAULT_THEME,
     SUPPORTED_LANGUAGES,
-    SUPPORTED_THEMES,
     Brightness,
     Color,
     ColorTemperature,
@@ -132,13 +131,16 @@ class LightControlService:
         """Valida, actualiza y persiste el idioma activo de la interfaz y la bandeja."""
         cleaned = str(language or "").strip().lower()
         if cleaned not in SUPPORTED_LANGUAGES:
-            raise ValueError(f"Unsupported language '{language}'. Must be one of {SUPPORTED_LANGUAGES}.")
+            raise ValueError(
+                f"Unsupported language '{language}'. Must be one of {SUPPORTED_LANGUAGES}."
+            )
         self._language = cleaned
         self._persist_settings()
         return self._language
 
     def get_theme(self) -> str:
-        """Devuelve el identificador del tema visual activo (`architectural-stone` o `atmospheric-dark`)."""
+        """Devuelve el identificador del tema visual activo (`architectural-stone` o
+        `atmospheric-dark`)."""
         return self._theme
 
     def set_theme(self, theme: str) -> str:
@@ -156,7 +158,8 @@ class LightControlService:
         return self._bulbs.get(ip)
 
     def select_targets(self, ips: list[str]) -> list[str]:
-        """Define que subconjunto de focos recibira los comandos cuando no se indiquen IPs explicitas."""
+        """Define que subconjunto de focos recibira los comandos cuando no se indiquen IPs
+        explicitas."""
         valid_ips = [ip for ip in ips if ip in self._bulbs]
         self._selected_ips = valid_ips
         resolved_targets = self.get_target_ips()
@@ -266,7 +269,8 @@ class LightControlService:
         """Enciende o apaga uno o varios focos en paralelo."""
         if not is_on:
             # Si el usuario apaga manualmente o expira el Sleep Timer, detenemos Ambilight
-            # y la sincronizacion musical para que un fotograma rezagado no vuelva a encender el foco.
+            # y la sincronizacion musical para que un fotograma rezagado no vuelva a encender el
+            # foco.
             self.stop_ambilight()
             self.stop_music_sync()
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
@@ -394,9 +398,7 @@ class LightControlService:
             raise ValueError(f"Unknown WiZ built-in scene ID: {scene_id}.")
 
         validated_speed = (
-            SceneSpeed(speed).value
-            if (speed is not None and scene.supports_speed)
-            else None
+            SceneSpeed(speed).value if (speed is not None and scene.supports_speed) else None
         )
         validated_brightness = Brightness(brightness).percent if brightness is not None else None
         self.stop_ambilight()
@@ -520,9 +522,7 @@ class LightControlService:
 
         resolved_mode = mode if isinstance(mode, LightMode) else LightMode(str(mode))
         resolved_id = (
-            scene_id.strip()
-            if (scene_id is not None and scene_id.strip())
-            else uuid4().hex[:8]
+            scene_id.strip() if (scene_id is not None and scene_id.strip()) else uuid4().hex[:8]
         )
 
         if resolved_mode == LightMode.RGB:
@@ -656,7 +656,8 @@ class LightControlService:
         return dict(self._sleep_timer.get_status())
 
     def _ensure_screen_sampler(self) -> ScreenSampler | None:
-        """Obtiene el adaptador de pantalla inyectado o lo instancia mediante la fabrica provista."""
+        """Obtiene el adaptador de pantalla inyectado o lo instancia mediante la fabrica
+        provista."""
         if self._screen_sampler is None and self._screen_sampler_factory is not None:
             self._screen_sampler = self._screen_sampler_factory()
             self._ambilight.set_sampler(self._screen_sampler)
@@ -689,7 +690,9 @@ class LightControlService:
         self._rate_limiter.reset()
         target_ips = self.get_target_ips(ips)
 
-        async def _on_frame(frame_color: Color, frame_brightness: int, frame_ips: list[str]) -> bool:
+        async def _on_frame(
+            frame_color: Color, frame_brightness: int, frame_ips: list[str]
+        ) -> bool:
             return await self.stream_color_frame(
                 color=frame_color,
                 brightness=frame_brightness,
@@ -759,7 +762,9 @@ class LightControlService:
         self._rate_limiter.reset()
         target_ips = self.get_target_ips(ips)
 
-        async def _on_frame(frame_color: Color, frame_brightness: int, frame_ips: list[str]) -> bool:
+        async def _on_frame(
+            frame_color: Color, frame_brightness: int, frame_ips: list[str]
+        ) -> bool:
             return await self.stream_color_frame(
                 color=frame_color,
                 brightness=frame_brightness,
@@ -779,7 +784,8 @@ class LightControlService:
         )
 
     def stop_music_sync(self, close_sampler: bool = False) -> AwaitableStatusDict:
-        """Detiene el flujo continuo de sincronizacion musical y opcionalmente cierra el stream WASAPI."""
+        """Detiene el flujo continuo de sincronizacion musical y opcionalmente cierra el stream
+        WASAPI."""
         status = self._music_sync.stop()
         if close_sampler:
             self.close_audio_sampler()
@@ -835,7 +841,4 @@ class LightControlService:
     def _persist_settings(self) -> None:
         """Delega el guardado de preferencias globales si hay un repositorio configurado."""
         if self._settings_repo is not None:
-            self._settings_repo.save_settings(
-                {"language": self._language, "theme": self._theme}
-            )
-
+            self._settings_repo.save_settings({"language": self._language, "theme": self._theme})

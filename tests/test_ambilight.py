@@ -88,7 +88,8 @@ class CyclingScreenSampler:
 
 
 def test_bgra_extraction_respects_channel_order_and_modes() -> None:
-    """Comprueba que el canal 0 se lea como Azul y el canal 2 como Rojo, y compara average vs vibrant."""
+    """Comprueba que el canal 0 se lea como Azul y el canal 2 como Rojo, y compara average vs
+    vibrant."""
     width, height = 32, 32
     # Construimos un cuadro donde el 75% de los pixeles son gris oscuro neutro (30, 30, 30)
     # y el 25% restante es rojo intenso (R=250, G=20, B=10 -> en orden BGRA: 10, 20, 250, 255).
@@ -99,8 +100,8 @@ def test_bgra_extraction_respects_channel_order_and_modes() -> None:
     frame[:, :, 3] = 255
 
     # Cuadrante superior izquierdo (25% del area) en rojo vibrante
-    frame[:16, :16, 0] = 10   # Blue
-    frame[:16, :16, 1] = 20   # Green
+    frame[:16, :16, 0] = 10  # Blue
+    frame[:16, :16, 1] = 20  # Green
     frame[:16, :16, 2] = 250  # Red
 
     bgra_bytes = frame.tobytes()
@@ -152,7 +153,8 @@ def test_mss_screen_sampler_implements_protocol_and_lists_monitors() -> None:
 
 
 async def test_ambilight_stream_and_manual_override_over_udp() -> None:
-    """Verifica que Ambilight transmita paquetes UDP continuos y se detenga ante un cambio manual."""
+    """Verifica que Ambilight transmita paquetes UDP continuos y se detenga ante un cambio
+    manual."""
     async with FakeWizBulbServer(mac="a8bb50df9029") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         sampler = CyclingScreenSampler(
@@ -204,7 +206,8 @@ async def test_ambilight_stream_and_manual_override_over_udp() -> None:
 
 
 async def test_webview_bridge_ambilight_lifecycle() -> None:
-    """Comprueba start_ambilight, get_ambilight_status y stop_ambilight a traves de WebviewBridge."""
+    """Comprueba start_ambilight, get_ambilight_status y stop_ambilight a traves de
+    WebviewBridge."""
     async with FakeWizBulbServer(mac="a8bb50112233") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         sampler = CyclingScreenSampler(
@@ -262,7 +265,8 @@ async def test_webview_bridge_ambilight_lifecycle() -> None:
 
 
 async def test_ambilight_auto_brightness_respects_min_brightness_floor() -> None:
-    """Verifica que el piso de brillo minimo (min_brightness) eleve escenas oscuras con auto_brightness=True."""
+    """Verifica que el piso de brillo minimo (min_brightness) eleve escenas oscuras con
+    auto_brightness=True."""
     async with FakeWizBulbServer(mac="a8bb50998877") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         # Cuadro muy oscuro con luminancia sugerida del 10%
@@ -292,4 +296,3 @@ async def test_ambilight_auto_brightness_respects_min_brightness_floor() -> None
 
         # Aunque el sampler sugiera 10%, el piso configurado de 18% debe imponerse
         assert server.pilot_state["dimming"] == 18
-

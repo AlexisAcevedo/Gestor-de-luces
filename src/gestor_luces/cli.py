@@ -91,9 +91,7 @@ async def sweep_subnet_for_bulbs(local_ip: str) -> list[dict[str, Any]]:
     """
     network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
     tasks = [
-        probe_single_ip(str(host_ip))
-        for host_ip in network.hosts()
-        if str(host_ip) != local_ip
+        probe_single_ip(str(host_ip)) for host_ip in network.hosts() if str(host_ip) != local_ip
     ]
     results = await asyncio.gather(*tasks)
     return [item for item in results if item is not None]

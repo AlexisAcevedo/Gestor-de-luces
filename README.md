@@ -129,9 +129,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   └── installer.iss            # Inno Setup per-user installer script
 ├── scripts/
 │   └── build.ps1                # Icon + PyInstaller + portable ZIP + installer
-├── pyproject.toml               # Project metadata and pytest configuration
-├── requirements.txt             # Locked production and testing dependencies
-├── requirements-dev.txt         # Dev, static security audit, and build dependencies
+├── pyproject.toml               # Dependencies, project metadata, and pytest configuration
 ├── README.md                    # Primary English documentation
 ├── README.es.md                 # Spanish translation of project documentation
 ├── docs/
@@ -236,9 +234,9 @@ No Python installation is required. Download the latest release from [**GitHub R
    source .venv/Scripts/activate
    ```
 
-3. Install dependencies (`requirements.txt` for runtime/tests, or `requirements-dev.txt` to include audit and packaging tools):
+3. Install the project in editable mode with the dev tooling (tests, static audit, packaging):
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
    ```
 
 ---
@@ -307,12 +305,7 @@ Expected output:
 100 passed in ~2.5s
 ```
 
-To run static security analysis and dependency vulnerability checks (using `requirements-dev.txt`):
-
-```bash
-python -m bandit -r src -q
-python -m pip_audit -r requirements.txt
-```
+Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
 ---
 
@@ -333,7 +326,7 @@ Use `-SkipInstaller` to build only the app folder and the portable ZIP.
 | `GestorDeLuces-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
 | `SHA256SUMS.txt` | SHA-256 checksums for all release artifacts generated in `dist/`. |
 
-Build requirements: the project virtual environment with `requirements.txt` (or `requirements-dev.txt`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
+Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
 
 Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.

@@ -11,9 +11,9 @@ despacha cada operacion mediante `asyncio.run_coroutine_threadsafe`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Coroutine
 import logging
 import threading
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from gestor_luces.application.service import LightControlService
@@ -170,6 +170,7 @@ class WebviewBridge:
                 return
             try:
                 if self._loop.is_running():
+
                     async def _cancel() -> None:
                         self._service.stop_ambilight()
                         self._service.stop_music_sync(close_sampler=True)
@@ -179,7 +180,9 @@ class WebviewBridge:
                 else:
                     self._service.close_audio_sampler()
             except Exception:
-                _LOGGER.debug("Ignoring error while cancelling streams during shutdown.", exc_info=True)
+                _LOGGER.debug(
+                    "Ignoring error while cancelling streams during shutdown.", exc_info=True
+                )
             self._closed = True
             if self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._loop.stop)
@@ -232,6 +235,7 @@ class WebviewBridge:
         rapida inicial para poblar la consola automaticamente al abrir la ventana.
         """
         try:
+
             async def _init() -> None:
                 if not self._service.list_bulbs():
                     await self._service.discover_bulbs(wait_time=1.8)
@@ -246,6 +250,7 @@ class WebviewBridge:
     def set_language(self, language: str) -> dict[str, Any]:
         """Cambia y persiste el idioma activo (`en` o `es`), refrescando tambien la bandeja."""
         try:
+
             async def _apply() -> None:
                 self._service.set_language(str(language))
 
@@ -259,6 +264,7 @@ class WebviewBridge:
         if not isinstance(theme, str):
             return self._build_response(ok=False, error="Theme must be a string.")
         try:
+
             async def _apply() -> None:
                 self._service.set_theme(theme)
 
@@ -272,7 +278,8 @@ class WebviewBridge:
         self._fit_window_height = callback
 
     def fit_window_height(self, content_px: int) -> dict[str, Any]:
-        """Solicita al host redimensionar la ventana para que el alto util coincida con `content_px`."""
+        """Solicita al host redimensionar la ventana para que el alto util coincida con
+        `content_px`."""
         if isinstance(content_px, bool) or not isinstance(content_px, int):
             return {"ok": False, "error": "content_px must be an integer."}
         if not FIT_WINDOW_MIN_PX <= content_px <= FIT_WINDOW_MAX_PX:
@@ -331,6 +338,7 @@ class WebviewBridge:
     def rename_bulb(self, ip: str, new_name: str) -> dict[str, Any]:
         """Actualiza el nombre descriptivo de un foco registrado."""
         try:
+
             async def _apply() -> None:
                 self._service.rename_bulb(ip=str(ip), new_name=str(new_name))
 
@@ -355,6 +363,7 @@ class WebviewBridge:
     def refresh_states(self) -> dict[str, Any]:
         """Consulta el estado real (getPilot) de todos los focos registrados."""
         try:
+
             async def _refresh() -> None:
                 all_ips = [b.ip for b in self._service.list_bulbs()]
                 if all_ips:
@@ -525,6 +534,7 @@ class WebviewBridge:
     def delete_custom_scene(self, scene_id: str) -> dict[str, Any]:
         """Elimina una escena personalizada guardada."""
         try:
+
             async def _apply() -> None:
                 self._service.delete_custom_scene(scene_id=str(scene_id).strip())
 
@@ -536,6 +546,7 @@ class WebviewBridge:
     def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> dict[str, Any]:
         """Agrega o quita un preset personalizado del submenu de favoritos de la bandeja."""
         try:
+
             async def _apply() -> None:
                 self._service.set_custom_scene_favorite(
                     scene_id=str(scene_id).strip(),
@@ -588,6 +599,7 @@ class WebviewBridge:
     def cancel_sleep_timer(self) -> dict[str, Any]:
         """Cancela el temporizador de apagado activo."""
         try:
+
             async def _cancel() -> dict[str, Any]:
                 return self._service.cancel_sleep_timer()
 
@@ -637,6 +649,7 @@ class WebviewBridge:
     def stop_ambilight(self) -> dict[str, Any]:
         """Detiene el flujo continuo de Ambilight en ejecucion."""
         try:
+
             async def _stop() -> dict[str, Any]:
                 return self._service.stop_ambilight()
 
@@ -687,6 +700,7 @@ class WebviewBridge:
     def stop_music_sync(self) -> dict[str, Any]:
         """Detiene el flujo continuo de sincronizacion musical."""
         try:
+
             async def _stop() -> dict[str, Any]:
                 return self._service.stop_music_sync()
 

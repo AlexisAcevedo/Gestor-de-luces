@@ -129,9 +129,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   └── installer.iss            # Script del instalador por usuario (Inno Setup)
 ├── scripts/
 │   └── build.ps1                # Icono + PyInstaller + ZIP portable + instalador
-├── pyproject.toml               # Metadatos del proyecto y configuración de pytest
-├── requirements.txt             # Dependencias fijadas para producción y pruebas
-├── requirements-dev.txt         # Dependencias de desarrollo, auditoría y empaquetado
+├── pyproject.toml               # Dependencias, metadatos del proyecto y configuración de pytest
 ├── README.md                    # Documentación principal en inglés
 ├── README.es.md                 # Traducción de la documentación al español
 ├── docs/
@@ -236,9 +234,9 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
    source .venv/Scripts/activate
    ```
 
-3. Instalar las dependencias (`requirements.txt` para ejecución/pruebas, o `requirements-dev.txt` para incluir auditoría estática y empaquetado):
+3. Instalar el proyecto en modo editable con las herramientas de desarrollo (pruebas, auditoría estática y empaquetado):
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
    ```
 
 ---
@@ -307,12 +305,7 @@ Resultado esperado:
 100 passed in ~2.5s
 ```
 
-Para ejecutar el análisis estático de seguridad y la auditoría de vulnerabilidades en dependencias (usando `requirements-dev.txt`):
-
-```bash
-python -m bandit -r src -q
-python -m pip_audit -r requirements.txt
-```
+El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 
 ---
 
@@ -333,7 +326,7 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 | `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
 | `SHA256SUMS.txt` | Hashes SHA-256 de todos los artefactos generados en `dist/`. |
 
-Requisitos para compilar: el entorno virtual del proyecto con `requirements.txt` (o `requirements-dev.txt`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
+Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
 
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.

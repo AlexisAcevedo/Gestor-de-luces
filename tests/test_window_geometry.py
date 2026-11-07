@@ -1,4 +1,5 @@
-"""Tests for initial desktop window geometry calculation, multi-theme chrome, and DWM 64-bit safety."""
+"""Tests for initial desktop window geometry calculation, multi-theme chrome, and DWM 64-bit
+safety."""
 
 from __future__ import annotations
 

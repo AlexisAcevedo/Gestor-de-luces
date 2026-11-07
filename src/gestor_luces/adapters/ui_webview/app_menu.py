@@ -113,7 +113,5 @@ def build_about_text(language: str, version: str, license_name: str | None = Non
     s = resolve_menu_strings(language)
     license_text = license_name or s["about_license_unspecified"]
     return (
-        f"{APP_DISPLAY_NAME}\n"
-        f"{s['about_version']}: {version}\n"
-        f"{s['about_license']}: {license_text}"
+        f"{APP_DISPLAY_NAME}\n{s['about_version']}: {version}\n{s['about_license']}: {license_text}"
     )
