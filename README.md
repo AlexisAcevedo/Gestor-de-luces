@@ -11,7 +11,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 ## Architectural Highlights
 
 - Zero Cloud Dependency: Direct local communication with WiZ bulbs over UDP port 38899.
-- Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
+- Hexagonal Architecture: Domain, ports, and application layers never import adapters (verified by `test_inner_hexagonal_layers_never_import_adapters`).
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
 - Fully Offline Testable: Automated test suite runs fully offline against an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.

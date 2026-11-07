@@ -11,7 +11,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 ## Aspectos Destacados de la Arquitectura
 
 - Cero Dependencia de la Nube: Comunicación local directa con los focos WiZ mediante el puerto UDP 38899.
-- Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
+- Arquitectura Hexagonal: Las capas de dominio, puertos y aplicación nunca importan adaptadores (verificado por `test_inner_hexagonal_layers_never_import_adapters`).
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
 - Pruebas 100% Fuera de Línea: Suite de pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
