@@ -21,14 +21,14 @@ usuario.
 | T-0.3 pyproject fuente de deps | S3 | inline | `5774335` |
 | T-0.4 requirements-dev limpio | S3 | inline (absorbido por T-0.3) | `5774335` |
 | T-0.5 bandit/pip-audit en CI | S3 | inline | `d7842ab` |
-| T-1.1 docs ignoradas + `.atl/` | S2, S3 | inline | — |
-| T-1.2 un solo número de tests | S3 | inline | — |
-| T-1.3 símbolos fantasma en docs | S3 | inline | — |
-| T-1.4 terminar traducción ES | S3 | inline | — |
-| T-1.5 promesa del README | S3 | inline | — |
-| T-1.6 índice de docs | S3 | inline | — |
-| T-1.7 código muerto (`Group`) | S3 | inline | — |
-| T-1.8 README sin `requirements.txt` | S3 (§11/G9) | inline | — |
+| T-1.1 docs ignoradas + `.atl/` | S2, S3 | worker | `4863fe8` |
+| T-1.2 un solo número de tests | S3 | worker | `b5e5d3a` |
+| T-1.3 símbolos fantasma en docs | S3 | worker | `1b84e86` |
+| T-1.4 terminar traducción ES | S3 | worker | `87aaa46` |
+| T-1.5 promesa del README | S3 | worker | `a933ffd` |
+| T-1.6 índice de docs | S3 | worker | `8a53275` |
+| T-1.7 código muerto (`Group`) | S3 | worker | `f8d0501` |
+| T-1.8 README sin `requirements.txt` | S3 (§11/G9) | worker | `3dda857` |
 | T-2.0 spike D4-A (loopback + ESM) | S2, S3 (§11/G7) | worker | — |
 | T-2.1 fuente única de escenas | S2, S3 | worker | — |
 | T-2.2 partir `app.js` | S2, S3 (§11/G1,G5) | worker | — |
@@ -68,3 +68,5 @@ usuario.
 - L10 (2026-11-08): T-0.5 inline (`d7842ab`): bandit + pip-audit en CI como pasos informativos (`continue-on-error`) con reporte JSON de bandit como artifact; README EN/ES dejan de instruir ejecución manual. Local: bandit 0 hallazgos, pip-audit sin vulnerabilidades conocidas.
 - L11 (2026-11-08): Fase 0 completa salvo Gate 0 pendiente de verificación en GitHub (ver L12). Documento ODD expuesto en la raíz del proyecto vía junction `odd` → `.worktrees/repo-hardening/odd` para que el launcher de workers encuentre `Spec: odd/tasks/repo-hardening.md, T<n>`.
 - L12 (2026-11-08): push autorizado por el usuario; rama renombrada `feature/repo-hardening` → `chore/repo-hardening` (naming del skill branch-pr) y PR draft #1 creado (https://github.com/AlexisAcevedo/Gestor-de-luces/pull/1). Primera corrida de CI: 3.14 ✅, **3.11 ❌** — `numpy==2.5.4` exige `Requires-Python >=3.12`, así que el piso 3.11 era imposible con los pins actuales. Corregido: `requires-python = ">=3.12"`, ruff `target-version = py312`, matriz CI `3.12/3.14`, `PLAN.md` T-0.1 amendado. Gate 0 queda pendiente de la corrida verde del CI en el PR.
+- L13 (2026-11-08): CI verde en ambas patas (3.12: 59s, 3.14: 55s, run 42398704688) → **Gate 0 cerrado** salvo branch protection de `main` (cambio de settings del repo, decisión pendiente del usuario). Fase 1 completa vía worker `gentle-ai-worker` (tarea `mw6pftn4-2-gbxg`), commits `4863fe8`..`3dda857`, un commit por tarea; spot-check del parent: suite 100 passed, árbol limpio. Notas del worker: T-1.3 guardrail warning-only (`scripts/check_doc_symbols.py` reporta 9 tokens no-src, todos conceptos externos); T-1.7: `tests/test_domain.py` SÍ referenciaba `Group` (import + 2 asserts) — removidos dentro de la superficie permitida, conteo se mantiene en 100; T-1.6: índice lista los 6 docs (4 top-level + `docs/design/`).
+- L14 (2026-11-08, usuario): «al terminar esta fase pongamos en pausa el proyecto que me quedo sin tokens» — **PROYECTO EN PAUSA** tras el cierre de Fase 1. Retomar por: Fase 2, empezando por T-2.0 (spike D4-A: `http_server=True` + ESM, ver `PLAN.md` §11/G7), luego T-2.1 (scenes.json), T-2.2 (partir app.js), T-2.3, T-2.4. Estado del repo: rama `chore/repo-hardening` pusheada (CI verde), PR draft #1 abierto, worktree `.worktrees/repo-hardening` con venv dev funcional, junction `odd/` en la raíz del proyecto. Resto pendiente: branch protection (usuario), Fases 2–6, verificación final + merge gateado (S4).
