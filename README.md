@@ -244,6 +244,12 @@ No Python installation is required. Download the latest release from [**GitHub R
    pip install -e ".[dev]"
    ```
 
+   To run the app from source without the development tooling, install only the
+   runtime dependencies:
+   ```bash
+   pip install -e .
+   ```
+
 ---
 
 ## Running the Application (From Source)

@@ -244,6 +244,12 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
    pip install -e ".[dev]"
    ```
 
+   Para ejecutar la app desde el código fuente sin las herramientas de desarrollo,
+   instala solo las dependencias de ejecución:
+   ```bash
+   pip install -e .
+   ```
+
 ---
 
 ## Ejecución de la Aplicación (Desde Código Fuente)
