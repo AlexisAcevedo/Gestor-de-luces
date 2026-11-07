@@ -138,7 +138,10 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   ├── architecture.md          # Especificación técnica de arquitectura y concurrencia (EN)
 │   ├── architecture.es.md       # Especificación técnica de arquitectura y concurrencia (ES)
 │   ├── wiz_protocol.md          # Protocolo WiZ UDP y esquemas RPC (EN)
-│   └── wiz_protocol.es.md       # Protocolo WiZ UDP y esquemas RPC (ES)
+│   ├── wiz_protocol.es.md       # Protocolo WiZ UDP y esquemas RPC (ES)
+│   └── design/
+│       ├── ui_redesign_spec.md     # Especificación de rediseño de UI (EN)
+│       └── ui_redesign_spec.es.md  # Especificación de rediseño de UI (ES)
 ├── src/
 │   └── gestor_luces/
 │       ├── __init__.py
@@ -341,5 +344,6 @@ Notas para las PCs de destino:
 
 - [Arquitectura y Concurrencia](docs/architecture.es.md): Análisis detallado del diseño hexagonal, ciclo de vida de los hilos y prevención de condiciones de carrera.
 - [Protocolo WiZ UDP y Modos de Streaming](docs/wiz_protocol.es.md): Especificación técnica de los paquetes JSON-RPC, regulación a 10 Hz y catálogo de escenas.
+- [Especificación de Rediseño de UI](docs/design/ui_redesign_spec.es.md): Dirección de diseño para la exploración de rediseño de UI en dos worktrees.
 - [English Documentation](README.md): Full documentation in English.
 

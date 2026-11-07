@@ -138,7 +138,10 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   ├── architecture.md          # Architectural deep-dive and concurrency design (EN)
 │   ├── architecture.es.md       # Architectural deep-dive and concurrency design (ES)
 │   ├── wiz_protocol.md          # WiZ UDP protocol specifications and RPC schema (EN)
-│   └── wiz_protocol.es.md       # WiZ UDP protocol specifications and RPC schema (ES)
+│   ├── wiz_protocol.es.md       # WiZ UDP protocol specifications and RPC schema (ES)
+│   └── design/
+│       ├── ui_redesign_spec.md     # UI redesign specification (EN)
+│       └── ui_redesign_spec.es.md  # UI redesign specification (ES)
 ├── src/
 │   └── gestor_luces/
 │       ├── __init__.py
@@ -341,5 +344,6 @@ Notes for target machines:
 
 - [Architecture & Concurrency Deep Dive](docs/architecture.md): Detailed analysis of the Hexagonal design, threading topology, and race condition prevention.
 - [WiZ UDP Protocol & Streaming Specification](docs/wiz_protocol.md): Low-level documentation of JSON-RPC datagram formats, rate limiting, and scene catalogs.
+- [UI Redesign Specification](docs/design/ui_redesign_spec.md): Design direction for the dual-worktree UI redesign exploration.
 - [Documentación en Español](README.es.md): Versión completa de esta documentación en español.
 
