@@ -24,8 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # T-0.3 will switch this to: pip install -e ".[dev]"
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -e ".[dev]"
 
       - name: Run tests
         run: pytest
