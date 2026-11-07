@@ -46,3 +46,6 @@ Desktop.ini
 # Logs
 *.log
 
+
+# Pi local agent definitions (not for GitHub)
+.pi/
