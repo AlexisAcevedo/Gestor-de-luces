@@ -115,7 +115,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 | Captura de Pantalla | `mss` | 10.2.0 | Captura eficiente del búfer GDI de Win32 |
 | Captura de Audio | `PyAudioWPatch` | 0.2.12.9 | Captura de la salida del sistema vía WASAPI loopback |
 | Procesamiento de Señal | `numpy` | 2.5.4 | Transformada Discreta de Fourier y análisis espectral en tiempo real |
-| Testing | `pytest` / `pytest-asyncio` | 9.0.3 / 1.3.0 | Entorno de pruebas unitarias y de integración |
+| Pruebas | `pytest` / `pytest-asyncio` | 9.0.3 / 1.3.0 | Entorno de pruebas unitarias y de integración |
 
 ---
 
