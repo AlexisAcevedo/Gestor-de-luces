@@ -34,6 +34,10 @@ jobs:
       - name: Run tests
         run: pytest
 
+      - name: Docs symbol reference check (informational)
+        continue-on-error: true
+        run: python scripts/check_doc_symbols.py
+
       - name: Static security analysis (bandit, informational)
         continue-on-error: true
         run: python -m bandit -r src -q -f json -o bandit-report.json

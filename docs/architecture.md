@@ -80,7 +80,7 @@ The core principle behind this project is **strict isolation of business invaria
      - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss`.
      - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture and `numpy.fft.rfft`.
      - `adapters.tray.tray_icon`: Implements Windows notification area integration using `pystray`.
-     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApiFacade` whitelist) so internal methods and callbacks cannot be invoked from JavaScript.
+     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApi` whitelist) so internal methods and callbacks cannot be invoked from JavaScript.
 
 ---
 
@@ -249,7 +249,7 @@ The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsReg
 ### Multi-Theme Engine & Dynamic Widget Geometry
 - **3-Tier CSS Token Architecture**: `ui/themes.css` defines primitive, semantic, and component-level tokens for both `"architectural-stone"` (default warm mineral Light theme) and `"atmospheric-dark"` (translucent glass Dark theme with `oklab` photometric halo), consumed by the layout and component rules in `ui/styles.css`.
 - **Native Window Chrome Synchronization (`THEME_WINDOW_CHROME`)**: `main.py` reads the persisted theme before creating the PyWebView window to set the initial WebView2 `background_color` (`#F4F1EA` or `#08090C`) and synchronizes the Windows DWM titlebar attribute (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` with `0` for light or `1` for dark) both on startup and bidirectionally at runtime when the user switches themes.
-- **Content-Driven Window Height Auto-Fit**: `main.py` implements `_fit_native_window_height` using 64-bit-safe Win32 `ctypes` (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) marshaled onto the WinForms UI thread (`BeginInvoke`), clamped to the active monitor's work area via `WebviewBridge.resize_window_to_content`.
+- **Content-Driven Window Height Auto-Fit**: `main.py` implements `_fit_native_window_height` using 64-bit-safe Win32 `ctypes` (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) marshaled onto the WinForms UI thread (`native_form.Invoke`), clamped to the active monitor's work area via `WebviewBridge.fit_window_height`.
 
 ### Packaging
 `scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`.

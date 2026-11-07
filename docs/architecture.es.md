@@ -80,7 +80,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
      - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows a alta velocidad con `mss`.
      - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` y aplicando `numpy.fft.rfft`.
      - `adapters.tray.tray_icon`: Integra el icono y menú de la bandeja del sistema mediante `pystray`.
-     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApiFacade`), impidiendo la invocación de métodos o callbacks internos desde JavaScript.
+     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApi`), impidiendo la invocación de métodos o callbacks internos desde JavaScript.
 
 ---
 
@@ -249,7 +249,7 @@ El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegist
 ### Motor Multitema y Geometría Dinámica de Widget
 - **Arquitectura de Tokens CSS de 3 Niveles**: `ui/themes.css` define tokens primitivos, semánticos y de componente tanto para `"architectural-stone"` (tema claro predeterminado en piedra mineral cálida) como para `"atmospheric-dark"` (tema oscuro en cristal esmerilado con halo fotométrico `oklab`), consumidos por las reglas estructurales de `ui/styles.css`.
 - **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `main.py` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`) y sincroniza de forma bidireccional la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) tanto en el arranque como al cambiar el tema en tiempo de ejecución.
-- **Autoajuste Dinámico de Altura según Contenido**: `main.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`BeginInvoke`) y acotadas al área de trabajo del monitor activo a través de `WebviewBridge.resize_window_to_content`.
+- **Autoajuste Dinámico de Altura según Contenido**: `main.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`native_form.Invoke`) y acotadas al área de trabajo del monitor activo a través de `WebviewBridge.fit_window_height`.
 
 ### Empaquetado
 `scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`.
