@@ -2,6 +2,8 @@
 
 [English](README.md) | [Español](README.es.md)
 
+[![CI](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml)
+
 Centro de control de escritorio para sistemas de iluminación inteligente Philips WiZ sobre redes de área local (LAN). Diseñado con Python, Arquitectura Hexagonal (Puertos y Adaptadores) y Microsoft WebView2 (PyWebView), operando de manera exclusiva mediante paquetes UDP locales sin dependencias de la nube, puentes externos ni necesidad de conexión a Internet.
 
 ---
@@ -12,7 +14,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 - Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
-- Pruebas 100% Fuera de Línea: Suite de 100 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+- Pruebas 100% Fuera de Línea: Suite de pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
 
 ---
 
@@ -166,7 +168,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           ├── tray/            # Bandeja del sistema con pystray y render compartido de la bombilla
 │           ├── system/          # Autoinicio de Windows (registro) e instancia única
 │           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
-├── tests/                       # Suite de pruebas automatizadas (99 tests)
+├── tests/                       # Suite de pruebas automatizadas
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
@@ -300,10 +302,7 @@ Para correr las pruebas:
 pytest
 ```
 
-Resultado esperado:
-```
-100 passed in ~2.5s
-```
+Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
 
 El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 

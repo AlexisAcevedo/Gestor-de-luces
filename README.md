@@ -2,6 +2,8 @@
 
 [English](README.md) | [Español](README.es.md)
 
+[![CI](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml)
+
 Desktop control center for Philips WiZ smart lighting systems over local area networks (LAN). Engineered with Python, Hexagonal Architecture (Ports and Adapters), and Microsoft WebView2 (PyWebView), operating exclusively through local UDP packets without cloud dependencies, external bridges, or internet access requirements.
 
 ---
@@ -12,7 +14,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 - Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
-- Fully Offline Testable: Suite of 100 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
+- Fully Offline Testable: Automated test suite runs fully offline against an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
 
 ---
 
@@ -166,7 +168,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           ├── tray/            # Pystray tray controller and shared bulb icon renderer
 │           ├── system/          # Windows autostart (registry) and single-instance guard
 │           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
-├── tests/                       # Automated test suite (99 tests)
+├── tests/                       # Automated test suite
 │   ├── simulators/              # In-memory WiZ UDP server simulator
 │   ├── test_domain.py           # Domain validation tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
@@ -300,10 +302,7 @@ Execute the test suite with:
 pytest
 ```
 
-Expected output:
-```
-100 passed in ~2.5s
-```
+All tests should pass (see the CI badge at the top of this file for the live status).
 
 Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
