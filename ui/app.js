@@ -10,45 +10,23 @@
 (function () {
   "use strict";
 
-  /* Catalogo de respaldo de las 36 escenas oficiales para modo previsualizacion en navegador */
-  const FALLBACK_SCENES = [
-    { scene_id: 1, name: "Ocean", category: "nature", supports_speed: true },
-    { scene_id: 2, name: "Romance", category: "ambient", supports_speed: true },
-    { scene_id: 3, name: "Sunset", category: "nature", supports_speed: true },
-    { scene_id: 4, name: "Party", category: "dynamic", supports_speed: true },
-    { scene_id: 5, name: "Fireplace", category: "ambient", supports_speed: true },
-    { scene_id: 6, name: "Cozy", category: "ambient", supports_speed: true },
-    { scene_id: 7, name: "Forest", category: "nature", supports_speed: true },
-    { scene_id: 8, name: "Pastel colors", category: "dynamic", supports_speed: true },
-    { scene_id: 9, name: "Wake-up", category: "ambient", supports_speed: true },
-    { scene_id: 10, name: "Bedtime", category: "ambient", supports_speed: true },
-    { scene_id: 11, name: "Warm white", category: "white", supports_speed: false },
-    { scene_id: 12, name: "Daylight", category: "white", supports_speed: false },
-    { scene_id: 13, name: "Cool white", category: "white", supports_speed: false },
-    { scene_id: 14, name: "Night light", category: "white", supports_speed: false },
-    { scene_id: 15, name: "Focus", category: "white", supports_speed: false },
-    { scene_id: 16, name: "Relax", category: "white", supports_speed: false },
-    { scene_id: 17, name: "True colors", category: "white", supports_speed: false },
-    { scene_id: 18, name: "TV time", category: "white", supports_speed: false },
-    { scene_id: 19, name: "Plantgrowth", category: "nature", supports_speed: false },
-    { scene_id: 20, name: "Spring", category: "nature", supports_speed: true },
-    { scene_id: 21, name: "Summer", category: "nature", supports_speed: true },
-    { scene_id: 22, name: "Fall", category: "nature", supports_speed: true },
-    { scene_id: 23, name: "Deep dive", category: "nature", supports_speed: true },
-    { scene_id: 24, name: "Jungle", category: "nature", supports_speed: true },
-    { scene_id: 25, name: "Mojito", category: "dynamic", supports_speed: true },
-    { scene_id: 26, name: "Club", category: "dynamic", supports_speed: true },
-    { scene_id: 27, name: "Christmas", category: "holiday", supports_speed: true },
-    { scene_id: 28, name: "Halloween", category: "holiday", supports_speed: true },
-    { scene_id: 29, name: "Candlelight", category: "ambient", supports_speed: true },
-    { scene_id: 30, name: "Golden white", category: "white", supports_speed: false },
-    { scene_id: 31, name: "Pulse", category: "dynamic", supports_speed: true },
-    { scene_id: 32, name: "Steampunk", category: "dynamic", supports_speed: true },
-    { scene_id: 33, name: "Diwali", category: "holiday", supports_speed: true },
-    { scene_id: 34, name: "White", category: "white", supports_speed: false },
-    { scene_id: 35, name: "Alarm", category: "dynamic", supports_speed: true },
-    { scene_id: 36, name: "Snowy sky", category: "nature", supports_speed: true }
-  ];
+  /* Catalogo de escenas leido de ui/scenes.json (fuente unica generada por
+     scripts/export_scenes.py). El handshake del backend puede sobrescribirlo. */
+  let SCENE_CATALOG = [];
+
+  async function loadSceneCatalog() {
+    try {
+      const response = await fetch("scenes.json", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        SCENE_CATALOG = data;
+        if (!appState.scenes.length) appState.scenes = SCENE_CATALOG.slice();
+      }
+    } catch (_err) {
+      /* Sin fetch (p. ej. file://): el handshake del backend provee el catalogo. */
+    }
+  }
 
   const SCENE_CATEGORY_COLORS = {
     white: "#FFF1E0",
@@ -145,7 +123,7 @@
     theme: DEFAULT_THEME,
     bulbs: [],
     selectedIps: [],
-    scenes: FALLBACK_SCENES.slice(),
+    scenes: SCENE_CATALOG.slice(),
     favoriteSceneIds: loadFavoriteSceneIds(),
     customScenes: [],
     sleepTimer: {
@@ -344,7 +322,7 @@
         theme: mockTheme,
         bulbs: JSON.parse(JSON.stringify(mockBulbs)),
         selected_ips: mockSelected.slice(),
-        scenes: FALLBACK_SCENES.slice(),
+        scenes: SCENE_CATALOG.slice(),
         custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
         sleep_timer: {
           active: mockSleepTimer.active,
@@ -388,7 +366,7 @@
       add_manual_bulb: (ip, name) => {
         const cleaned = String(ip || "").trim();
         if (!cleaned) {
-          return Promise.resolve({ ok: false, bulbs: mockBulbs, selected_ips: mockSelected, scenes: FALLBACK_SCENES, error: "IP cannot be empty." });
+          return Promise.resolve({ ok: false, bulbs: mockBulbs, selected_ips: mockSelected, scenes: SCENE_CATALOG.slice(), error: "IP cannot be empty." });
         }
         const label = String(name || "").trim() || `WiZ Bulb (${cleaned})`;
         const existing = mockBulbs.find((b) => b.ip === cleaned);
@@ -476,7 +454,7 @@
       },
       set_builtin_scene: (sceneId, speed, brightness, ips) => {
         const targets = resolveTargets(ips);
-        const scene = FALLBACK_SCENES.find((s) => s.scene_id === Number(sceneId));
+        const scene = SCENE_CATALOG.find((s) => s.scene_id === Number(sceneId));
         mockBulbs.forEach((bulb) => {
           if (targets.includes(bulb.ip)) {
             bulb.state.is_on = true;
@@ -547,7 +525,7 @@
             bulb.state.color = preset.color ? Object.assign({}, preset.color) : null;
             bulb.state.temperature = preset.temperature;
             bulb.state.scene_id = preset.built_in_scene_id;
-            const bScene = FALLBACK_SCENES.find((s) => s.scene_id === preset.built_in_scene_id);
+            const bScene = SCENE_CATALOG.find((s) => s.scene_id === preset.built_in_scene_id);
             bulb.state.scene_name = bScene ? bScene.name : null;
             bulb.state.speed = preset.speed || 100;
           }
@@ -3347,6 +3325,7 @@
 
   /* Inicializacion principal al cargar el DOM */
   document.addEventListener("DOMContentLoaded", async () => {
+    loadSceneCatalog();
     syncLanguageUi("en");
     drawColorWheel();
     updateAllSlidersFill();

@@ -200,6 +200,7 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     i18n_js = (ui_dir / "i18n.js").read_text(encoding="utf-8")
     index_html = (ui_dir / "index.html").read_text(encoding="utf-8")
     app_js = (ui_dir / "app.js").read_text(encoding="utf-8")
+    scenes_json = (ui_dir / "scenes.json").read_text(encoding="utf-8")
     themes_css = (ui_dir / "themes.css").read_text(encoding="utf-8")
 
     assert 'html[data-theme="architectural-stone"]' in themes_css
@@ -227,7 +228,9 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     assert 'id="ambilight-min-brightness-slider"' in index_html
     assert "SCENE_CHROMATIC_MAP" in app_js
     assert "gestor_luces_fav_scenes" in app_js
+    assert '"scenes.json"' in app_js
     # Los nombres de las 36 escenas nativas de WiZ se mantienen en su denominacion original
+    # en la fuente unica del catalogo (`ui/scenes.json`, generado por scripts/export_scenes.py).
     for builtin_name in (
         "Ocean",
         "Romance",
@@ -237,4 +240,4 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
         "Steampunk",
         "Plantgrowth",
     ):
-        assert f'name: "{builtin_name}"' in app_js
+        assert f'"name": "{builtin_name}"' in scenes_json

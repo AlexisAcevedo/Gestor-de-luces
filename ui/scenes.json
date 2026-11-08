@@ -1,0 +1,218 @@
+[
+  {
+    "scene_id": 1,
+    "name": "Ocean",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 2,
+    "name": "Romance",
+    "category": "ambient",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 3,
+    "name": "Sunset",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 4,
+    "name": "Party",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 5,
+    "name": "Fireplace",
+    "category": "ambient",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 6,
+    "name": "Cozy",
+    "category": "ambient",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 7,
+    "name": "Forest",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 8,
+    "name": "Pastel colors",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 9,
+    "name": "Wake-up",
+    "category": "ambient",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 10,
+    "name": "Bedtime",
+    "category": "ambient",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 11,
+    "name": "Warm white",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 12,
+    "name": "Daylight",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 13,
+    "name": "Cool white",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 14,
+    "name": "Night light",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 15,
+    "name": "Focus",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 16,
+    "name": "Relax",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 17,
+    "name": "True colors",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 18,
+    "name": "TV time",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 19,
+    "name": "Plantgrowth",
+    "category": "nature",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 20,
+    "name": "Spring",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 21,
+    "name": "Summer",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 22,
+    "name": "Fall",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 23,
+    "name": "Deep dive",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 24,
+    "name": "Jungle",
+    "category": "nature",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 25,
+    "name": "Mojito",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 26,
+    "name": "Club",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 27,
+    "name": "Christmas",
+    "category": "holiday",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 28,
+    "name": "Halloween",
+    "category": "holiday",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 29,
+    "name": "Candlelight",
+    "category": "ambient",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 30,
+    "name": "Golden white",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 31,
+    "name": "Pulse",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 32,
+    "name": "Steampunk",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 33,
+    "name": "Diwali",
+    "category": "holiday",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 34,
+    "name": "White",
+    "category": "white",
+    "supports_speed": false
+  },
+  {
+    "scene_id": 35,
+    "name": "Alarm",
+    "category": "dynamic",
+    "supports_speed": true
+  },
+  {
+    "scene_id": 36,
+    "name": "Snowy sky",
+    "category": "nature",
+    "supports_speed": true
+  }
+]
