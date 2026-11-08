@@ -702,7 +702,7 @@ def main(argv: list[str] | None = None) -> int:
 
     window = webview.create_window(
         title="WiZ Architectural Lighting Console",
-        url=index_path.as_uri(),
+        url=str(index_path),
         js_api=JsApi(bridge, fit_window=_fit_window),
         width=win_width,
         height=win_height,
@@ -918,6 +918,7 @@ def main(argv: list[str] | None = None) -> int:
             autostart_enabled=bool(bridge.get_autostart().get("enabled")),
         )
         webview.start(
+            http_server=True,
             debug=args.debug,
             private_mode=False,
             storage_path=str(webview_storage),
