@@ -251,5 +251,40 @@ The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsReg
 - **Native Window Chrome Synchronization (`THEME_WINDOW_CHROME`)**: `main.py` reads the persisted theme before creating the PyWebView window to set the initial WebView2 `background_color` (`#F4F1EA` or `#08090C`) and synchronizes the Windows DWM titlebar attribute (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` with `0` for light or `1` for dark) both on startup and bidirectionally at runtime when the user switches themes.
 - **Content-Driven Window Height Auto-Fit**: `main.py` implements `_fit_native_window_height` using 64-bit-safe Win32 `ctypes` (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) marshaled onto the WinForms UI thread (`native_form.Invoke`), clamped to the active monitor's work area via `WebviewBridge.fit_window_height`.
 
+### Frontend Serving (loopback HTTP + ES Modules) · D4 verdict: A (2026-11-08)
+The frontend is served over loopback HTTP so `ui/app.js` can be split into real ES
+modules (Chromium blocks `type="module"` over `file://`). `main.py` passes the plain
+filesystem path `str(index_path)` as the window URL and starts `webview.start(http_server=True)`.
+
+The D4-A spike (T-2.0) verified the following, with evidence:
+- **Loopback-only surface**: pywebview's built-in Bottle server binds `127.0.0.1` only
+  (observed `http://127.0.0.1:42001/`). It is never exposed to the LAN.
+- **Bridge stays direct IPC**: `window.pywebview.api` remains a native WebView2 host
+  object. The HTTP `/js_api/<uuid>` endpoint only carries JS promise callbacks, gated by
+  a per-launch random `uuid`; it is not the application bridge.
+- **Static serving + ESM MIME**: `index.html` → `text/html`, `app.js`/`i18n.js` →
+  `text/javascript` (module-compatible), `themes.css`/`styles.css` → `text/css`.
+- **Path traversal blocked**: `GET /../../<file>` returns `403 Forbidden`
+  (`bottle.static_file` rejects `..`).
+- **Dev boot verified**: `python -m gestor_luces --minimized --multi-instance` served
+  `index.html` with HTTP 200 on `127.0.0.1:42001` (title `WiZ Architectural Lighting
+  Console`), no errors in the log.
+- **`resolve_ui_directory()` unchanged**: returns `ui/` from source and `_MEIPASS/ui`
+  when frozen; both are plain paths, so the server root is identical either way
+  (`resources.py`).
+
+Gotchas recorded for T-2.2:
+- The window URL **must** be a plain path (`str(index_path)`), not `.as_uri()`
+  (`file://` is not rewritten to HTTP by pywebview's `_resolve_url`).
+- The CSP `'self'` origin follows the scheme: it becomes `http://127.0.0.1:42001`;
+  the explicit `file:` allowances become vestigial (harmless) and can be dropped later.
+- `localStorage` origin migrates from `file://` to `http://127.0.0.1:42001`. The port is
+  fixed (`settings['DEFAULT_HTTP_PORT']=42001`) because `private_mode=False`, so data
+  persists across launches — but pre-existing `file://` localStorage does not carry over
+  (one-time migration note; scene/theme truth lives in the JSON repositories anyway).
+- Fixed port `42001` can collide under `--multi-instance` (two simultaneous servers).
+- pywebview's root route `/` is a dead, buggy route (500); windows always load a
+  concrete file path (`/index.html`), so it is never exercised.
+
 ### Packaging
 `scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`.

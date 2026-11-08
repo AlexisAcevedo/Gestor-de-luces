@@ -251,5 +251,42 @@ El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegist
 - **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `main.py` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`) y sincroniza de forma bidireccional la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) tanto en el arranque como al cambiar el tema en tiempo de ejecución.
 - **Autoajuste Dinámico de Altura según Contenido**: `main.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`native_form.Invoke`) y acotadas al área de trabajo del monitor activo a través de `WebviewBridge.fit_window_height`.
 
+### Servido del Frontend (HTTP por loopback + Módulos ES) · veredicto D4: A (2026-11-08)
+El frontend se sirve por HTTP en loopback para poder partir `ui/app.js` en módulos ES
+reales (Chromium bloquea `type="module"` sobre `file://`). `main.py` pasa la ruta de
+archivo plana `str(index_path)` como URL de la ventana y arranca
+`webview.start(http_server=True)`.
+
+El spike D4-A (T-2.0) verificó lo siguiente, con evidencia:
+- **Superficie solo-loopback**: el servidor Bottle integrado de pywebview enlaza
+  únicamente `127.0.0.1` (observado `http://127.0.0.1:42001/`). Nunca se expone a la LAN.
+- **El bridge sigue siendo IPC directo**: `window.pywebview.api` continúa como objeto
+  host nativo de WebView2. El endpoint HTTP `/js_api/<uuid>` solo transporta callbacks de
+  promesas JS, gateados por un `uuid` aleatorio por lanzamiento; no es el bridge de la app.
+- **Servido estático + MIME para ESM**: `index.html` → `text/html`, `app.js`/`i18n.js` →
+  `text/javascript` (compatible con módulos), `themes.css`/`styles.css` → `text/css`.
+- **Traversal de rutas bloqueado**: `GET /../../<archivo>` devuelve `403 Forbidden`
+  (`bottle.static_file` rechaza `..`).
+- **Arranque en dev verificado**: `python -m gestor_luces --minimized --multi-instance`
+  sirvió `index.html` con HTTP 200 en `127.0.0.1:42001` (título `WiZ Architectural
+  Lighting Console`), sin errores en el log.
+- **`resolve_ui_directory()` sin cambios**: devuelve `ui/` desde fuente y `_MEIPASS/ui`
+  cuando está congelada; ambas son rutas planas, así que la raíz del servidor es idéntica
+  en ambos casos (`resources.py`).
+
+Gotchas registrados para T-2.2:
+- La URL de la ventana **debe** ser una ruta plana (`str(index_path)`), no `.as_uri()`
+  (`file://` no se reescribe a HTTP en `_resolve_url` de pywebview).
+- El origen `'self'` de la CSP sigue el esquema: pasa a ser `http://127.0.0.1:42001`; los
+  permisos explícitos `file:` quedan vestigiales (inofensivos) y pueden quitarse después.
+- El origen de `localStorage` migra de `file://` a `http://127.0.0.1:42001`. El puerto es
+  fijo (`settings['DEFAULT_HTTP_PORT']=42001`) porque `private_mode=False`, así que los
+  datos persisten entre lanzamientos — pero el `localStorage` previo de `file://` no se
+  transfiere (nota de migración única; la verdad de escenas/tema vive igual en los
+  repositorios JSON).
+- El puerto fijo `42001` puede colisionar bajo `--multi-instance` (dos servidores simultáneos).
+- La ruta raíz `/` de pywebview es una ruta muerta y rota (500); las ventanas siempre cargan
+  una ruta de archivo concreta (`/index.html`), así que nunca se ejecuta.
+
 ### Empaquetado
 `scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`.
