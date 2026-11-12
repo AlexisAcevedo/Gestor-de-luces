@@ -288,5 +288,22 @@ Gotchas registrados para T-2.2:
 - La ruta raíz `/` de pywebview es una ruta muerta y rota (500); las ventanas siempre cargan
   una ruta de archivo concreta (`/index.html`), así que nunca se ejecuta.
 
+### Propiedad de la Internacionalización (i18n) · fuente única de verdad
+Las traducciones tienen **un único dueño por dominio** (Gate 2 / T-2.3):
+
+- **El backend es dueño solo de las cadenas de bandeja y los errores de dominio.** Las
+  etiquetas del menú de bandeja viven en `adapters/tray/menu_model.py` (`_TRAY_STRINGS`),
+  porque la bandeja del sistema no tiene acceso a la UI web. Sus claves son `snake_case`
+  sin namespace (`hide_window`, `turn_off`, `brightness`, …).
+- **La UI es dueña de todo el texto de pantalla.** Todo el texto visible de la página vive
+  en `ui/i18n.js` (`DICTIONARIES`), con claves `namespace.camelCase` (`rail.scanBtn`,
+  `stage.turnOff`, `shortcuts.brightness`, …).
+
+Las dos convenciones son deliberadamente incompatibles para que una clave literal nunca
+pueda colisionar: `tests/test_i18n.py::test_i18n_single_owner_backend_tray_vs_ui_screen`
+garantiza que ninguna clave de `_TRAY_STRINGS` aparezca como clave de pantalla y viceversa.
+Al agregar una cadena, ubicala en el dominio que le corresponde; nunca dupliques la misma
+clave en ambos lugares.
+
 ### Empaquetado
 `scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`.

@@ -8,6 +8,7 @@ la propagacion reactiva a traves de `WebviewBridge` hacia el menu de bandeja del
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from gestor_luces.adapters.tray import (
     build_tray_menu_spec,
     build_tray_title,
 )
+from gestor_luces.adapters.tray.menu_model import _TRAY_STRINGS
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
@@ -241,3 +243,42 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
         "Plantgrowth",
     ):
         assert f'"name": "{builtin_name}"' in scenes_json
+
+
+def test_i18n_single_owner_backend_tray_vs_ui_screen() -> None:
+    """Garantiza el duenio unico de las traducciones (Gate 2 / T-2.3).
+
+    La regla de ownership (docs/architecture.md §i18n): el backend solo resuelve las
+    cadenas de la bandeja del sistema y los errores de dominio; la UI (`ui/i18n.js`) es
+    duenia de todo el texto de pantalla. Ninguna clave de bandeja puede aparecer como
+    clave del diccionario de pantalla, y viceversa.
+    """
+    ui_dir = resolve_ui_directory()
+    i18n_js = (ui_dir / "i18n.js").read_text(encoding="utf-8")
+
+    # Claves de pantalla en el diccionario de la UI (formato `namespace.camelCase`).
+    ui_keys: set[str] = set(re.findall(r'"([a-z]+\.[a-zA-Z0-9]+)"', i18n_js))
+
+    # Claves de bandeja en el backend (snake_case, sin namespace).
+    tray_keys: set[str] = set()
+    for lang_table in _TRAY_STRINGS.values():
+        tray_keys.update(lang_table.keys())
+
+    assert tray_keys, "la tabla de bandeja no debe estar vacia"
+    assert ui_keys, "el diccionario de pantalla no debe estar vacio"
+
+    # Dueño único literal: ninguna clave de bandeja aparece como clave de pantalla.
+    collisions = tray_keys & ui_keys
+    assert not collisions, (
+        f"Clave de bandeja duplicada en la UI (dueño único violado): "
+        f"{sorted(collisions)}"
+    )
+
+    # Convención inconfundible: la bandeja es snake_case sin namespace, la UI es
+    # `namespace.camelCase`. Esto hace mecánicamente imposible la misma clave literal.
+    for key in tray_keys:
+        assert key == key.lower() and "." not in key and "_" in key or key.isalpha(), (
+            f"Clave de bandeja con convención ambigua: {key!r}"
+        )
+    for key in ui_keys:
+        assert "." in key, f"Clave de pantalla sin namespace: {key!r}"

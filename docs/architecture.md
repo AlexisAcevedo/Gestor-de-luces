@@ -286,5 +286,21 @@ Gotchas recorded for T-2.2:
 - pywebview's root route `/` is a dead, buggy route (500); windows always load a
   concrete file path (`/index.html`), so it is never exercised.
 
+### Internationalization (i18n) Ownership · single source of truth
+Translations have a **single owner per domain** (Gate 2 / T-2.3):
+
+- **Backend owns tray strings and domain errors only.** The tray menu labels live in
+  `adapters/tray/menu_model.py` (`_TRAY_STRINGS`), because the system tray has no access
+  to the web UI. Their keys are `snake_case` with no namespace (`hide_window`,
+  `turn_off`, `brightness`, …).
+- **The UI owns every on-screen string.** All visible page text lives in `ui/i18n.js`
+  (`DICTIONARIES`), keyed as `namespace.camelCase` (`rail.scanBtn`, `stage.turnOff`,
+  `shortcuts.brightness`, …).
+
+The two conventions are deliberately incompatible so a literal key can never collide:
+`tests/test_i18n.py::test_i18n_single_owner_backend_tray_vs_ui_screen` enforces that no
+`_TRAY_STRINGS` key appears as a screen key and vice-versa. When adding a string, put it
+in the domain that owns it; never mirror the same key in both places.
+
 ### Packaging
 `scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`.
