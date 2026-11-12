@@ -279,22 +279,19 @@ El módulo `gestor_luces.cli` permite realizar descubrimientos de red, consultas
 python -m gestor_luces.cli discover
 
 # Consultar el estado en tiempo real de un foco específico:
-python -m gestor_luces.cli status 192.168.100.6
+python -m gestor_luces.cli status --ip 192.168.100.6
 
 # Encender el foco con un 80% de brillo:
-python -m gestor_luces.cli on 192.168.100.6 --brightness 80
+python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
 
 # Establecer un color RGB:
-python -m gestor_luces.cli color 192.168.100.6 255 120 0 --brightness 100
+python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Ajustar la temperatura de color (CCT en Kelvin):
-python -m gestor_luces.cli temp 192.168.100.6 2700
-
-# Activar una escena de fábrica por su número de ID:
-python -m gestor_luces.cli scene 192.168.100.6 5 --speed 120
+python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
 
 # Apagar el foco:
-python -m gestor_luces.cli off 192.168.100.6
+python -m gestor_luces.cli off --ip 192.168.100.6
 ```
 
 ---

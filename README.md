@@ -279,22 +279,19 @@ Use `gestor_luces.cli` for direct network discovery, UDP diagnostic probing, and
 python -m gestor_luces.cli discover
 
 # Query real-time status of a specific bulb:
-python -m gestor_luces.cli status 192.168.100.6
+python -m gestor_luces.cli status --ip 192.168.100.6
 
 # Turn a bulb on at 80% brightness:
-python -m gestor_luces.cli on 192.168.100.6 --brightness 80
+python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
 
 # Set bulb color using RGB:
-python -m gestor_luces.cli color 192.168.100.6 255 120 0 --brightness 100
+python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Set Correlated Color Temperature (CCT):
-python -m gestor_luces.cli temp 192.168.100.6 2700
-
-# Activate built-in scene by ID:
-python -m gestor_luces.cli scene 192.168.100.6 5 --speed 120
+python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
 
 # Turn a bulb off:
-python -m gestor_luces.cli off 192.168.100.6
+python -m gestor_luces.cli off --ip 192.168.100.6
 ```
 
 ---
