@@ -199,7 +199,7 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     ui_dir = resolve_ui_directory()
     i18n_js = (ui_dir / "i18n.js").read_text(encoding="utf-8")
     index_html = (ui_dir / "index.html").read_text(encoding="utf-8")
-    app_js = (ui_dir / "app.js").read_text(encoding="utf-8")
+    app_js = "\n".join(p.read_text(encoding="utf-8") for p in sorted((ui_dir / "js").glob("*.js")))
     scenes_json = (ui_dir / "scenes.json").read_text(encoding="utf-8")
     themes_css = (ui_dir / "themes.css").read_text(encoding="utf-8")
 

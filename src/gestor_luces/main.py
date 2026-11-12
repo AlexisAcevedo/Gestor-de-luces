@@ -606,7 +606,7 @@ def main(argv: list[str] | None = None) -> int:
     themes_path = ui_dir / "themes.css"
     styles_path = ui_dir / "styles.css"
     i18n_path = ui_dir / "i18n.js"
-    script_path = ui_dir / "app.js"
+    script_path = ui_dir / "js" / "app.js"
     scenes_path = ui_dir / "scenes.json"
 
     icon_path = resolve_icon_path()
