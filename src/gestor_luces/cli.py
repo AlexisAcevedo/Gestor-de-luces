@@ -19,11 +19,7 @@ from gestor_luces.domain.value_objects import Color
 def _format_state(state: LightState) -> str:
     """Formatea un `LightState` para mostrarlo en consola (misma salida que el CLI previo)."""
     color = state.color
-    rgb = (
-        f"({color.r}, {color.g}, {color.b})"
-        if color is not None
-        else "N/A"
-    )
+    rgb = f"({color.r}, {color.g}, {color.b})" if color is not None else "N/A"
     temperature = f"{state.temperature} K" if state.temperature is not None else "N/A"
     scene = state.scene_name if state.scene_name is not None else "None"
     return "\n".join(

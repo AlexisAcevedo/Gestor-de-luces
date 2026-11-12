@@ -270,8 +270,7 @@ def test_i18n_single_owner_backend_tray_vs_ui_screen() -> None:
     # Dueño único literal: ninguna clave de bandeja aparece como clave de pantalla.
     collisions = tray_keys & ui_keys
     assert not collisions, (
-        f"Clave de bandeja duplicada en la UI (dueño único violado): "
-        f"{sorted(collisions)}"
+        f"Clave de bandeja duplicada en la UI (dueño único violado): {sorted(collisions)}"
     )
 
     # Convención inconfundible: la bandeja es snake_case sin namespace, la UI es

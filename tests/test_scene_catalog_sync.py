@@ -29,8 +29,7 @@ def test_scenes_json_matches_domain_catalog() -> None:
     expected = _expected_payload()
 
     assert committed == expected, (
-        "ui/scenes.json está desincronizado del dominio; "
-        f"{_REGENERATE_HINT}"
+        f"ui/scenes.json está desincronizado del dominio; {_REGENERATE_HINT}"
     )
 
 

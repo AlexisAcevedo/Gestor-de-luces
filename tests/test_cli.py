@@ -12,8 +12,6 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.cli import run_command
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
@@ -65,8 +63,7 @@ async def test_cli_color_and_kelvin_through_shared_controller() -> None:
         controller = WizUdpController(probe_candidates=[server.endpoint])
 
         assert (
-            await _run(controller, server.endpoint, "color", r=255, g=120, b=0, brightness=100)
-            == 0
+            await _run(controller, server.endpoint, "color", r=255, g=120, b=0, brightness=100) == 0
         )
         state_rgb = await controller.get_state(server.endpoint)
         assert state_rgb is not None
