@@ -4,6 +4,7 @@ safety."""
 from __future__ import annotations
 
 import ctypes
+import logging
 from types import SimpleNamespace
 
 from gestor_luces.main import (
@@ -16,6 +17,7 @@ from gestor_luces.main import (
     _compute_initial_window_geometry,
     _resolve_native_hwnd,
     _set_windows_dark_titlebar_attribute,
+    show_message_box,
 )
 
 
@@ -194,3 +196,66 @@ def test_activate_window_foreground_restores_and_raises(monkeypatch) -> None:
         (hwnd_64, -2, 0, 0, 0, 0, 0x0001 | 0x0002),
     ]
     assert fg_calls == [(hwnd_64,)]
+
+
+def test_activate_window_foreground_accepts_injected_user32() -> None:
+    """`_activate_window_foreground` usa el `user32` inyectado en vez de `ctypes.windll`."""
+    hwnd_64 = 0x0000000180009999
+    show_calls: list[tuple[int, int]] = []
+    pos_calls: list[tuple[int, int, int, int, int, int, int]] = []
+    fg_calls: list[int] = []
+
+    class _FakeFn:
+        def __init__(self, sink) -> None:
+            self._sink = sink
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, *args):
+            self._sink.append(args)
+            return 1
+
+    fake_user32 = SimpleNamespace(
+        ShowWindow=_FakeFn(show_calls),
+        SetWindowPos=_FakeFn(pos_calls),
+        SetForegroundWindow=_FakeFn(fg_calls),
+    )
+    fake_window = SimpleNamespace(
+        native=SimpleNamespace(Handle=SimpleNamespace(ToInt64=lambda: hwnd_64))
+    )
+
+    assert _activate_window_foreground(fake_window, platform="win32", user32=fake_user32) is True
+
+    assert show_calls == [(hwnd_64, 9)]
+    assert pos_calls == [
+        (hwnd_64, -1, 0, 0, 0, 0, 0x0001 | 0x0002),
+        (hwnd_64, -2, 0, 0, 0, 0, 0x0001 | 0x0002),
+    ]
+    assert fg_calls == [(hwnd_64,)]
+
+
+def test_show_message_box_uses_injected_user32_and_logs_off_windows(caplog) -> None:
+    """`show_message_box` llama `MessageBoxW` en Windows y solo registra fuera de Windows."""
+    calls: list[tuple[int, str, str, int]] = []
+
+    class FakeUser32:
+        def MessageBoxW(  # noqa: N802
+            self,
+            hwnd: int,
+            text: str,
+            title: str,
+            flags: int,
+        ) -> int:
+            calls.append((hwnd, text, title, flags))
+            return 1
+
+    fake_user32 = FakeUser32()
+
+    show_message_box("About text", "Console", platform="win32", user32=fake_user32)
+    assert calls == [(0, "About text", "Console", 0x40)]
+
+    with caplog.at_level(logging.INFO):
+        show_message_box("About text", "Console", platform="linux", user32=fake_user32)
+    # Fuera de Windows no se abre ninguna ventana nativa y el texto queda en el log.
+    assert calls == [(0, "About text", "Console", 0x40)]
+    assert any("About text" in record.getMessage() for record in caplog.records)

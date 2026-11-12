@@ -17,6 +17,22 @@ from typing import Any
 
 from gestor_luces.adapters.ambilight.mss_sampler import MssScreenSampler
 from gestor_luces.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
+from gestor_luces.adapters.platform.windows import (
+    DARK_TITLEBAR_ENABLED,
+    THEME_WINDOW_CHROME,
+    WINDOW_DEFAULT_SIZE,
+    WINDOW_FALLBACK_SIZE,
+    WINDOW_MIN_SIZE,
+    _activate_window_foreground,
+    _compute_fit_height,
+    _compute_initial_window_geometry,
+    _fit_native_window_height,
+    _resolve_native_hwnd,
+    _set_windows_dark_titlebar_attribute,
+    _sync_native_menu,
+    _to_webview_menus,
+    show_message_box,
+)
 from gestor_luces.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
@@ -45,459 +61,30 @@ from gestor_luces.resources import resolve_app_version, resolve_asset_path, reso
 
 _LOGGER = logging.getLogger(__name__)
 
-
-WINDOW_DEFAULT_SIZE = (620, 760)
-WINDOW_MIN_SIZE = (480, 640)
-WINDOW_FALLBACK_SIZE = WINDOW_DEFAULT_SIZE
-THEME_WINDOW_CHROME: dict[str, dict[str, Any]] = {
-    "architectural-stone": {
-        "background_color": "#F4F1EA",
-        "dark_titlebar": False,
-    },
-    "atmospheric-dark": {
-        "background_color": "#08090C",
-        "dark_titlebar": True,
-    },
-}
-DARK_TITLEBAR_ENABLED = False
-
-
-def _resolve_native_hwnd(native_form: Any) -> int | None:
-    """Extrae el HWND nativo de 64 bits sin truncar punteros mayores a 0x7FFFFFFF."""
-    if native_form is None:
-        return None
-    handle = getattr(native_form, "Handle", None)
-    if handle is None:
-        return None
-    for method_name in ("ToInt64", "ToInt32"):
-        converter = getattr(handle, method_name, None)
-        if callable(converter):
-            try:
-                hwnd = int(converter())
-                return hwnd if hwnd > 0 else None
-            except Exception:
-                _LOGGER.debug("Handle.%s() conversion failed.", method_name, exc_info=True)
-    try:
-        hwnd = int(handle)
-        return hwnd if hwnd > 0 else None
-    except Exception:
-        return None
-
-
-def _configure_fn_signature(fn: Any, argtypes: list[Any], restype: Any) -> None:
-    """Declara `argtypes` y `restype` sobre punteros Win32 reales sin romper dobles de prueba."""
-    if fn is None:
-        return
-    try:
-        if hasattr(fn, "argtypes"):
-            fn.argtypes = argtypes
-        if hasattr(fn, "restype"):
-            fn.restype = restype
-    except Exception:
-        _LOGGER.debug("Win32 function signature setup skipped.", exc_info=True)
-
-
-def _set_windows_dark_titlebar_attribute(
-    window: Any,
-    *,
-    enabled: bool = DARK_TITLEBAR_ENABLED,
-    platform: str = sys.platform,
-    dwmapi: Any = None,
-) -> bool:
-    """Actualiza bidireccionalmente el atributo DWMWA_USE_IMMERSIVE_DARK_MODE (20) en Windows."""
-    if platform != "win32":
-        return False
-    try:
-        native_form = getattr(window, "native", None)
-        hwnd = _resolve_native_hwnd(native_form)
-        if hwnd is None:
-            return False
-        import ctypes
-        from ctypes import wintypes
-
-        target_dwmapi = ctypes.windll.dwmapi if dwmapi is None else dwmapi
-        dwm_fn = getattr(target_dwmapi, "DwmSetWindowAttribute", None)
-        if dwm_fn is None:
-            return False
-        _configure_fn_signature(
-            dwm_fn,
-            [wintypes.HWND, ctypes.c_int, ctypes.c_void_p, ctypes.c_int],
-            ctypes.c_int,
-        )
-        value = ctypes.c_int(1 if enabled else 0)
-        dwm_fn(
-            hwnd,
-            20,
-            ctypes.byref(value),
-            ctypes.sizeof(ctypes.c_int),
-        )
-        return True
-    except Exception:
-        _LOGGER.debug("Windows dark titlebar attribute skipped.", exc_info=True)
-        return False
-
-
-def _compute_initial_window_geometry(
-    webview_module: object,
-) -> tuple[int, int, int | None, int | None]:
-    """Return (width, height, x, y) sized to WINDOW_DEFAULT_SIZE, clamped to screen
-    bounds, and centered.
-
-    Falls back to WINDOW_DEFAULT_SIZE (OS-centered) when screen info is unavailable.
-    """
-    try:
-        screens = getattr(webview_module, "screens", None)
-        if not screens:
-            raise RuntimeError("no screens reported")
-        screen = screens[0]
-        screen_w, screen_h = int(screen.width), int(screen.height)
-        if screen_w <= 0 or screen_h <= 0:
-            raise RuntimeError("invalid screen size")
-    except Exception:
-        return (*WINDOW_DEFAULT_SIZE, None, None)
-
-    width = min(WINDOW_DEFAULT_SIZE[0], screen_w)
-    if screen_w >= WINDOW_MIN_SIZE[0]:
-        width = max(WINDOW_MIN_SIZE[0], width)
-
-    height = min(WINDOW_DEFAULT_SIZE[1], screen_h)
-    if screen_h >= WINDOW_MIN_SIZE[1]:
-        height = max(WINDOW_MIN_SIZE[1], height)
-
-    x = max(0, (screen_w - width) // 2)
-    y = max(0, (screen_h - height) // 2)
-    return width, height, x, y
-
-
-def _compute_fit_height(
-    content_px: int,
-    chrome: float,
-    min_h: int = WINDOW_MIN_SIZE[1],
-    max_h: int = WINDOW_DEFAULT_SIZE[1],
-) -> int:
-    """Return the outer window height (logical px) for a page content height.
-
-    `chrome` is the non-client height (title bar + menu bar). The result is clamped to
-    `[min_h, max_h]`; when the work area is smaller than `min_h`, the work area wins.
-    """
-    target = int(round(content_px + chrome))
-    return max(1, min(max(target, int(min_h)), int(max_h)))
-
-
-def _fit_native_window_height(
-    window: Any,
-    content_px: int,
-    fallback_max_h: int | None = None,
-    *,
-    baseline_height: int = WINDOW_DEFAULT_SIZE[1],
-    min_height: int = WINDOW_MIN_SIZE[1],
-    platform: str = sys.platform,
-    user32: Any = None,
-) -> bool:
-    """Resize the native window so its client height equals `content_px` CSS pixels.
-
-    Keeps x, y and width fixed (moves the window up only when the new bottom would leave
-    the monitor work area). Marshals inspection onto the WinForms UI thread when
-    `InvokeRequired` is True and guards against disposed or uncreated handles.
-    """
-    if platform != "win32":
-        return False
-    native_form = getattr(window, "native", None)
-    if native_form is None:
-        return False
-    if bool(getattr(native_form, "IsDisposed", False)) or not bool(
-        getattr(native_form, "IsHandleCreated", True)
-    ):
-        return False
-
-    def _execute() -> bool:
-        if bool(getattr(native_form, "IsDisposed", False)) or not bool(
-            getattr(native_form, "IsHandleCreated", True)
-        ):
-            return False
-        import ctypes
-        from ctypes import wintypes
-
-        hwnd = _resolve_native_hwnd(native_form)
-        if hwnd is None:
-            return False
-        target_user32 = ctypes.windll.user32 if user32 is None else user32
-
-        class _MonitorInfo(ctypes.Structure):
-            _fields_ = [
-                ("cbSize", wintypes.DWORD),
-                ("rcMonitor", wintypes.RECT),
-                ("rcWork", wintypes.RECT),
-                ("dwFlags", wintypes.DWORD),
-            ]
-
-        _configure_fn_signature(
-            getattr(target_user32, "IsZoomed", None),
-            [wintypes.HWND],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "IsIconic", None),
-            [wintypes.HWND],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "IsWindowVisible", None),
-            [wintypes.HWND],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "GetDpiForWindow", None),
-            [wintypes.HWND],
-            wintypes.UINT,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "GetWindowRect", None),
-            [wintypes.HWND, ctypes.POINTER(wintypes.RECT)],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "GetClientRect", None),
-            [wintypes.HWND, ctypes.POINTER(wintypes.RECT)],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "MonitorFromWindow", None),
-            [wintypes.HWND, wintypes.DWORD],
-            wintypes.HMONITOR,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "GetMonitorInfoW", None),
-            [wintypes.HMONITOR, ctypes.POINTER(_MonitorInfo)],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(target_user32, "SetWindowPos", None),
-            [
-                wintypes.HWND,
-                wintypes.HWND,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                wintypes.UINT,
-            ],
-            wintypes.BOOL,
-        )
-
-        if (
-            target_user32.IsZoomed(hwnd)
-            or target_user32.IsIconic(hwnd)
-            or not target_user32.IsWindowVisible(hwnd)
-        ):
-            return False
-
-        try:
-            dpi = int(target_user32.GetDpiForWindow(hwnd)) or 96
-        except Exception:
-            dpi = 96
-        scale = dpi / 96.0
-
-        outer = wintypes.RECT()
-        client = wintypes.RECT()
-        if not target_user32.GetWindowRect(
-            hwnd, ctypes.byref(outer)
-        ) or not target_user32.GetClientRect(hwnd, ctypes.byref(client)):
-            return False
-        outer_h = outer.bottom - outer.top
-        chrome_phys = outer_h - (client.bottom - client.top)
-        try:
-            for control in getattr(native_form, "Controls", ()):
-                if control.GetType().Name == "MenuStrip" and getattr(control, "Visible", True):
-                    chrome_phys += int(control.Height)
-        except Exception:
-            _LOGGER.debug("Menu strip height query failed.", exc_info=True)
-
-        work_top = None
-        work_bottom = None
-        try:
-            monitor = target_user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
-            info = _MonitorInfo()
-            info.cbSize = ctypes.sizeof(_MonitorInfo)
-            if monitor and target_user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
-                work_top, work_bottom = info.rcWork.top, info.rcWork.bottom
-        except Exception:
-            _LOGGER.debug("Monitor work area query failed.")
-        if work_top is None or work_bottom is None:
-            effective_fallback = fallback_max_h if fallback_max_h else baseline_height
-            if not effective_fallback:
-                return False
-            work_top, work_bottom = outer.top, outer.top + int(effective_fallback * scale)
-
-        target_logical = _compute_fit_height(
-            content_px,
-            chrome_phys / scale,
-            min_height,
-            int((work_bottom - work_top) / scale),
-        )
-        target_phys = int(round(target_logical * scale))
-        if target_phys == outer_h:
-            return True
-        new_top = outer.top
-        if new_top + target_phys > work_bottom:
-            new_top = max(work_top, work_bottom - target_phys)
-        # SWP_NOZORDER | SWP_NOACTIVATE
-        return bool(
-            target_user32.SetWindowPos(
-                hwnd,
-                0,
-                outer.left,
-                new_top,
-                outer.right - outer.left,
-                target_phys,
-                0x0004 | 0x0010,
-            )
-        )
-
-    if bool(getattr(native_form, "InvokeRequired", False)):
-        outcome = {"ok": False}
-
-        def _marshaled() -> None:
-            outcome["ok"] = _execute()
-
-        try:
-            invoke_fn = getattr(native_form, "Invoke", None)
-            if not callable(invoke_fn):
-                return False
-            try:
-                from System import Action
-
-                invoke_fn(Action(_marshaled))
-            except ImportError:
-                invoke_fn(_marshaled)
-            return outcome["ok"]
-        except Exception:
-            _LOGGER.debug("Marshaled window fit skipped.", exc_info=True)
-            return False
-
-    try:
-        return _execute()
-    except Exception:
-        _LOGGER.debug("Window fit skipped.", exc_info=True)
-        return False
-
-
-def _activate_window_foreground(window: Any, *, platform: str = sys.platform) -> bool:
-    """Restaura y eleva la ventana al frente en Windows usando un HWND de 64 bits seguro."""
-    if platform != "win32":
-        return False
-    try:
-        native_form = getattr(window, "native", None)
-        hwnd = _resolve_native_hwnd(native_form)
-        if hwnd is None:
-            return False
-        import ctypes
-        from ctypes import wintypes
-
-        user32 = ctypes.windll.user32
-        _configure_fn_signature(
-            getattr(user32, "ShowWindow", None),
-            [wintypes.HWND, ctypes.c_int],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(user32, "SetWindowPos", None),
-            [
-                wintypes.HWND,
-                wintypes.HWND,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                wintypes.UINT,
-            ],
-            wintypes.BOOL,
-        )
-        _configure_fn_signature(
-            getattr(user32, "SetForegroundWindow", None),
-            [wintypes.HWND],
-            wintypes.BOOL,
-        )
-        user32.ShowWindow(hwnd, 9)
-        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002)
-        user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002)
-        user32.SetForegroundWindow(hwnd)
-        return True
-    except Exception:
-        _LOGGER.debug("Native foreground activation skipped.", exc_info=True)
-        return False
-
-
-def _to_webview_menus(
-    spec: list[AppMenu],
-    on_action: Any,
-) -> list[Any]:
-    """Translate the pure menu model into pywebview `Menu` objects."""
-    from webview.menu import Menu, MenuAction, MenuSeparator
-
-    menus: list[Any] = []
-    for menu in spec:
-        items: list[Any] = []
-        for item in menu.items:
-            if item.is_separator:
-                items.append(MenuSeparator())
-            else:
-                items.append(
-                    # Items from pywebview are not checkable: `_sync_native_menu` sets `Checked`.
-                    MenuAction(item.label, lambda action_id=item.action_id: on_action(action_id))
-                )
-        menus.append(Menu(menu.title, items))
-    return menus
-
-
-def _sync_native_menu(window: Any, spec: list[AppMenu]) -> None:
-    """Push labels and check marks onto the live WinForms `MenuStrip` created by pywebview.
-
-    pywebview builds the menu once and offers no update API, so after startup the
-    `ToolStripMenuItem` objects are updated in place (language, show/hide label and the
-    Start with Windows check mark). Failures are logged and never propagate.
-    """
-    if sys.platform != "win32":
-        return
-    native_form = getattr(window, "native", None)
-    if native_form is None:
-        return
-    if bool(getattr(native_form, "IsDisposed", False)) or not bool(
-        getattr(native_form, "IsHandleCreated", True)
-    ):
-        return
-
-    def _apply() -> None:
-        if bool(getattr(native_form, "IsDisposed", False)) or not bool(
-            getattr(native_form, "IsHandleCreated", True)
-        ):
-            return
-        strip = next(
-            (c for c in native_form.Controls if c.GetType().Name == "MenuStrip"),
-            None,
-        )
-        if strip is None:
-            return
-        for top_index, menu in enumerate(spec):
-            top_item = strip.Items[top_index]
-            top_item.Text = menu.title
-            for sub_index, item in enumerate(menu.items):
-                if item.is_separator:
-                    continue
-                native_item = top_item.DropDownItems[sub_index]
-                native_item.Text = item.label
-                if item.checked is not None:
-                    native_item.Checked = bool(item.checked)
-
-    try:
-        from System import Action
-
-        if native_form.InvokeRequired:
-            native_form.Invoke(Action(_apply))
-        else:
-            _apply()
-    except Exception:
-        _LOGGER.debug("Native menu sync skipped.", exc_info=True)
+# Reexportes de la capa de plataforma Windows: las pruebas y los consumidores historicos
+# importan estos simbolos desde `gestor_luces.main`.
+__all__ = [
+    "DARK_TITLEBAR_ENABLED",
+    "THEME_WINDOW_CHROME",
+    "WINDOW_DEFAULT_SIZE",
+    "WINDOW_FALLBACK_SIZE",
+    "WINDOW_MIN_SIZE",
+    "_activate_window_foreground",
+    "_compute_fit_height",
+    "_compute_initial_window_geometry",
+    "_fit_native_window_height",
+    "_resolve_native_hwnd",
+    "_set_windows_dark_titlebar_attribute",
+    "_sync_native_menu",
+    "_to_webview_menus",
+    "build_application",
+    "main",
+    "parse_args",
+    "resolve_icon_path",
+    "resolve_png_icon_path",
+    "resolve_ui_directory",
+    "show_message_box",
+]
 
 
 class _NoopTrayIcon:
@@ -847,13 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     def show_about() -> None:
         language = str(bridge.get_tray_snapshot().get("language") or "en")
         text = build_about_text(language, resolve_app_version())
-        if sys.platform == "win32":
-            import ctypes
-
-            # MB_OK | MB_ICONINFORMATION
-            ctypes.windll.user32.MessageBoxW(0, text, APP_DISPLAY_NAME, 0x40)
-        else:
-            _LOGGER.info("%s", text)
+        show_message_box(text, APP_DISPLAY_NAME)
 
     def toggle_autostart() -> None:
         current = bool(bridge.get_autostart().get("enabled"))
