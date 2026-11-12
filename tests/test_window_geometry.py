@@ -12,6 +12,7 @@ from gestor_luces.main import (
     WINDOW_DEFAULT_SIZE,
     WINDOW_FALLBACK_SIZE,
     WINDOW_MIN_SIZE,
+    _activate_window_foreground,
     _compute_initial_window_geometry,
     _resolve_native_hwnd,
     _set_windows_dark_titlebar_attribute,
@@ -133,3 +134,63 @@ def test_compute_initial_window_geometry_falls_back_when_screens_missing() -> No
     assert _compute_initial_window_geometry(
         SimpleNamespace(screens=[SimpleNamespace(width=0, height=-10)])
     ) == (620, 760, None, None)
+
+
+def test_activate_window_foreground_skips_non_win32_and_missing_native() -> None:
+    """`_activate_window_foreground` es no-op fuera de Windows y sin ventana nativa."""
+    fake_window = SimpleNamespace(native=SimpleNamespace(Handle=SimpleNamespace()))
+    assert _activate_window_foreground(fake_window, platform="linux") is False
+    assert _activate_window_foreground(SimpleNamespace(native=None), platform="win32") is False
+
+
+def test_activate_window_foreground_restores_and_raises(monkeypatch) -> None:
+    """`_activate_window_foreground` llama ShowWindow/SetWindowPos/SetForegroundWindow."""
+    import ctypes
+
+    hwnd_64 = 0x0000000180007777
+    show_calls: list[tuple[int, int]] = []
+    pos_calls: list[tuple[int, int, int, int, int, int, int]] = []
+    fg_calls: list[int] = []
+
+    class _FakeFn:
+        def __init__(self, sink) -> None:
+            self._sink = sink
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, *args):
+            self._sink.append(args)
+            return 1
+
+    class FakeUser32:
+        def __init__(self) -> None:
+            self.ShowWindow = _FakeFn(show_calls)  # noqa: N802
+            self.SetWindowPos = _FakeFn(pos_calls)  # noqa: N802
+            self.SetForegroundWindow = _FakeFn(fg_calls)  # noqa: N802
+
+    fake_user32 = FakeUser32()
+
+    class FakeWindll:
+        user32 = fake_user32
+
+    # Inyectamos el fake en ctypes.windll (existe solo en Windows).
+    monkeypatch.setattr(ctypes, "windll", FakeWindll(), raising=False)
+
+    fake_window = SimpleNamespace(
+        native=SimpleNamespace(
+            Handle=SimpleNamespace(
+                ToInt64=lambda: hwnd_64,
+                ToInt32=lambda: (_ for _ in ()).throw(OverflowError("32-bit overflow")),
+            )
+        )
+    )
+
+    assert _activate_window_foreground(fake_window, platform="win32") is True
+
+    # ShowWindow(hwnd, 9) + dos SetWindowPos + SetForegroundWindow
+    assert show_calls == [(hwnd_64, 9)]
+    assert pos_calls == [
+        (hwnd_64, -1, 0, 0, 0, 0, 0x0001 | 0x0002),
+        (hwnd_64, -2, 0, 0, 0, 0, 0x0001 | 0x0002),
+    ]
+    assert fg_calls == [(hwnd_64,)]
