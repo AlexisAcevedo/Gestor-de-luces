@@ -141,7 +141,7 @@ La exploración del rediseño de interfaz en múltiples worktrees fue completada
    - La selección de tema se valida en la capa de dominio (`SUPPORTED_THEMES`, `DEFAULT_THEME = "architectural-stone"`), se persiste en `settings.json` (`SettingsRepository.get_theme` / `set_theme`), se expone en la barra superior (`#theme-btn-stone` / `#theme-btn-dark`) y se sincroniza con la barra de título de Windows DWM (`DwmSetWindowAttribute` 20) y el color de fondo de WebView2 (`THEME_WINDOW_CHROME`).
 2. **Geometría de Ventana y Autoajuste Dinámico de Altura:**
    - Dimensiones configuradas en `WINDOW_DEFAULT_SIZE = (620, 760)` y `WINDOW_MIN_SIZE = (480, 640)`, calibradas para operar con cero desplazamiento vertical (*zero vertical scroll*) en las 6 pestañas de modo.
-   - Incluye ajuste dinámico de altura guiado por contenido (`fit_window_height` en `WebviewBridge` y `_fit_native_window_height` en `main.py`), tomando la pestaña Blanco (Kelvin) con las secciones colapsables cerradas como altura base de referencia.
+   - Incluye ajuste dinámico de altura guiado por contenido (`fit_window_height` en `WebviewBridge` y `_fit_native_window_height` en `adapters/platform/windows/window_geometry.py`), tomando la pestaña Blanco (Kelvin) con las secciones colapsables cerradas como altura base de referencia.
 3. **Punto de Entrada del Paquete, Diagnóstico Multi-Instancia y Suite de Pruebas Automatizadas:**
    - Se incorporó el punto de entrada de paquete `src/gestor_luces/__main__.py` (`python -m gestor_luces`) además de `python -m gestor_luces.main`.
    - Se añadió el parámetro de línea de comandos `--multi-instance` para omitir el cerrojo de instancia única durante comparaciones de diagnóstico lado a lado.
