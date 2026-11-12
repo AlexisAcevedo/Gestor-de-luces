@@ -9,6 +9,7 @@ ventana nativa (`WebviewBridge` + `pywebview`) y bandeja del sistema (`TrayContr
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,32 @@ __all__ = [
     "resolve_ui_directory",
     "show_message_box",
 ]
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    """Configura el logger raiz con salida a archivo y a stderr.
+
+    Escribe en `<data_dir>/gestor_luces.log` (resuelto con `resolve_default_data_dir`) y
+    refleja todo en stderr, para que los mensajes de arranque y de error queden
+    disponibles tanto en una consola como en el log persistente de la aplicacion.
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    data_dir = resolve_default_data_dir()
+    log_path = data_dir / "gestor_luces.log"
+    formatter = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    root.setLevel(logging.INFO)
+    root.addHandler(file_handler)
+    root.addHandler(stream_handler)
 
 
 class _NoopTrayIcon:
@@ -206,13 +233,13 @@ def _run_smoke_test(bridge: WebviewBridge) -> int:
             str(path) for path in (*assets.values(), icon_path, png_icon_path) if not path.is_file()
         ]
         if missing:
-            print(f"Smoke test failed: missing assets: {missing}", file=sys.stderr)
+            _LOGGER.error("Smoke test failed: missing assets: %s", missing)
             return 1
         smoke_tray.refresh()
         if not smoke_tray.spec:
-            print("Smoke test failed: tray menu specification is empty.", file=sys.stderr)
+            _LOGGER.error("Smoke test failed: tray menu specification is empty.")
             return 1
-        print(f"Composition root initialized. UI entry verified at: {index_path}")
+        _LOGGER.info("Composition root initialized. UI entry verified at: %s", index_path)
         return 0
     finally:
         smoke_tray.stop()
@@ -221,6 +248,7 @@ def _run_smoke_test(bridge: WebviewBridge) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Punto de entrada principal de la aplicacion de escritorio."""
+    _configure_logging()
     args = parse_args(argv)
     ui_dir = resolve_ui_directory()
     index_path = ui_dir / "index.html"
@@ -230,11 +258,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.smoke_test and not getattr(args, "multi_instance", False):
         guard = SingleInstanceGuard()
         if not guard.acquire():
-            print(
+            _LOGGER.info(
                 "An existing Gestor de luces instance is already running; "
                 "bringing it to the foreground. "
-                "(Pass --multi-instance to launch a side-by-side window.)",
-                flush=True,
+                "(Pass --multi-instance to launch a side-by-side window.)"
             )
             guard.signal_existing_instance()
             return 0
@@ -259,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     app.create_window()
     win_width, win_height = app.window_size
-    print(f"Opening UI window ({win_width}x{win_height}) -> {index_path}", flush=True)
+    _LOGGER.info("Opening UI window (%sx%s) -> %s", win_width, win_height, index_path)
     app.start()
     return 0
 
