@@ -29,9 +29,11 @@ from gestor_luces.adapters.platform.windows.window_chrome import (
 from gestor_luces.adapters.platform.windows.window_geometry import (
     WINDOW_DEFAULT_SIZE,
     WINDOW_FALLBACK_SIZE,
+    WINDOW_FIT_COMFORT_RATIO,
     WINDOW_MIN_SIZE,
     _compute_fit_height,
     _compute_initial_window_geometry,
+    _fit_max_height,
     _fit_native_window_height,
 )
 
@@ -42,12 +44,14 @@ __all__ = [
     "GUI_SYSTEMMENUMODE",
     "THEME_WINDOW_CHROME",
     "WINDOW_DEFAULT_SIZE",
+    "WINDOW_FIT_COMFORT_RATIO",
     "WINDOW_FALLBACK_SIZE",
     "WINDOW_MIN_SIZE",
     "_activate_window_foreground",
     "_compute_fit_height",
     "_compute_initial_window_geometry",
     "_configure_fn_signature",
+    "_fit_max_height",
     "_fit_native_window_height",
     "_is_menu_open",
     "_resolve_native_hwnd",

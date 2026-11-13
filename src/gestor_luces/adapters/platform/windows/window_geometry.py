@@ -22,6 +22,10 @@ _LOGGER = logging.getLogger(__name__)
 WINDOW_DEFAULT_SIZE = (620, 760)
 WINDOW_MIN_SIZE = (480, 640)
 WINDOW_FALLBACK_SIZE = WINDOW_DEFAULT_SIZE
+# El auto-fit no lleva la ventana mas alla de esta fraccion del area de trabajo: una
+# seccion larga (la grilla de escenas pide ~1310 px) no debe ocupar toda la pantalla;
+# lo que sobra scrollea en el escenario, nunca dentro de una grilla.
+WINDOW_FIT_COMFORT_RATIO = 0.78
 
 
 def _compute_initial_window_geometry(
@@ -54,6 +58,14 @@ def _compute_initial_window_geometry(
     x = max(0, (screen_w - width) // 2)
     y = max(0, (screen_h - height) // 2)
     return width, height, x, y
+
+
+def _fit_max_height(work_area_px: int, *, comfort_ratio: float = WINDOW_FIT_COMFORT_RATIO) -> int:
+    """Altura maxima (logica) que el auto-fit puede pedir, como fraccion del area de trabajo.
+
+    Deja aire alrededor de la ventana para que una seccion larga no llene la pantalla.
+    """
+    return max(1, int(work_area_px * comfort_ratio))
 
 
 def _compute_fit_height(
@@ -220,7 +232,7 @@ def _fit_native_window_height(
             content_px,
             chrome_phys / scale,
             min_height,
-            int((work_bottom - work_top) / scale),
+            _fit_max_height(int((work_bottom - work_top) / scale)),
         )
         target_phys = int(round(target_logical * scale))
         if target_phys == outer_h:

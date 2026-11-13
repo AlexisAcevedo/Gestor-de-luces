@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from gestor_luces.adapters.platform.windows.window_geometry import _fit_max_height
 from gestor_luces.adapters.ui_webview.bridge import JsApi
 from gestor_luces.main import (
     WINDOW_MIN_SIZE,
@@ -251,3 +252,17 @@ def test_window_fit_cannot_enter_a_resize_oscillation() -> None:
     assert "fitBudgetTripped = true" in fit_js
     assert "if (!fitBudgetAllows()) return;" in fit_js
     assert "fitBudgetTripped = false;" in fit_js
+
+
+def test_fit_max_height_keeps_a_comfort_margin() -> None:
+    """El fit no debe llevar la ventana al borde del monitor.
+
+    La grilla de escenas mide ~1310 px: sin techo de confort la ventana toca el area de
+    trabajo y se ve enorme. El techo es una fraccion del area (0.78), y el resto scrollea
+    en el escenario.
+    """
+    assert _fit_max_height(1040) == 811
+    assert _fit_max_height(1000) == 780
+    assert _fit_max_height(2160) == 1684
+    assert _fit_max_height(1) == 1
+    assert _fit_max_height(1040, comfort_ratio=1.0) == 1040
