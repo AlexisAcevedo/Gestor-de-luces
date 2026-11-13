@@ -2,6 +2,9 @@
 
 [English](README.md) | [Español](README.es.md)
 
+[![CI](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AlexisAcevedo/Gestor-de-luces/badges/coverage.json)](https://github.com/AlexisAcevedo/Gestor-de-luces/blob/main/.github/workflows/coverage-badge.yml)
+
 Centro de control de escritorio para sistemas de iluminación inteligente Philips WiZ sobre redes de área local (LAN). Diseñado con Python, Arquitectura Hexagonal (Puertos y Adaptadores) y Microsoft WebView2 (PyWebView), operando de manera exclusiva mediante paquetes UDP locales sin dependencias de la nube, puentes externos ni necesidad de conexión a Internet.
 
 ---
@@ -9,10 +12,10 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 ## Aspectos Destacados de la Arquitectura
 
 - Cero Dependencia de la Nube: Comunicación local directa con los focos WiZ mediante el puerto UDP 38899.
-- Arquitectura Hexagonal: Desacoplamiento total entre la lógica del dominio, la gestión del estado, la interfaz de usuario, el streaming de hardware y la persistencia de datos.
+- Arquitectura Hexagonal: Las capas de dominio, puertos y aplicación nunca importan adaptadores (verificado por `test_inner_hexagonal_layers_never_import_adapters`).
 - Concurrencia Multihilo: Bucle de eventos asíncrono e independiente para I/O de red, hilos aislados en segundo plano para streaming y bandeja del sistema no bloqueante.
 - Limitación de Frecuencia por Hardware: Regulación estricta a 10 Hz (100 ms) para evitar la saturación de los microcontroladores ESP integrados en los focos durante el streaming continuo.
-- Pruebas 100% Fuera de Línea: Suite de 100 pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
+- Pruebas 100% Fuera de Línea: Suite de pruebas automatizadas que utilizan un simulador UDP en memoria que replica fielmente el comportamiento JSON-RPC de WiZ.
 
 ---
 
@@ -38,7 +41,9 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Mapeo de frecuencias a color con sensibilidad de ganancia configurable y caída suavizada.
 
 5. Bandeja del Sistema y Ejecución en Segundo Plano:
-   - Ejecución silenciosa en el Área de Notificación de Windows mediante `pystray`.
+   - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo
+     WinForms `NotifyIcon` pintado con el tema activo (con respaldo `pystray` si WinForms no
+     puede cargar).
    - Menú de presets rápidos, alternancia de encendido general y minimización elegante a la bandeja al cerrar la ventana.
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
 
@@ -50,7 +55,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Cambio de tema en tiempo de ejecución entre **Architectural Stone** (tema claro predeterminado inspirado en botoneras de hardware Braun/Lutron) y **Atmospheric Dark** (cristal esmerilado y halo fotométrico dinámico en espacio `oklab`), persistido en `settings.json` con sincronización automática de la barra de título de Windows DWM.
 
 8. Integración con el Escritorio de Windows:
-   - Geometría de widget compacta (base de `620x760` con ajuste dinámico de altura según el contenido) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
+   - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
    - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de).
    - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
    - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).
@@ -63,7 +68,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 ```
                       +---------------------------------------+
                       |       Interfaz Gráfica (WebView2)     |
-                      |       Bandeja del Sistema (pystray)   |
+                      |   Bandeja del Sistema (NotifyIcon)    |
                       |       Utilidad de Diagnóstico CLI     |
                       +-------------------+-------------------+
                                           |
@@ -109,11 +114,11 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 | Entorno de Ejecución | Python | >= 3.11 (verificado en 3.14) | Plataforma base del lenguaje |
 | Red | `pywizlight` | 0.6.6 | Transporte por sockets UDP en puerto 38899 |
 | Contenedor de Escritorio | `pywebview` | 6.2.1 | Ventana nativa sobre Microsoft Edge WebView2 |
-| Bandeja del Sistema | `pystray` / `Pillow` | 0.19.5 / 13.0.0 | Icono y menú en el Área de Notificaciones de Windows |
+| Bandeja del Sistema | `Pillow` / `pystray` | 13.0.0 / 0.19.5 | `Pillow` dibuja el icono del foco; el menú es un `NotifyIcon` de WinForms y `pystray` queda como vista de respaldo |
 | Captura de Pantalla | `mss` | 10.2.0 | Captura eficiente del búfer GDI de Win32 |
 | Captura de Audio | `PyAudioWPatch` | 0.2.12.9 | Captura de la salida del sistema vía WASAPI loopback |
 | Procesamiento de Señal | `numpy` | 2.5.4 | Transformada Discreta de Fourier y análisis espectral en tiempo real |
-| Testing | `pytest` / `pytest-asyncio` | 9.0.3 / 1.3.0 | Entorno de pruebas unitarias y de integración |
+| Pruebas | `pytest` / `pytest-asyncio` | 9.0.3 / 1.3.0 | Entorno de pruebas unitarias y de integración |
 
 ---
 
@@ -129,16 +134,17 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   └── installer.iss            # Script del instalador por usuario (Inno Setup)
 ├── scripts/
 │   └── build.ps1                # Icono + PyInstaller + ZIP portable + instalador
-├── pyproject.toml               # Metadatos del proyecto y configuración de pytest
-├── requirements.txt             # Dependencias fijadas para producción y pruebas
-├── requirements-dev.txt         # Dependencias de desarrollo, auditoría y empaquetado
+├── pyproject.toml               # Dependencias, metadatos del proyecto y configuración de pytest
 ├── README.md                    # Documentación principal en inglés
 ├── README.es.md                 # Traducción de la documentación al español
 ├── docs/
 │   ├── architecture.md          # Especificación técnica de arquitectura y concurrencia (EN)
 │   ├── architecture.es.md       # Especificación técnica de arquitectura y concurrencia (ES)
 │   ├── wiz_protocol.md          # Protocolo WiZ UDP y esquemas RPC (EN)
-│   └── wiz_protocol.es.md       # Protocolo WiZ UDP y esquemas RPC (ES)
+│   ├── wiz_protocol.es.md       # Protocolo WiZ UDP y esquemas RPC (ES)
+│   └── design/
+│       ├── ui_redesign_spec.md     # Especificación de rediseño de UI (EN)
+│       └── ui_redesign_spec.es.md  # Especificación de rediseño de UI (ES)
 ├── src/
 │   └── gestor_luces/
 │       ├── __init__.py
@@ -165,17 +171,28 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           ├── storage/         # Repositorios en disco JSON (%LOCALAPPDATA%)
 │           ├── ambilight/       # Muestreador de pantalla MSS
 │           ├── audio/           # Muestreador de audio WASAPI loopback
-│           ├── tray/            # Bandeja del sistema con pystray y render compartido de la bombilla
+│           ├── tray/            # Controlador de bandeja, vistas WinForms/Pystray y render del icono
 │           ├── system/          # Autoinicio de Windows (registro) e instancia única
 │           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
-├── tests/                       # Suite de pruebas automatizadas (99 tests)
+├── tests/                       # Suite de pruebas automatizadas
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
+│   ├── js/                      # Pruebas unitarias del frontend (node --test, sin dependencias)
+│   ├── waits.py                 # Esperas acotadas por condición compartidas por la suite
+│   ├── test_cli.py              # Subcomandos del CLI contra el simulador UDP
+│   ├── test_coverage_badge_json.py # Endpoint JSON del badge de cobertura
+│   ├── test_coverage_gate.py    # Lógica del gate de cobertura por paquete
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
+│   ├── test_menu_state.py       # Pruebas del sondeo de menú de bandeja abierto
+│   ├── test_native_menu.py      # Pruebas del modelo de menú nativo y su sync en vivo
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
+│   ├── test_scene_catalog_sync.py # Sincronía entre ui/scenes.json y BUILTIN_SCENES
+│   ├── test_single_instance.py  # Guarda de instancia única con procesos reales
+│   ├── test_thread_lifecycle.py # Ningún hilo con nombre de la app sobrevive al cierre
 │   ├── test_persistence_and_scenes.py # Pruebas de persistencia JSON y presets
 │   ├── test_wiz_integration.py  # Pruebas de integración UDP contra el simulador
 │   ├── test_ui_bridge.py        # Pruebas del puente asíncrono con la interfaz gráfica
 │   ├── test_tray.py             # Pruebas de la bandeja del sistema y sincronización
+│   ├── test_winforms_tray.py    # Vista WinForms de la bandeja: paleta, painter, marshalling
 │   ├── test_ambilight.py        # Pruebas de captura de pantalla y suavizado EMA
 │   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
 │   ├── test_i18n.py             # Pruebas de localización bilingüe
@@ -236,9 +253,15 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
    source .venv/Scripts/activate
    ```
 
-3. Instalar las dependencias (`requirements.txt` para ejecución/pruebas, o `requirements-dev.txt` para incluir auditoría estática y empaquetado):
+3. Instalar el proyecto en modo editable con las herramientas de desarrollo (pruebas, auditoría estática y empaquetado):
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
+   ```
+
+   Para ejecutar la app desde el código fuente sin las herramientas de desarrollo,
+   instala solo las dependencias de ejecución:
+   ```bash
+   pip install -e .
    ```
 
 ---
@@ -270,22 +293,19 @@ El módulo `gestor_luces.cli` permite realizar descubrimientos de red, consultas
 python -m gestor_luces.cli discover
 
 # Consultar el estado en tiempo real de un foco específico:
-python -m gestor_luces.cli status 192.168.100.6
+python -m gestor_luces.cli status --ip 192.168.100.6
 
 # Encender el foco con un 80% de brillo:
-python -m gestor_luces.cli on 192.168.100.6 --brightness 80
+python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
 
 # Establecer un color RGB:
-python -m gestor_luces.cli color 192.168.100.6 255 120 0 --brightness 100
+python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Ajustar la temperatura de color (CCT en Kelvin):
-python -m gestor_luces.cli temp 192.168.100.6 2700
-
-# Activar una escena de fábrica por su número de ID:
-python -m gestor_luces.cli scene 192.168.100.6 5 --speed 120
+python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
 
 # Apagar el foco:
-python -m gestor_luces.cli off 192.168.100.6
+python -m gestor_luces.cli off --ip 192.168.100.6
 ```
 
 ---
@@ -302,17 +322,21 @@ Para correr las pruebas:
 pytest
 ```
 
-Resultado esperado:
-```
-100 passed in ~2.5s
-```
+La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
 
-Para ejecutar el análisis estático de seguridad y la auditoría de vulnerabilidades en dependencias (usando `requirements-dev.txt`):
+Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
+
+Los módulos del frontend bajo `ui/js` se prueban aparte con el runner integrado de Node, así que la capa JS **no agrega ninguna dependencia de npm ni lockfile**:
 
 ```bash
-python -m bandit -r src -q
-python -m pip_audit -r requirements.txt
+npm test
 ```
+
+Corre `tests/js/store.test.js` (estado compartido de la app, preferencias persistidas y helpers fotométricos) y `tests/js/scenes.test.js` (grilla de escenas nativas, filtrado por categoría, presets personalizados y los comandos que envían al backend) con un **piso de 60 % de cobertura de líneas** verificado por `--test-coverage-lines`. El job `js tests` de `.github/workflows/ci.yml` corre el mismo comando en cada push y pull request.
+
+El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
+
+Un workflow nocturno (`.github/workflows/nightly.yml`) corre la suite completa cinco veces seguidas con `--count=5 --timeout=120`, para detectar tests inestables que una sola corrida en verde esconde. Se puede correr localmente con `pytest -x --count=5 --timeout=120`.
 
 ---
 
@@ -333,7 +357,7 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 | `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
 | `SHA256SUMS.txt` | Hashes SHA-256 de todos los artefactos generados en `dist/`. |
 
-Requisitos para compilar: el entorno virtual del proyecto con `requirements.txt` (o `requirements-dev.txt`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
+Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
 
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
@@ -349,5 +373,6 @@ Notas para las PCs de destino:
 
 - [Arquitectura y Concurrencia](docs/architecture.es.md): Análisis detallado del diseño hexagonal, ciclo de vida de los hilos y prevención de condiciones de carrera.
 - [Protocolo WiZ UDP y Modos de Streaming](docs/wiz_protocol.es.md): Especificación técnica de los paquetes JSON-RPC, regulación a 10 Hz y catálogo de escenas.
+- [Especificación de Rediseño de UI](docs/design/ui_redesign_spec.es.md): Dirección de diseño para la exploración de rediseño de UI en dos worktrees.
 - [English Documentation](README.md): Full documentation in English.
 

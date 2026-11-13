@@ -10,6 +10,7 @@ acceso a descriptores GDI inexistentes en los hilos trabajadores. Por ello abrim
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -18,7 +19,15 @@ import numpy as np
 
 from gestor_luces.domain.value_objects import Color
 
+_LOGGER = logging.getLogger(__name__)
+
 VALID_COLOR_MODES = ("vibrant", "average")
+DEFAULT_MONITOR_DESCRIPTOR: dict[str, Any] = {
+    "index": 1,
+    "label": "Display 1 (Primary)",
+    "width": 1920,
+    "height": 1080,
+}
 
 
 def extract_color_and_brightness_from_bgra(
@@ -106,11 +115,16 @@ class MssScreenSampler:
         try:
             with self._sct_factory() as sct:
                 raw_monitors = list(sct.monitors)
-        except Exception:
-            return [{"index": 1, "label": "Display 1 (Primary)", "width": 1920, "height": 1080}]
+        except (OSError, mss.exception.ScreenShotError):
+            # `mss` solo falla asi cuando no puede abrir un contexto GDI: se informa un
+            # descriptor sintetico para que la UI siga mostrando una pantalla.
+            _LOGGER.debug(
+                "Monitor enumeration failed; reporting a synthetic display.", exc_info=True
+            )
+            return [dict(DEFAULT_MONITOR_DESCRIPTOR)]
 
         if not raw_monitors:
-            return [{"index": 1, "label": "Display 1 (Primary)", "width": 1920, "height": 1080}]
+            return [dict(DEFAULT_MONITOR_DESCRIPTOR)]
 
         descriptors: list[dict[str, Any]] = []
         physical_monitors = raw_monitors[1:]

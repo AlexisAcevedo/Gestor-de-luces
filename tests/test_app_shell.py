@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
 import pytest
+from PIL import Image
 
 from gestor_luces.adapters.system.windows_autostart import (
     DEFAULT_VALUE_NAME,
@@ -127,7 +127,9 @@ def test_build_autostart_command_always_minimized() -> None:
 
 def test_autostart_adapter_enable_disable_with_fake_registry() -> None:
     registry = FakeRegistry()
-    autostart = WindowsRegistryAutostart(registry=registry, command_factory=lambda: "cmd --minimized")
+    autostart = WindowsRegistryAutostart(
+        registry=registry, command_factory=lambda: "cmd --minimized"
+    )
     assert isinstance(autostart, AutostartManager)
     assert autostart.is_enabled() is False
     autostart.disable()  # missing entry is not an error
@@ -141,7 +143,9 @@ def test_autostart_adapter_enable_disable_with_fake_registry() -> None:
 def test_autostart_refreshes_stale_path_only_when_enabled() -> None:
     registry = FakeRegistry()
     command = {"value": r'"C:\Old\app.exe" --minimized'}
-    autostart = WindowsRegistryAutostart(registry=registry, command_factory=lambda: command["value"])
+    autostart = WindowsRegistryAutostart(
+        registry=registry, command_factory=lambda: command["value"]
+    )
     assert autostart.refresh_if_stale() is False  # disabled: never creates an entry
     assert autostart.is_enabled() is False
     autostart.enable()
@@ -155,7 +159,9 @@ def test_bridge_autostart_methods(tmp_path: Path) -> None:
     from gestor_luces.main import build_application
 
     registry = FakeRegistry()
-    autostart = WindowsRegistryAutostart(registry=registry, command_factory=lambda: "cmd --minimized")
+    autostart = WindowsRegistryAutostart(
+        registry=registry, command_factory=lambda: "cmd --minimized"
+    )
     _, bridge = build_application(data_dir=tmp_path, autostart=autostart)
     changes: list[int] = []
     bridge.set_state_change_listener(lambda: changes.append(1))
@@ -178,7 +184,25 @@ def test_bridge_without_autostart_reports_unavailable(tmp_path: Path, method: st
     bridge.shutdown()
     plain = WebviewBridge(service=service)
     try:
-        result = getattr(plain, method)(True) if method == "set_autostart" else plain.get_autostart()
+        result = (
+            getattr(plain, method)(True) if method == "set_autostart" else plain.get_autostart()
+        )
         assert result["ok"] is False
     finally:
         plain.shutdown()
+
+
+def test_module_entry_point_delegates_to_main_and_exits_with_its_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`python -m gestor_luces` corre `main()` y propaga su codigo de salida como SystemExit."""
+    import runpy
+
+    from gestor_luces import main as main_module
+
+    monkeypatch.setattr(main_module, "main", lambda: 3)
+
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_module("gestor_luces", run_name="__main__")
+
+    assert exit_info.value.code == 3

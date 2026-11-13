@@ -10,8 +10,8 @@ antes de que la habitacion quede a oscuras.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Generator
 import math
+from collections.abc import Awaitable, Callable, Generator
 from typing import Any
 
 

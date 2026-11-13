@@ -11,8 +11,8 @@ ni saturar el microcontrolador Wi-Fi de las lamparas WiZ.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from gestor_luces.application.sleep_timer import AwaitableStatusDict
@@ -87,9 +87,7 @@ class MusicSyncStreamManager:
 
         validated_brightness = Brightness(int(brightness)).percent
         normalized_device = (
-            int(device_index)
-            if (device_index is not None and int(device_index) >= 0)
-            else None
+            int(device_index) if (device_index is not None and int(device_index) >= 0) else None
         )
 
         self.stop()
@@ -140,11 +138,7 @@ class MusicSyncStreamManager:
 
     def get_status(self) -> AwaitableStatusDict:
         """Devuelve una fotografia serializable del estado y telemetria del flujo musical."""
-        is_running = (
-            self._active
-            and self._task is not None
-            and not self._task.done()
-        )
+        is_running = self._active and self._task is not None and not self._task.done()
         if not is_running:
             self._active = False
 
@@ -228,9 +222,7 @@ class MusicSyncStreamManager:
                     sampled_color: Color = metrics["color"]
                     suggested_brightness = int(metrics.get("brightness", self._fixed_brightness))
                     effective_brightness = (
-                        suggested_brightness
-                        if self._audio_brightness
-                        else self._fixed_brightness
+                        suggested_brightness if self._audio_brightness else self._fixed_brightness
                     )
 
                     self._rms = float(metrics.get("rms", 0.0))
@@ -250,6 +242,10 @@ class MusicSyncStreamManager:
                             self._frames_sent += 1
                 except asyncio.CancelledError:
                     raise
+                # FRONTERA: cada iteracion lee el endpoint de audio nativo (PortAudio/WASAPI
+                # via ctypes y NumPy) en un hilo y envia por UDP. Un fotograma fallido no
+                # puede terminar el flujo que el usuario inicio: se registra con traza y la
+                # proxima iteracion reintenta.
                 except Exception:
                     _LOGGER.exception("Music sync frame sampling iteration failed.")
 
@@ -258,4 +254,3 @@ class MusicSyncStreamManager:
             raise
         finally:
             self._active = False
-

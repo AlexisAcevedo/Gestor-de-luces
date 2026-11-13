@@ -10,10 +10,11 @@ archivos JSON truncados o corruptos.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Any
 
 from gestor_luces.domain.models import Bulb
@@ -21,8 +22,6 @@ from gestor_luces.domain.scenes import CustomScene
 from gestor_luces.domain.value_objects import (
     DEFAULT_LANGUAGE,
     DEFAULT_THEME,
-    SUPPORTED_LANGUAGES,
-    SUPPORTED_THEMES,
     normalize_language,
     normalize_theme,
 )
@@ -60,18 +59,21 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
         dir=str(target_path.parent),
     )
     tmp_path = Path(tmp_raw)
+    replaced = False
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(serialized)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, target_path)
-    except BaseException:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise
+        replaced = True
+    finally:
+        # El temporal se descarta ante cualquier salida que no sea el reemplazo exitoso,
+        # incluido un `KeyboardInterrupt` durante el apagado. Un `finally` no necesita
+        # nombrar `BaseException` y deja propagar la excepcion original intacta.
+        if not replaced:
+            with contextlib.suppress(OSError):
+                tmp_path.unlink(missing_ok=True)
 
 
 def _safe_read_json_list(target_path: Path) -> list[dict[str, Any]]:
@@ -162,7 +164,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 
 
 class JsonSettingsRepository:
-    """Persiste las preferencias globales de la consola (`language` y `theme`) en `settings.json`."""
+    """Persiste las preferencias globales de la consola (`language` y `theme`) en
+    `settings.json`."""
 
     def __init__(self, data_dir: Path | None = None, filename: str = "settings.json") -> None:
         self._data_dir = data_dir if data_dir is not None else resolve_default_data_dir()
@@ -177,7 +180,8 @@ class JsonSettingsRepository:
         """Recupera las preferencias guardadas tolerando archivos inexistentes o corruptos.
 
         Si el archivo no existe, contiene sintaxis JSON invalida o valores desconocidos,
-        retorna los valores por defecto (`en` y `architectural-stone`) para garantizar un arranque seguro.
+        retorna los valores por defecto (`en` y `architectural-stone`) para garantizar un arranque
+        seguro.
         """
         if not self._file_path.is_file():
             return dict(DEFAULT_SETTINGS)
@@ -207,4 +211,3 @@ class JsonSettingsRepository:
         payload["language"] = language
         payload["theme"] = theme
         _atomic_write_json(self._file_path, payload)
-

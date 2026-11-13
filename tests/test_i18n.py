@@ -8,6 +8,7 @@ la propagacion reactiva a traves de `WebviewBridge` hacia el menu de bandeja del
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from gestor_luces.adapters.tray import (
     build_tray_menu_spec,
     build_tray_title,
 )
+from gestor_luces.adapters.tray.menu_model import _TRAY_STRINGS
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
@@ -31,15 +33,11 @@ from gestor_luces.main import resolve_ui_directory
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 
 
-class _FakeTrayIcon:
-    """Doble de prueba de `pystray.Icon` para inspeccionar el idioma de la bandeja."""
+class _RecordingTrayView:
+    """Doble de `TrayView` que registra cada estado aplicado para inspeccionar el idioma."""
 
-    def __init__(self, name: str, image: Any, title: str, menu: Any) -> None:
-        self.name = name
-        self.icon = image
-        self.title = title
-        self.menu = menu
-        self.update_menu_count = 0
+    def __init__(self) -> None:
+        self.applies: list[tuple[list[Any], str, str]] = []
 
     def run(self) -> None:
         return None
@@ -47,8 +45,14 @@ class _FakeTrayIcon:
     def stop(self) -> None:
         return None
 
-    def update_menu(self) -> None:
-        self.update_menu_count += 1
+    def apply(self, spec: list[Any], title: str, rgb: tuple[int, int, int], theme: str) -> None:
+        self.applies.append((list(spec), title, theme))
+
+    @property
+    def title(self) -> str:
+        """Ultimo tooltip aplicado por el controlador; falla si nunca aplico nada."""
+        assert self.applies, "the tray controller never applied a state to the view"
+        return self.applies[-1][1]
 
 
 def test_json_settings_repository_persists_and_tolerates_corrupt_files(
@@ -152,7 +156,12 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             settings_repository=JsonSettingsRepository(data_dir=tmp_path),
         )
         bridge = WebviewBridge(service=service)
-        created_icons: list[_FakeTrayIcon] = []
+        created_views: list[_RecordingTrayView] = []
+
+        def _view_factory(dispatch: Any) -> _RecordingTrayView:
+            view = _RecordingTrayView()
+            created_views.append(view)
+            return view
 
         tray = TrayController(
             bridge,
@@ -160,11 +169,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             hide_window=lambda: None,
             quit_app=lambda: None,
             is_window_visible=lambda: True,
-            icon_factory=lambda name, img, title, menu: (
-                icon := _FakeTrayIcon(name, img, title, menu),
-                created_icons.append(icon),
-                icon,
-            )[-1],
+            view_factory=_view_factory,
             executor=lambda task: task(),
             poll_interval=0.05,
         )
@@ -176,7 +181,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             await asyncio.to_thread(bridge.set_power, True, 75)
 
             await asyncio.to_thread(tray.start)
-            assert created_icons[0].title == "WiZ Lighting - On 75%"
+            assert created_views[0].title == "WiZ Lighting - On 75%"
             assert tray.spec[1].label == "Hide window"
 
             # Cambiamos a espanol a traves del puente JS
@@ -185,7 +190,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             assert es_env["language"] == "es"
 
             await asyncio.to_thread(tray.refresh)
-            assert created_icons[0].title == "Iluminación WiZ - Encendido 75%"
+            assert created_views[0].title == "Iluminación WiZ - Encendido 75%"
             assert tray.spec[1].label == "Ocultar ventana"
             assert any(e.label == "Escenas favoritas" for e in tray.spec)
             assert any(e.label == "Salir" for e in tray.spec)
@@ -199,7 +204,8 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     ui_dir = resolve_ui_directory()
     i18n_js = (ui_dir / "i18n.js").read_text(encoding="utf-8")
     index_html = (ui_dir / "index.html").read_text(encoding="utf-8")
-    app_js = (ui_dir / "app.js").read_text(encoding="utf-8")
+    app_js = "\n".join(p.read_text(encoding="utf-8") for p in sorted((ui_dir / "js").glob("*.js")))
+    scenes_json = (ui_dir / "scenes.json").read_text(encoding="utf-8")
     themes_css = (ui_dir / "themes.css").read_text(encoding="utf-8")
 
     assert 'html[data-theme="architectural-stone"]' in themes_css
@@ -227,7 +233,54 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     assert 'id="ambilight-min-brightness-slider"' in index_html
     assert "SCENE_CHROMATIC_MAP" in app_js
     assert "gestor_luces_fav_scenes" in app_js
+    assert '"scenes.json"' in app_js
     # Los nombres de las 36 escenas nativas de WiZ se mantienen en su denominacion original
-    for builtin_name in ("Ocean", "Romance", "Sunset", "Fireplace", "Daylight", "Steampunk", "Plantgrowth"):
-        assert f'name: "{builtin_name}"' in app_js
+    # en la fuente unica del catalogo (`ui/scenes.json`, generado por scripts/export_scenes.py).
+    for builtin_name in (
+        "Ocean",
+        "Romance",
+        "Sunset",
+        "Fireplace",
+        "Daylight",
+        "Steampunk",
+        "Plantgrowth",
+    ):
+        assert f'"name": "{builtin_name}"' in scenes_json
 
+
+def test_i18n_single_owner_backend_tray_vs_ui_screen() -> None:
+    """Garantiza el duenio unico de las traducciones (Gate 2 / T-2.3).
+
+    La regla de ownership (docs/architecture.md §i18n): el backend solo resuelve las
+    cadenas de la bandeja del sistema y los errores de dominio; la UI (`ui/i18n.js`) es
+    duenia de todo el texto de pantalla. Ninguna clave de bandeja puede aparecer como
+    clave del diccionario de pantalla, y viceversa.
+    """
+    ui_dir = resolve_ui_directory()
+    i18n_js = (ui_dir / "i18n.js").read_text(encoding="utf-8")
+
+    # Claves de pantalla en el diccionario de la UI (formato `namespace.camelCase`).
+    ui_keys: set[str] = set(re.findall(r'"([a-z]+\.[a-zA-Z0-9]+)"', i18n_js))
+
+    # Claves de bandeja en el backend (snake_case, sin namespace).
+    tray_keys: set[str] = set()
+    for lang_table in _TRAY_STRINGS.values():
+        tray_keys.update(lang_table.keys())
+
+    assert tray_keys, "la tabla de bandeja no debe estar vacia"
+    assert ui_keys, "el diccionario de pantalla no debe estar vacio"
+
+    # Dueño único literal: ninguna clave de bandeja aparece como clave de pantalla.
+    collisions = tray_keys & ui_keys
+    assert not collisions, (
+        f"Clave de bandeja duplicada en la UI (dueño único violado): {sorted(collisions)}"
+    )
+
+    # Convención inconfundible: la bandeja es snake_case sin namespace, la UI es
+    # `namespace.camelCase`. Esto hace mecánicamente imposible la misma clave literal.
+    for key in tray_keys:
+        assert key == key.lower() and "." not in key and "_" in key or key.isalpha(), (
+            f"Clave de bandeja con convención ambigua: {key!r}"
+        )
+    for key in ui_keys:
+        assert "." in key, f"Clave de pantalla sin namespace: {key!r}"

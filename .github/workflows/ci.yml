@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Run tests
+        run: pytest --cov=gestor_luces --cov-report=term-missing --cov-report=json:coverage.json
+
+      # Per-package floors (domain 90, application 75, adapters 55): a global percentage can be
+      # padded with cheap tests in one layer while another stays untested.
+      - name: Coverage gate (per package)
+        run: python scripts/check_coverage.py coverage.json
+
+      - name: Docs symbol reference check (informational)
+        continue-on-error: true
+        run: python scripts/check_doc_symbols.py
+
+      - name: Static security analysis (bandit, informational)
+        continue-on-error: true
+        run: python -m bandit -r src -q -f json -o bandit-report.json
+
+      - name: Dependency audit (pip-audit, informational)
+        continue-on-error: true
+        run: python -m pip_audit
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.json
+          if-no-files-found: ignore
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report-py${{ matrix.python-version }}
+          path: bandit-report.json
+          if-no-files-found: ignore
+
+  # Frontend modules (ui/js) are browser ES modules with no npm dependencies, so this job needs
+  # no install step: it runs the suite with Node's built-in test runner and fails under the
+  # 60 % line floor declared in package.json.
+  js-tests:
+    name: js tests
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run JS tests (node --test)
+        run: npm test

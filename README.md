@@ -2,6 +2,9 @@
 
 [English](README.md) | [Español](README.es.md)
 
+[![CI](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AlexisAcevedo/Gestor-de-luces/badges/coverage.json)](https://github.com/AlexisAcevedo/Gestor-de-luces/blob/main/.github/workflows/coverage-badge.yml)
+
 Desktop control center for Philips WiZ smart lighting systems over local area networks (LAN). Engineered with Python, Hexagonal Architecture (Ports and Adapters), and Microsoft WebView2 (PyWebView), operating exclusively through local UDP packets without cloud dependencies, external bridges, or internet access requirements.
 
 ---
@@ -9,10 +12,10 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 ## Architectural Highlights
 
 - Zero Cloud Dependency: Direct local communication with WiZ bulbs over UDP port 38899.
-- Hexagonal Architecture: Complete decoupling of domain logic, state management, UI, hardware streaming, and storage persistence.
+- Hexagonal Architecture: Domain, ports, and application layers never import adapters (verified by `test_inner_hexagonal_layers_never_import_adapters`).
 - Multi-Threaded Concurrency: Independent event loop for asynchronous network I/O, isolated background streaming threads, and non-blocking desktop tray integration.
 - Hardware Rate Limiting: Leaky-bucket pacing enforced at 10 Hz (100 ms) to avoid saturating bulb ESP microcontrollers during continuous streaming.
-- Fully Offline Testable: Suite of 100 automated tests with an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
+- Fully Offline Testable: Automated test suite runs fully offline against an in-memory UDP simulator fixture reproducing WiZ JSON RPC behavior.
 
 ---
 
@@ -38,7 +41,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Frequency-to-color mapping with configurable gain sensitivity and smoothing decay.
 
 5. System Tray & Background Residency:
-   - Runs silently in the Windows Notification Area via `pystray`.
+   - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`
+     menu painted with the active theme (with a `pystray` fallback when WinForms cannot load).
    - Quick presets menu, master power toggle, and graceful minimize-to-tray on window close.
    - Deadlock-free WinForms and PyWebView synchronization.
 
@@ -50,7 +54,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Runtime theme switching between **Architectural Stone** (default Light theme inspired by Braun/Lutron hardware keypads) and **Atmospheric Dark** (frosted glass and dynamic `oklab` photometric halo), persisted in `settings.json` with automatic Windows DWM titlebar synchronization.
 
 8. Windows Desktop Integration:
-   - Compact widget geometry (`620x760` baseline with automatic content-driven height adjustment) and custom light-bulb icon for the window, taskbar, tray and executable.
+   - Compact widget geometry (opens at `620x760`, then resizes to the content of the active section) and custom light-bulb icon for the window, taskbar, tray and executable.
    - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About).
    - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
    - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one (with `--multi-instance` override for side-by-side diagnostics).
@@ -63,7 +67,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 ```
                       +---------------------------------------+
                       |       Desktop UI (WebView2 / HTML5)   |
-                      |       System Tray (pystray / Win32)   |
+                      |       System Tray (WinForms NotifyIcon)|
                       |       CLI Diagnostic Utility          |
                       +-------------------+-------------------+
                                           |
@@ -109,7 +113,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 | Runtime | Python | >= 3.11 (tested on 3.14) | Base language platform |
 | Networking | `pywizlight` | 0.6.6 | Local UDP 38899 socket transport |
 | Desktop Container | `pywebview` | 6.2.1 | Native window wrapping Microsoft Edge WebView2 |
-| System Tray | `pystray` / `Pillow` | 0.19.5 / 13.0.0 | Windows system notification area icon and menu |
+| System Tray | `Pillow` / `pystray` | 13.0.0 / 0.19.5 | `Pillow` renders the bulb icon; the tray menu is a WinForms `NotifyIcon`, with `pystray` as the fallback view |
 | Screen Capture | `mss` | 10.2.0 | High-performance Win32 GDI screen buffer grabber |
 | Audio Capture | `PyAudioWPatch` | 0.2.12.9 | WASAPI loopback system output capture |
 | DSP / FFT | `numpy` | 2.5.4 | Real-time Discrete Fourier Transform and spectral analysis |
@@ -129,16 +133,17 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   └── installer.iss            # Inno Setup per-user installer script
 ├── scripts/
 │   └── build.ps1                # Icon + PyInstaller + portable ZIP + installer
-├── pyproject.toml               # Project metadata and pytest configuration
-├── requirements.txt             # Locked production and testing dependencies
-├── requirements-dev.txt         # Dev, static security audit, and build dependencies
+├── pyproject.toml               # Dependencies, project metadata, and pytest configuration
 ├── README.md                    # Primary English documentation
 ├── README.es.md                 # Spanish translation of project documentation
 ├── docs/
 │   ├── architecture.md          # Architectural deep-dive and concurrency design (EN)
 │   ├── architecture.es.md       # Architectural deep-dive and concurrency design (ES)
 │   ├── wiz_protocol.md          # WiZ UDP protocol specifications and RPC schema (EN)
-│   └── wiz_protocol.es.md       # WiZ UDP protocol specifications and RPC schema (ES)
+│   ├── wiz_protocol.es.md       # WiZ UDP protocol specifications and RPC schema (ES)
+│   └── design/
+│       ├── ui_redesign_spec.md     # UI redesign specification (EN)
+│       └── ui_redesign_spec.es.md  # UI redesign specification (ES)
 ├── src/
 │   └── gestor_luces/
 │       ├── __init__.py
@@ -165,17 +170,28 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           ├── storage/         # %LOCALAPPDATA% JSON file repositories
 │           ├── ambilight/       # MSS screen sampler
 │           ├── audio/           # WASAPI loopback audio sampler
-│           ├── tray/            # Pystray tray controller and shared bulb icon renderer
+│           ├── tray/            # Tray controller, WinForms/Pystray views and bulb icon renderer
 │           ├── system/          # Windows autostart (registry) and single-instance guard
 │           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
-├── tests/                       # Automated test suite (99 tests)
+├── tests/                       # Automated test suite
 │   ├── simulators/              # In-memory WiZ UDP server simulator
+│   ├── js/                      # Frontend unit tests (node --test, zero dependencies)
+│   ├── waits.py                 # Bounded condition waits shared by the suite
+│   ├── test_cli.py              # CLI subcommands against the UDP simulator
+│   ├── test_coverage_badge_json.py # shields.io coverage endpoint JSON
+│   ├── test_coverage_gate.py    # Per-package coverage gate logic
 │   ├── test_domain.py           # Domain validation tests
+│   ├── test_menu_state.py       # Tray menu open-state probe tests
+│   ├── test_native_menu.py      # Native menu model and live MenuStrip sync tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
+│   ├── test_scene_catalog_sync.py # ui/scenes.json vs BUILTIN_SCENES sync test
+│   ├── test_single_instance.py  # Single-instance guard across real processes
+│   ├── test_thread_lifecycle.py # No app-named thread survives shutdown
 │   ├── test_persistence_and_scenes.py # JSON storage and preset tests
 │   ├── test_wiz_integration.py  # UDP integration tests against simulator
 │   ├── test_ui_bridge.py        # Asynchronous JS API bridge tests
 │   ├── test_tray.py             # System tray synchronization and menu tests
+│   ├── test_winforms_tray.py    # WinForms tray view: palette, painter, marshalling
 │   ├── test_ambilight.py        # Screen capture and EMA streaming tests
 │   ├── test_music_sync.py       # WASAPI and FFT DSP tests
 │   ├── test_i18n.py             # Bilingual localization tests
@@ -236,9 +252,15 @@ No Python installation is required. Download the latest release from [**GitHub R
    source .venv/Scripts/activate
    ```
 
-3. Install dependencies (`requirements.txt` for runtime/tests, or `requirements-dev.txt` to include audit and packaging tools):
+3. Install the project in editable mode with the dev tooling (tests, static audit, packaging):
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
+   ```
+
+   To run the app from source without the development tooling, install only the
+   runtime dependencies:
+   ```bash
+   pip install -e .
    ```
 
 ---
@@ -270,22 +292,19 @@ Use `gestor_luces.cli` for direct network discovery, UDP diagnostic probing, and
 python -m gestor_luces.cli discover
 
 # Query real-time status of a specific bulb:
-python -m gestor_luces.cli status 192.168.100.6
+python -m gestor_luces.cli status --ip 192.168.100.6
 
 # Turn a bulb on at 80% brightness:
-python -m gestor_luces.cli on 192.168.100.6 --brightness 80
+python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
 
 # Set bulb color using RGB:
-python -m gestor_luces.cli color 192.168.100.6 255 120 0 --brightness 100
+python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Set Correlated Color Temperature (CCT):
-python -m gestor_luces.cli temp 192.168.100.6 2700
-
-# Activate built-in scene by ID:
-python -m gestor_luces.cli scene 192.168.100.6 5 --speed 120
+python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
 
 # Turn a bulb off:
-python -m gestor_luces.cli off 192.168.100.6
+python -m gestor_luces.cli off --ip 192.168.100.6
 ```
 
 ---
@@ -302,17 +321,21 @@ Execute the test suite with:
 pytest
 ```
 
-Expected output:
-```
-100 passed in ~2.5s
-```
+Coverage is gated **per package**, not as one global percentage: `domain` at least 90 %, `application` at least 75 % and `adapters` at least 55 % (`scripts/check_coverage.py`, run by CI). The percentage in the coverage badge is published by `.github/workflows/coverage-badge.yml` on every push to `main`, so it is never edited by hand. Measure it locally with `pytest --cov=gestor_luces --cov-report=term-missing` and check the gate with `python scripts/check_coverage.py coverage.json`.
 
-To run static security analysis and dependency vulnerability checks (using `requirements-dev.txt`):
+All tests should pass (see the CI badge at the top of this file for the live status).
+
+The frontend modules under `ui/js` are tested separately with Node's built-in test runner, so the JS layer adds **no npm dependency and no lockfile**:
 
 ```bash
-python -m bandit -r src -q
-python -m pip_audit -r requirements.txt
+npm test
 ```
+
+This runs `tests/js/store.test.js` (shared app state, persisted preferences, photometric helpers) and `tests/js/scenes.test.js` (built-in scene grid, category filtering, custom presets and their backend commands) under a **60 % line-coverage floor** enforced by `--test-coverage-lines`. The `js tests` job of `.github/workflows/ci.yml` runs the same command on every push and pull request.
+
+Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
+
+A nightly workflow (`.github/workflows/nightly.yml`) runs the whole suite five times in a row with `--count=5 --timeout=120`, to catch flaky tests that a single green run hides. Run it locally with `pytest -x --count=5 --timeout=120`.
 
 ---
 
@@ -333,7 +356,7 @@ Use `-SkipInstaller` to build only the app folder and the portable ZIP.
 | `GestorDeLuces-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
 | `SHA256SUMS.txt` | SHA-256 checksums for all release artifacts generated in `dist/`. |
 
-Build requirements: the project virtual environment with `requirements.txt` (or `requirements-dev.txt`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
+Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
 
 Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.
@@ -349,5 +372,6 @@ Notes for target machines:
 
 - [Architecture & Concurrency Deep Dive](docs/architecture.md): Detailed analysis of the Hexagonal design, threading topology, and race condition prevention.
 - [WiZ UDP Protocol & Streaming Specification](docs/wiz_protocol.md): Low-level documentation of JSON-RPC datagram formats, rate limiting, and scene catalogs.
+- [UI Redesign Specification](docs/design/ui_redesign_spec.md): Design direction for the dual-worktree UI redesign exploration.
 - [Documentación en Español](README.es.md): Versión completa de esta documentación en español.
 

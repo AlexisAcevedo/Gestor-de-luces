@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+import socket
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import pytest
 
 from gestor_luces.adapters.storage.json_repositories import _atomic_write_json
-from gestor_luces.adapters.ui_webview.bridge import JS_API_EXCLUDED, JsApi, WebviewBridge
+from gestor_luces.adapters.ui_webview.bridge import (
+    JS_API_DISPATCH,
+    JS_API_EXCLUDED,
+    JsApi,
+    WebviewBridge,
+)
+from gestor_luces.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
+from gestor_luces.adapters.wiz import udp_controller as udp_controller_module
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController, _safe_int, _safe_text
 from gestor_luces.application.service import (
     MAX_DISPLAY_NAME_LEN,
@@ -14,8 +26,6 @@ from gestor_luces.application.service import (
     validate_local_endpoint,
 )
 from gestor_luces.domain.models import Bulb
-from pathlib import Path
-from types import SimpleNamespace
 
 
 @pytest.mark.parametrize("value", [float("inf"), "abc", None, [], {}])
@@ -58,17 +68,131 @@ def test_max_explicit_targets_is_bounded() -> None:
     assert 1 <= MAX_EXPLICIT_TARGETS <= 256
 
 
+# El puente vive partido en varios modulos (T-4.4); los guardrails que lo inspeccionan
+# por AST recorren todos para no perder superficie al mover un handler de archivo.
+_BRIDGE_MODULES = ("bridge.py", "dispatch.py", "handlers.py", "lifecycle.py")
+
+
+def _bridge_modules() -> list[Path]:
+    """Rutas absolutas de los modulos que componen el puente IPC."""
+    src_root = Path(__file__).resolve().parents[1] / "src" / "gestor_luces"
+    ui_root = src_root / "adapters" / "ui_webview"
+    return [ui_root / name for name in _BRIDGE_MODULES]
+
+
+_JS_API_SURFACE = frozenset(
+    {
+        "add_manual_bulb",
+        "apply_custom_scene",
+        "cancel_sleep_timer",
+        "delete_custom_scene",
+        "discover_bulbs",
+        "fit_window_height",
+        "get_ambilight_status",
+        "get_autostart",
+        "get_initial_state",
+        "get_music_sync_status",
+        "get_sleep_timer_status",
+        "refresh_states",
+        "rename_bulb",
+        "save_custom_scene",
+        "select_targets",
+        "set_autostart",
+        "set_brightness",
+        "set_builtin_scene",
+        "set_color",
+        "set_custom_scene_favorite",
+        "set_language",
+        "set_power",
+        "set_temperature",
+        "set_theme",
+        "start_ambilight",
+        "start_music_sync",
+        "start_sleep_timer",
+        "stop_ambilight",
+        "stop_music_sync",
+        "update_custom_scene",
+    }
+)
+
+
+def test_js_api_dispatch_table_is_explicit_and_pinned() -> None:
+    """La superficie JS vive en una tabla escrita a mano, no en reflexion sobre la clase."""
+    assert set(JS_API_DISPATCH) == _JS_API_SURFACE - {"fit_window_height"}
+    for name, handler in JS_API_DISPATCH.items():
+        assert name in _JS_API_SURFACE
+        assert handler is getattr(WebviewBridge, name)
+
+
 def test_js_api_hides_lifecycle_methods() -> None:
-    api = JsApi.__new__(JsApi)
-    for name in dir(WebviewBridge):
-        if not name.startswith("_") and name not in JS_API_EXCLUDED:
-            setattr(api, name, lambda: None)
+    """Ni la tabla ni la instancia exponen los metodos de ciclo de vida o de bandeja."""
+    assert not set(JS_API_DISPATCH) & JS_API_EXCLUDED
+    api = JsApi(MagicMock())
     public = {n for n in dir(api) if not n.startswith("_")}
+    assert public == _JS_API_SURFACE
     assert not public & JS_API_EXCLUDED
     assert "set_power" in public
 
 
-async def test_discover_ignores_broadcast_hits_when_probe_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_js_api_binds_every_exposed_method_to_the_bridge_instance() -> None:
+    """Cada nombre JS sigue siendo el metodo del puente ligado a esa instancia."""
+    bridge = MagicMock()
+    api = JsApi(bridge)
+    for name in JS_API_DISPATCH:
+        assert getattr(api, name).__self__ is bridge
+
+
+def test_bridge_narrows_service_errors_to_the_declared_tuple() -> None:
+    """Un error esperado del servicio sigue devolviendo `{ok: False, error}`."""
+
+    class ValidationService(LightControlService):
+        async def set_power(
+            self,
+            is_on: bool,
+            brightness: int | None = None,
+            ips: list[str] | None = None,
+        ) -> list[Bulb]:
+            raise ValueError("Brightness must be between 10 and 100.")
+
+    bridge = WebviewBridge(
+        service=ValidationService(controller=WizUdpController(probe_candidates=[]))
+    )
+    try:
+        response = bridge.set_power(True)
+    finally:
+        bridge.shutdown()
+    assert response["ok"] is False
+    assert response["error"] == "Brightness must be between 10 and 100."
+
+
+def test_bridge_propagates_errors_outside_the_declared_tuple() -> None:
+    """Un error inesperado ya no se silencia: sale del puente en vez de fingir un fallo de UI."""
+
+    class UnexpectedError(Exception):
+        pass
+
+    class ExplodingService(LightControlService):
+        async def set_power(
+            self,
+            is_on: bool,
+            brightness: int | None = None,
+            ips: list[str] | None = None,
+        ) -> list[Bulb]:
+            raise UnexpectedError("boom")
+
+    bridge = WebviewBridge(
+        service=ExplodingService(controller=WizUdpController(probe_candidates=[]))
+    )
+    try:
+        with pytest.raises(UnexpectedError):
+            bridge.set_power(True)
+    finally:
+        bridge.shutdown()
+
+
+async def test_discover_ignores_broadcast_hits_when_probe_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     controller = WizUdpController()
 
     async def fake_discover_lights(*_a: object, **_kw: object) -> list[object]:
@@ -112,19 +236,47 @@ def test_atomic_write_json_cleans_up_temp_files(tmp_path: Path) -> None:
     assert leftovers == []
 
 
-async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly() -> None:
+async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El flujo continuo abre UN solo socket UDP y `close()` lo libera.
+
+    Se observa el socket mismo (cuantos se crean y si queda con descriptor), no un atributo
+    privado del controlador: el contrato es «no filtrar sockets», y eso se mide en el objeto
+    que el sistema operativo entrega.
+    """
     from gestor_luces.domain.value_objects import Color
 
+    created: list[socket.socket] = []
+    real_socket = socket.socket
+
+    def _counting_socket(*args: object, **kwargs: object) -> socket.socket:
+        sock = real_socket(*args, **kwargs)  # type: ignore[arg-type]
+        created.append(sock)
+        return sock
+
+    class _SocketModuleShim:
+        """Reemplaza solo el nombre `socket` del modulo; el modulo real queda intacto."""
+
+        socket = staticmethod(_counting_socket)
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(socket, name)
+
+    # Se sustituye el nombre en el modulo del adaptador, no el modulo `socket` global: parchear
+    # el global rompe el bucle Proactor de asyncio, que hace `isinstance(conn, socket.socket)`.
+    monkeypatch.setattr(udp_controller_module, "socket", _SocketModuleShim())
+
     controller = WizUdpController(port=49999)
-    await controller.stream_pilot("127.0.0.1", Color(255, 100, 50), 80)
-    first_sock = controller._stream_sock
-    assert first_sock is not None and first_sock.fileno() >= 0
-
-    await controller.stream_pilot("127.0.0.1", Color(10, 200, 90), 60)
-    assert controller._stream_sock is first_sock
-
-    controller.close()
-    assert controller._stream_sock is None
+    try:
+        await controller.stream_pilot("127.0.0.1", Color(255, 100, 50), 80)
+        await controller.stream_pilot("127.0.0.1", Color(10, 200, 90), 60)
+        assert len(created) == 1, "the continuous stream opened more than one UDP socket"
+        stream_sock = created[0]
+        assert stream_sock.fileno() >= 0
+    finally:
+        controller.close()
+    assert stream_sock.fileno() == -1, "close() left the streaming socket open"
 
 
 def test_inner_hexagonal_layers_never_import_adapters() -> None:
@@ -146,6 +298,78 @@ def test_inner_hexagonal_layers_never_import_adapters() -> None:
                     )
 
 
+def test_webview_bridge_depends_on_the_port_not_the_concrete_service() -> None:
+    """El adaptador primario depende del puerto, nunca de la clase de aplicacion (T-4.3)."""
+    import ast
+
+    for bridge_file in _bridge_modules():
+        tree = ast.parse(bridge_file.read_text(encoding="utf-8"), filename=str(bridge_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert not alias.name.startswith("gestor_luces.application"), (
+                        f"{bridge_file} imports {alias.name}"
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith("gestor_luces.application"), (
+                    f"{bridge_file} imports from {node.module}"
+                )
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    assert alias.name != "LightControlService", (
+                        f"{bridge_file} imports the concrete LightControlService"
+                    )
+
+
+def test_light_control_port_covers_the_service_surface_the_bridge_uses() -> None:
+    """El puerto declara justo lo que el puente consume, y el servicio lo satisface."""
+    import ast
+    import inspect
+    from typing import get_origin, get_type_hints
+
+    from gestor_luces.ports.light_control import LightControlServicePort
+
+    def satisfies(port_return: object, service_return: object) -> bool:
+        """`service_return` cumple `port_return` si es el mismo o un subtipo estructural."""
+        if port_return == service_return:
+            return True
+        origin = get_origin(port_return) or port_return
+        return (
+            isinstance(service_return, type)
+            and isinstance(origin, type)
+            and issubclass(service_return, origin)
+        )
+
+    consumed = {
+        node.func.attr
+        for bridge_file in _bridge_modules()
+        for node in ast.walk(
+            ast.parse(bridge_file.read_text(encoding="utf-8"), filename=str(bridge_file))
+        )
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "_service"
+    }
+    declared = {name for name in vars(LightControlServicePort) if not name.startswith("_")}
+    assert consumed == declared
+
+    for name in sorted(declared):
+        port_params = inspect.signature(getattr(LightControlServicePort, name)).parameters
+        service_params = list(
+            inspect.signature(getattr(LightControlService, name)).parameters.values()
+        )[: len(port_params)]
+        assert list(port_params) == [param.name for param in service_params]
+        assert [param.default for param in port_params.values()] == [
+            param.default for param in service_params
+        ]
+        port_return = get_type_hints(getattr(LightControlServicePort, name))["return"]
+        service_return = get_type_hints(getattr(LightControlService, name))["return"]
+        assert satisfies(port_return, service_return), (
+            f"{name}: {service_return} does not satisfy {port_return}"
+        )
+
+
 def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
     import threading
 
@@ -162,13 +386,14 @@ def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
     try:
         resp = bridge.get_sleep_timer_status()
         assert resp["ok"] is True
-        assert "GestorLucesAsyncLoop" in observed_threads
+        assert ASYNC_LOOP_THREAD_NAME in observed_threads
     finally:
         bridge.shutdown()
 
 
 def test_index_html_has_no_inline_style_attributes() -> None:
     import re
+
     from gestor_luces.main import resolve_ui_directory
 
     index_html = (resolve_ui_directory() / "index.html").read_text(encoding="utf-8")

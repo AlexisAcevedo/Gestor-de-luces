@@ -3,7 +3,7 @@
 Exporta las entidades, objetos de valor y catalogos puros sin dependencias externas.
 """
 
-from gestor_luces.domain.models import Bulb, Group, LightState
+from gestor_luces.domain.models import Bulb, LightState
 from gestor_luces.domain.scenes import (
     BUILTIN_SCENES,
     BuiltInScene,
@@ -27,7 +27,6 @@ __all__ = [
     "Color",
     "ColorTemperature",
     "CustomScene",
-    "Group",
     "LightMode",
     "LightState",
     "SceneSpeed",

@@ -1,8 +1,7 @@
-"""Entidades principales del dominio: LightState, Bulb y Group.
+"""Entidades principales del dominio: LightState y Bulb.
 
 Estas clases modelan la realidad del negocio (el estado luminico actual de cada
-foco y su agrupacion logica) sin conocer absolutamente nada sobre sockets UDP,
-archivos JSON ni PyWebView.
+foco) sin conocer absolutamente nada sobre sockets UDP, archivos JSON ni PyWebView.
 """
 
 from __future__ import annotations
@@ -56,7 +55,11 @@ class LightState:
             else None
         )
         raw_mode = data.get("mode", LightMode.TEMPERATURE.value)
-        mode = LightMode(raw_mode) if raw_mode in {m.value for m in LightMode} else LightMode.TEMPERATURE
+        mode = (
+            LightMode(raw_mode)
+            if raw_mode in {m.value for m in LightMode}
+            else LightMode.TEMPERATURE
+        )
         return cls(
             is_on=bool(data.get("is_on", False)),
             brightness=int(data.get("brightness", 100)),
@@ -111,26 +114,3 @@ class Bulb:
             is_online=bool(data.get("is_online", True)),
             state=state,
         )
-
-
-@dataclass
-class Group:
-    """Agrupacion logica de multiples focos para control sincronizado por habitacion o zona."""
-
-    id: str
-    name: str
-    bulb_ips: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if not self.id or not self.id.strip():
-            raise ValueError("Group id cannot be empty.")
-        if not self.name or not self.name.strip():
-            raise ValueError("Group name cannot be empty.")
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serializa el grupo de focos a un diccionario simple."""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "bulb_ips": list(self.bulb_ips),
-        }

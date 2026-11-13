@@ -1,13 +1,17 @@
-"""Tests for window auto-fit: pure height math, JsApi/WebviewBridge validation, 64-bit Win32 and InvokeRequired."""
+"""Tests for window auto-fit: pure height math, JsApi/WebviewBridge validation, 64-bit Win32 and
+InvokeRequired."""
 
 from __future__ import annotations
 
 import ctypes
+import re
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+from gestor_luces.adapters.platform.windows.window_geometry import _fit_max_height
 from gestor_luces.adapters.ui_webview.bridge import JsApi
 from gestor_luces.main import (
     WINDOW_MIN_SIZE,
@@ -152,9 +156,7 @@ def test_fit_native_window_height_handles_64bit_hwnd_and_invoke_required() -> No
 
 
 def test_fit_native_window_height_skips_when_disposed_or_handle_not_created() -> None:
-    disposed_window = SimpleNamespace(
-        native=SimpleNamespace(IsDisposed=True, IsHandleCreated=True)
-    )
+    disposed_window = SimpleNamespace(native=SimpleNamespace(IsDisposed=True, IsHandleCreated=True))
     uncreated_window = SimpleNamespace(
         native=SimpleNamespace(IsDisposed=False, IsHandleCreated=False)
     )
@@ -163,8 +165,8 @@ def test_fit_native_window_height_skips_when_disposed_or_handle_not_created() ->
 
 
 def test_scenes_grid_prevents_css_grid_row_collapse() -> None:
-    from pathlib import Path
     import re
+    from pathlib import Path
 
     styles_path = Path(__file__).resolve().parent.parent / "ui" / "styles.css"
     css_text = styles_path.read_text(encoding="utf-8")
@@ -186,3 +188,81 @@ def test_scenes_grid_prevents_css_grid_row_collapse() -> None:
     assert custom_grid_match is not None
     assert "grid-auto-rows: max-content" in custom_grid_match.group(1)
 
+
+def test_window_fit_measures_full_section_content_without_inner_grid_scroll() -> None:
+    """El fit debe medir el contenido completo: grillas sin tope y sin scroll interno.
+
+    Regresion doble que dejaba la ventana chica en Escenas: (1) un `max-height`/
+    `overflow-y` en las grillas hacia que 36 escenas se midieran como una caja de 320 px
+    con scroll adentro; (2) el tope de 48 px aplicado durante la medicion dejaba el
+    contenido real fuera de la cuenta.
+    """
+    root = Path(__file__).resolve().parent.parent
+    css_text = (root / "ui" / "styles.css").read_text(encoding="utf-8")
+    fit_js = (root / "ui" / "js" / "shortcuts.js").read_text(encoding="utf-8")
+
+    for pattern in (r"\.scenes-grid\s*\{([^}]*)\}", r"\.custom-scenes-grid\s*\{([^}]*)\}"):
+        match = re.search(pattern, css_text)
+        assert match is not None
+        body = match.group(1)
+        assert "max-height" not in body
+        assert "overflow" not in body
+
+    measuring_match = re.search(
+        r"\.is-measuring \.scenes-grid,\s*\.is-measuring \.custom-scenes-grid\s*\{([^}]*)\}",
+        css_text,
+    )
+    assert measuring_match is not None
+    assert "max-height" not in measuring_match.group(1)
+
+    assert "is-measuring-baseline" not in css_text
+
+    assert "measureBaseline" not in fit_js
+    assert "fitBaseline" not in fit_js
+    assert "const target = measureNaturalHeight(stage);" in fit_js
+
+
+def test_language_change_refits_the_window_to_the_new_labels() -> None:
+    """Cambiar de idioma cambia el alto de las etiquetas: la ventana se reajusta."""
+    app_js = (Path(__file__).resolve().parent.parent / "ui" / "js" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"function syncLanguageUi\(lang\) \{(.*?)\n\}", app_js, re.S)
+    assert match is not None
+    assert "requestFit(true)" in match.group(1)
+
+
+def test_window_fit_cannot_enter_a_resize_oscillation() -> None:
+    """El auto-fit necesita cortafuegos contra un ciclo medir/redimensionar.
+
+    Si el ancho util cambia al aparecer la barra de scroll, la medicion oscila y cada
+    ciclo pide un resize nativo: la ventana se satura de WM_SIZE y la UI deja de responder.
+    """
+    root = Path(__file__).resolve().parent.parent
+    css_text = (root / "ui" / "styles.css").read_text(encoding="utf-8")
+    fit_js = (root / "ui" / "js" / "shortcuts.js").read_text(encoding="utf-8")
+
+    stage_match = re.search(r"\.photometric-stage\s*\{([^}]*)\}", css_text)
+    assert stage_match is not None
+    stage_body = stage_match.group(1)
+    assert "overflow-y: auto" in stage_body
+    assert "scrollbar-gutter: stable" in stage_body
+
+    assert "FIT_BURST_LIMIT" in fit_js
+    assert "fitBudgetTripped = true" in fit_js
+    assert "if (!fitBudgetAllows()) return;" in fit_js
+    assert "fitBudgetTripped = false;" in fit_js
+
+
+def test_fit_max_height_keeps_a_comfort_margin() -> None:
+    """El fit no debe llevar la ventana al borde del monitor.
+
+    La grilla de escenas mide ~1310 px: sin techo de confort la ventana toca el area de
+    trabajo y se ve enorme. El techo es una fraccion del area (0.72), y el resto scrollea
+    en el escenario.
+    """
+    assert _fit_max_height(1040) == 748
+    assert _fit_max_height(1000) == 720
+    assert _fit_max_height(2160) == 1555
+    assert _fit_max_height(1) == 1
+    assert _fit_max_height(1040, comfort_ratio=1.0) == 1040

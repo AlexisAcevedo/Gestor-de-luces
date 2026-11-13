@@ -20,7 +20,6 @@ Cubre:
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Any
 
 import numpy as np
@@ -36,6 +35,7 @@ from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import Color
 from gestor_luces.ports.interfaces import AudioSampler
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import wait_for, wait_until_async
 
 
 def _make_stereo_sine_wave(
@@ -272,9 +272,13 @@ def test_wasapi_loopback_sampler_non_blocking_silence_timeout() -> None:
     assert active["color"].r > 200
 
     # Si Windows detiene las interrupciones de audio (pausa musical > 60ms),
-    # el adaptador cae automaticamente a silencio sin congelarse.
-    time.sleep(0.08)
-    after_pause = sampler.sample_frame(palette_mode="spectrum", sensitivity=1.0)
+    # el adaptador cae automaticamente a silencio sin congelarse. Se sondea la condicion
+    # observable (el frame ya es silencio) en vez de dormir una duracion fija.
+    after_pause = wait_for(
+        lambda: sampler.sample_frame(palette_mode="spectrum", sensitivity=1.0),
+        lambda frame: frame["rms"] == 0.0,
+        "the sampler never fell back to silence after the audio stall",
+    )
     assert after_pause["rms"] == 0.0
     assert after_pause["bass"] == 0.0
     assert 10 <= after_pause["brightness"] <= 15
@@ -285,7 +289,8 @@ def test_wasapi_loopback_sampler_non_blocking_silence_timeout() -> None:
 
 
 async def test_music_sync_stream_and_mutual_exclusion_with_ambilight() -> None:
-    """Verifica la emision UDP de Music Sync y la exclusion mutua frente a Ambilight y control manual."""
+    """Verifica la emision UDP de Music Sync y la exclusion mutua frente a Ambilight y control
+    manual."""
     async with FakeWizBulbServer(mac="a8bb50df9029") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         audio_sampler = CyclingAudioSampler(
@@ -350,7 +355,10 @@ async def test_music_sync_stream_and_mutual_exclusion_with_ambilight() -> None:
         assert music_status["palette_mode"] == "club"
         assert service.get_ambilight_status()["active"] is False
 
-        await asyncio.sleep(0.11)
+        await wait_until_async(
+            lambda: service.get_music_sync_status()["frames_sent"] >= 2,
+            "the music-sync loop never published two frames",
+        )
 
         live_music = service.get_music_sync_status()
         assert live_music["active"] is True
@@ -373,7 +381,8 @@ async def test_music_sync_stream_and_mutual_exclusion_with_ambilight() -> None:
 
 
 async def test_webview_bridge_music_sync_lifecycle() -> None:
-    """Comprueba start_music_sync, get_music_sync_status y stop_music_sync a traves de WebviewBridge."""
+    """Comprueba start_music_sync, get_music_sync_status y stop_music_sync a traves de
+    WebviewBridge."""
     async with FakeWizBulbServer(mac="a8bb50445566") as server:
         controller = WizUdpController(probe_candidates=[server.endpoint])
         audio_sampler = CyclingAudioSampler(
@@ -428,7 +437,10 @@ async def test_webview_bridge_music_sync_lifecycle() -> None:
             assert started["music_sync"]["audio_brightness"] is False
             assert started["music_sync"]["brightness"] == 65
 
-            await asyncio.sleep(0.09)
+            await wait_until_async(
+                lambda: server.pilot_state["dimming"] == 65,
+                "the music-sync stream never reached the simulated bulb",
+            )
 
             polled = await asyncio.to_thread(bridge.get_music_sync_status)
             assert polled["ok"] is True
@@ -444,4 +456,3 @@ async def test_webview_bridge_music_sync_lifecycle() -> None:
         finally:
             bridge.shutdown()
             assert audio_sampler.closed is True
-
