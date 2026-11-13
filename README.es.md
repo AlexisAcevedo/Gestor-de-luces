@@ -3,6 +3,7 @@
 [English](README.md) | [Español](README.es.md)
 
 [![CI](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AlexisAcevedo/Gestor-de-luces/badges/coverage.json)](https://github.com/AlexisAcevedo/Gestor-de-luces/blob/main/.github/workflows/coverage-badge.yml)
 
 Centro de control de escritorio para sistemas de iluminación inteligente Philips WiZ sobre redes de área local (LAN). Diseñado con Python, Arquitectura Hexagonal (Puertos y Adaptadores) y Microsoft WebView2 (PyWebView), operando de manera exclusiva mediante paquetes UDP locales sin dependencias de la nube, puentes externos ni necesidad de conexión a Internet.
 
@@ -308,7 +309,7 @@ Para correr las pruebas:
 pytest
 ```
 
-La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
+La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
 
 Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
 

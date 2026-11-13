@@ -1,0 +1,53 @@
+name: Coverage badge
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# `contents: write` is scoped to this job and exists for one reason: pushing the generated
+# endpoint JSON to the `badges` branch. It was explicitly authorised for that purpose.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish coverage badge
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: pytest --cov=gestor_luces --cov-report=json:coverage.json
+
+      # Blocking on purpose: a badge must never advertise a number below the per-package floors.
+      - name: Coverage gate (per package)
+        run: python scripts/check_coverage.py coverage.json
+
+      - name: Render the shields.io endpoint JSON
+        run: python scripts/coverage_badge_json.py --output badge-out/coverage.json
+
+      # The `badges` branch is an orphan whose only content is this one generated file: it holds
+      # no project history, so replacing it wholesale with a force-push cannot lose any work.
+      # Nothing else may ever be published there, which is why the index is emptied first.
+      # `git add -f` is needed because `coverage.json` is gitignored in the project worktree.
+      - name: Publish the badge to the orphan `badges` branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan badges
+          git rm -rf --cached .
+          Copy-Item badge-out/coverage.json coverage.json -Force
+          git add -f coverage.json
+          git commit -m "chore(badge): publish the coverage endpoint JSON"
+          git push --force origin badges
