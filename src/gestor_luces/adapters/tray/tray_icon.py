@@ -54,7 +54,6 @@ REFRESH_THREAD_NAME = "GestorLucesTrayRefresh"
 Executor = Callable[[Callable[[], None]], None]
 ViewFactory = Callable[[Dispatch], TrayView | None]
 #: Constructor de icono de la vista de respaldo (`pystray.Icon` en produccion).
-IconFactory = Callable[[str, Any, str, Any], Any]
 
 #: Fallos reales de un callback de visibilidad: el composition root lee un booleano, asi que
 #: solo un callback ajeno puede fallar al leerlo.
@@ -101,17 +100,6 @@ def _default_view_factory(dispatch: Dispatch) -> TrayView | None:
     return create_pystray_view(dispatch)
 
 
-def _pystray_view_factory(icon_factory: IconFactory) -> ViewFactory:
-    """Vista de respaldo con un constructor de icono inyectado (smoke-test y pruebas)."""
-
-    def _factory(dispatch: Dispatch) -> TrayView | None:
-        from gestor_luces.adapters.tray.pystray_tray import create_pystray_view
-
-        return create_pystray_view(dispatch, icon_factory=icon_factory)
-
-    return _factory
-
-
 class TrayController:
     """Posee el modelo de menu de la bandeja y despacha sus acciones a una vista."""
 
@@ -126,7 +114,6 @@ class TrayController:
         notify_ui: Callable[[], None] | None = None,
         view: TrayView | None = None,
         view_factory: ViewFactory | None = None,
-        icon_factory: IconFactory | None = None,
         executor: Executor | None = None,
         poll_interval: float = 5.0,
     ) -> None:
@@ -137,14 +124,7 @@ class TrayController:
         self._is_window_visible = is_window_visible
         self._notify_ui = notify_ui
         self._view = view
-        if view_factory is not None:
-            self._view_factory: ViewFactory = view_factory
-        elif icon_factory is not None:
-            # El smoke-test (`main.py`) y las pruebas de i18n inyectan el icono de la vista de
-            # respaldo; la vista WinForms no acepta un icono ajeno al CLR.
-            self._view_factory = _pystray_view_factory(icon_factory)
-        else:
-            self._view_factory = _default_view_factory
+        self._view_factory: ViewFactory = view_factory or _default_view_factory
         self._executor = executor or _default_executor
         self._poll_interval = poll_interval
         self._lock = threading.Lock()

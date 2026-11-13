@@ -33,15 +33,11 @@ from gestor_luces.main import resolve_ui_directory
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 
 
-class _FakeTrayIcon:
-    """Doble de prueba de `pystray.Icon` para inspeccionar el idioma de la bandeja."""
+class _RecordingTrayView:
+    """Doble de `TrayView` que registra cada estado aplicado para inspeccionar el idioma."""
 
-    def __init__(self, name: str, image: Any, title: str, menu: Any) -> None:
-        self.name = name
-        self.icon = image
-        self.title = title
-        self.menu = menu
-        self.update_menu_count = 0
+    def __init__(self) -> None:
+        self.applies: list[tuple[list[Any], str, str]] = []
 
     def run(self) -> None:
         return None
@@ -49,8 +45,14 @@ class _FakeTrayIcon:
     def stop(self) -> None:
         return None
 
-    def update_menu(self) -> None:
-        self.update_menu_count += 1
+    def apply(self, spec: list[Any], title: str, rgb: tuple[int, int, int], theme: str) -> None:
+        self.applies.append((list(spec), title, theme))
+
+    @property
+    def title(self) -> str:
+        """Ultimo tooltip aplicado por el controlador; falla si nunca aplico nada."""
+        assert self.applies, "the tray controller never applied a state to the view"
+        return self.applies[-1][1]
 
 
 def test_json_settings_repository_persists_and_tolerates_corrupt_files(
@@ -154,7 +156,12 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             settings_repository=JsonSettingsRepository(data_dir=tmp_path),
         )
         bridge = WebviewBridge(service=service)
-        created_icons: list[_FakeTrayIcon] = []
+        created_views: list[_RecordingTrayView] = []
+
+        def _view_factory(dispatch: Any) -> _RecordingTrayView:
+            view = _RecordingTrayView()
+            created_views.append(view)
+            return view
 
         tray = TrayController(
             bridge,
@@ -162,11 +169,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             hide_window=lambda: None,
             quit_app=lambda: None,
             is_window_visible=lambda: True,
-            icon_factory=lambda name, img, title, menu: (
-                icon := _FakeTrayIcon(name, img, title, menu),
-                created_icons.append(icon),
-                icon,
-            )[-1],
+            view_factory=_view_factory,
             executor=lambda task: task(),
             poll_interval=0.05,
         )
@@ -178,7 +181,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             await asyncio.to_thread(bridge.set_power, True, 75)
 
             await asyncio.to_thread(tray.start)
-            assert created_icons[0].title == "WiZ Lighting - On 75%"
+            assert created_views[0].title == "WiZ Lighting - On 75%"
             assert tray.spec[1].label == "Hide window"
 
             # Cambiamos a espanol a traves del puente JS
@@ -187,7 +190,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             assert es_env["language"] == "es"
 
             await asyncio.to_thread(tray.refresh)
-            assert created_icons[0].title == "Iluminación WiZ - Encendido 75%"
+            assert created_views[0].title == "Iluminación WiZ - Encendido 75%"
             assert tray.spec[1].label == "Ocultar ventana"
             assert any(e.label == "Escenas favoritas" for e in tray.spec)
             assert any(e.label == "Salir" for e in tray.spec)

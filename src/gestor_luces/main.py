@@ -100,14 +100,16 @@ def _configure_logging() -> None:
     root.addHandler(stream_handler)
 
 
-class _NoopTrayIcon:
-    """Icono simulado sin efectos secundarios para verificar el ensamblado en smoke-test."""
+class _NoopTrayView:
+    """Vista de bandeja simulada, sin efectos secundarios, para el smoke-test.
 
-    def __init__(self, name: str, image: Any, title: str, menu: Any) -> None:
-        self.name = name
-        self.icon = image
-        self.title = title
-        self.menu = menu
+    Cumple el mismo contrato `TrayView` que las vistas reales (`run`, `stop`, `apply`) y
+    registra lo aplicado, asi que el smoke-test ejercita el cableado del controlador sin
+    abrir ningun toolkit grafico.
+    """
+
+    def __init__(self) -> None:
+        self.applies: list[tuple[list[Any], str]] = []
 
     def run(self) -> None:
         return None
@@ -115,8 +117,8 @@ class _NoopTrayIcon:
     def stop(self) -> None:
         return None
 
-    def update_menu(self) -> None:
-        return None
+    def apply(self, spec: list[Any], title: str, rgb: tuple[int, int, int], theme: str) -> None:
+        self.applies.append((list(spec), title))
 
 
 def resolve_ui_directory() -> Path:
@@ -211,7 +213,7 @@ def _ui_asset_paths(ui_dir: Path) -> dict[str, Path]:
 
 
 def _run_smoke_test(bridge: WebviewBridge) -> int:
-    """Ensambla la bandeja con iconos simulados y verifica rutas de UI sin abrir el bucle nativo."""
+    """Ensambla la bandeja con una vista simulada y verifica la UI sin abrir el bucle nativo."""
     ui_dir = resolve_ui_directory()
     assets = _ui_asset_paths(ui_dir)
     icon_path = resolve_icon_path()
@@ -222,7 +224,7 @@ def _run_smoke_test(bridge: WebviewBridge) -> int:
         hide_window=lambda: None,
         quit_app=lambda: None,
         is_window_visible=lambda: True,
-        icon_factory=_NoopTrayIcon,
+        view_factory=lambda dispatch: _NoopTrayView(),
         executor=lambda task: task(),
         poll_interval=0.0,
     )
