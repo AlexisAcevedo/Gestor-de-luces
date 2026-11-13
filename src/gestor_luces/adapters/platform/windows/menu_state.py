@@ -17,6 +17,8 @@ import sys
 from ctypes import wintypes
 from typing import Any
 
+from gestor_luces.adapters.platform.windows.window_chrome import NATIVE_CALL_ERRORS
+
 _LOGGER = logging.getLogger(__name__)
 
 # Banderas documentadas de GUITHREADINFO.flags (winuser.h).
@@ -59,6 +61,8 @@ def _is_menu_open(*, platform: str = sys.platform, user32: Any = None) -> bool:
         if not target.GetGUIThreadInfo(0, ctypes.pointer(info)):
             return False
         return bool(int(info.flags) & _MENU_MODE_FLAGS)
-    except Exception:
+    except NATIVE_CALL_ERRORS:
+        # Un `user32` ausente o una firma inutilizable no puede frenar el refresco para
+        # siempre: el peor caso es diferir el rebuild un ciclo de mas.
         _LOGGER.debug("Menu-mode probe failed; assuming no menu is open.", exc_info=True)
         return False

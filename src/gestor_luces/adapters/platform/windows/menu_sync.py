@@ -85,5 +85,9 @@ def _sync_native_menu(window: Any, spec: list[AppMenu]) -> None:
             native_form.Invoke(Action(_apply))
         else:
             _apply()
+    # FRONTERA: este sync cruza a WinForms con pythonnet (`System.Action`, propiedades de
+    # `ToolStripMenuItem`, `Control.Invoke`), que no garantiza el tipo de excepcion del CLR.
+    # Es una actualizacion cosmetica de etiquetas y tildes: se loguea con traza y el menu
+    # se queda como estaba en vez de romper el hilo que serializa los refrescos.
     except Exception:
         _LOGGER.debug("Native menu sync skipped.", exc_info=True)

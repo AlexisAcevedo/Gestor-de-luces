@@ -119,6 +119,9 @@ class SingleInstanceGuard:
                 if kernel32.WaitForSingleObject(handle, WAIT_TIMEOUT_MS) == WAIT_OBJECT_0:
                     try:
                         on_show_requested()
+                    # FRONTERA: `on_show_requested` es el callback de la aplicacion, codigo
+                    # ajeno a este modulo dentro de un hilo demonio que debe sobrevivir a
+                    # cualquier fallo para seguir atendiendo el proximo segundo lanzamiento.
                     except Exception:
                         _LOGGER.exception("Show-window request from a second launch failed.")
 

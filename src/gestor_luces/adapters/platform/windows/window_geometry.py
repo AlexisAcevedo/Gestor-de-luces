@@ -12,6 +12,7 @@ import sys
 from typing import Any
 
 from gestor_luces.adapters.platform.windows.window_chrome import (
+    NATIVE_CALL_ERRORS,
     _configure_fn_signature,
     _resolve_native_hwnd,
 )
@@ -36,15 +37,17 @@ def _compute_initial_window_geometry(
 
     Falls back to WINDOW_DEFAULT_SIZE (OS-centered) when screen info is unavailable.
     """
+    screens = getattr(webview_module, "screens", None)
+    if not screens:
+        return (*WINDOW_DEFAULT_SIZE, None, None)
     try:
-        screens = getattr(webview_module, "screens", None)
-        if not screens:
-            raise RuntimeError("no screens reported")
         screen = screens[0]
         screen_w, screen_h = int(screen.width), int(screen.height)
-        if screen_w <= 0 or screen_h <= 0:
-            raise RuntimeError("invalid screen size")
-    except Exception:
+    except (AttributeError, LookupError, TypeError, ValueError, OverflowError):
+        # pywebview reporta las pantallas como objetos planos: un objeto sin `width`/
+        # `height` o un valor que no se puede convertir es "sin informacion de pantalla".
+        return (*WINDOW_DEFAULT_SIZE, None, None)
+    if screen_w <= 0 or screen_h <= 0:
         return (*WINDOW_DEFAULT_SIZE, None, None)
 
     width = min(WINDOW_DEFAULT_SIZE[0], screen_w)
@@ -193,7 +196,9 @@ def _fit_native_window_height(
 
         try:
             dpi = int(target_user32.GetDpiForWindow(hwnd)) or 96
-        except Exception:
+        except NATIVE_CALL_ERRORS:
+            # `GetDpiForWindow` no existe antes de Windows 10 1607: se asume 96 dpi.
+            _LOGGER.debug("DPI query failed; assuming 96 dpi.", exc_info=True)
             dpi = 96
         scale = dpi / 96.0
 
@@ -209,7 +214,10 @@ def _fit_native_window_height(
             for control in getattr(native_form, "Controls", ()):
                 if control.GetType().Name == "MenuStrip" and getattr(control, "Visible", True):
                     chrome_phys += int(control.Height)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
+            # Un control sin `GetType`/`Height` utilizable deja el chrome medido hasta aca;
+            # una excepcion de pythonnet fuera de esta tupla la atrapa la frontera de abajo,
+            # que solo cancela el ajuste (nunca tumba la app).
             _LOGGER.debug("Menu strip height query failed.", exc_info=True)
 
         work_top = None
@@ -220,8 +228,9 @@ def _fit_native_window_height(
             info.cbSize = ctypes.sizeof(_MonitorInfo)
             if monitor and target_user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
                 work_top, work_bottom = info.rcWork.top, info.rcWork.bottom
-        except Exception:
-            _LOGGER.debug("Monitor work area query failed.")
+        except NATIVE_CALL_ERRORS:
+            # Sin area de trabajo se cae al tope de respaldo (`fallback_max_h`).
+            _LOGGER.debug("Monitor work area query failed.", exc_info=True)
         if work_top is None or work_bottom is None:
             effective_fallback = fallback_max_h if fallback_max_h else baseline_height
             if not effective_fallback:
@@ -253,13 +262,13 @@ def _fit_native_window_height(
             )
         )
 
-    if bool(getattr(native_form, "InvokeRequired", False)):
-        outcome = {"ok": False}
+    try:
+        if bool(getattr(native_form, "InvokeRequired", False)):
+            outcome = {"ok": False}
 
-        def _marshaled() -> None:
-            outcome["ok"] = _execute()
+            def _marshaled() -> None:
+                outcome["ok"] = _execute()
 
-        try:
             invoke_fn = getattr(native_form, "Invoke", None)
             if not callable(invoke_fn):
                 return False
@@ -270,12 +279,10 @@ def _fit_native_window_height(
             except ImportError:
                 invoke_fn(_marshaled)
             return outcome["ok"]
-        except Exception:
-            _LOGGER.debug("Marshaled window fit skipped.", exc_info=True)
-            return False
-
-    try:
         return _execute()
+    # FRONTERA: `_execute` corre sobre ctypes y, por `Invoke`, sobre el hilo de interfaz de
+    # WinForms (pythonnet no garantiza el tipo de excepcion del CLR). Un auto-ajuste que
+    # falla solo deja la ventana en su tamano actual; nunca debe tumbar al llamador.
     except Exception:
         _LOGGER.debug("Window fit skipped.", exc_info=True)
         return False

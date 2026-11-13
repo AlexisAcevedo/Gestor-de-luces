@@ -22,6 +22,39 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_SAMPLE_RATE = 48000
 DEFAULT_CHANNELS = 2
 
+#: Errores documentados de PortAudio/WASAPI al consultar o abrir un endpoint.
+#:
+#: `pyaudiowpatch` envuelve a PortAudio sobre ctypes: un endpoint ausente, ocupado o con un
+#: formato que el driver rechaza llega como `OSError`, un indice invalido como `ValueError`,
+#: y un descriptor de dispositivo incompleto como `KeyError`/`TypeError`. `ImportError` es la
+#: pila de audio no instalada, que el modulo degrada a silencio de reposo. Cualquier otra
+#: excepcion es un defecto y propaga al bucle que muestrea, que la registra por iteracion.
+WASAPI_DEVICE_ERRORS: tuple[type[BaseException], ...] = (
+    OSError,
+    ValueError,
+    KeyError,
+    TypeError,
+    ImportError,
+)
+
+
+def _release_native_resource(resource: Any, method_name: str, description: str) -> None:
+    """Libera un recurso nativo sin dejar que el fallo de liberacion propague.
+
+    FRONTERA: cerrar un stream de PortAudio o terminar `PyAudio` corre en las rutas de
+    limpieza (cambio de dispositivo, fin del muestreo y apagado de la app). La DLL puede
+    fallar de cualquier forma mientras libera handles, y una excepcion ahi abortaria el
+    resto de la secuencia de limpieza; se registra con traza y se continua.
+    """
+    method = getattr(resource, method_name, None)
+    if not callable(method):
+        return
+    try:
+        method()
+    # FRONTERA (ver el docstring): la liberacion de un recurso nativo nunca propaga.
+    except Exception:
+        _LOGGER.debug("Ignoring error while %s.", description, exc_info=True)
+
 
 class WasapiLoopbackStreamSession:
     """Envoltorio del contenedor PortAudio y del stream loopback activo."""
@@ -91,7 +124,9 @@ class WasapiLoopbackStreamSession:
 
             pa_float32 = getattr(pyaudio, "paFloat32", 1)
             pa_continue = getattr(pyaudio, "paContinue", 0)
-        except Exception:
+        except ImportError:
+            # Sin `pyaudiowpatch` el modo Musica queda en silencio de reposo, no en error.
+            _LOGGER.debug("pyaudiowpatch is unavailable; using the default format.", exc_info=True)
             pa_float32 = 1
             pa_continue = 0
 
@@ -104,7 +139,14 @@ class WasapiLoopbackStreamSession:
                     candidate = pa.get_device_info_by_index(normalized_req)
                     if candidate and int(candidate.get("maxInputChannels", 0)) > 0:
                         device_info = dict(candidate)
-                except Exception:
+                except WASAPI_DEVICE_ERRORS:
+                    # El indice pedido ya no existe (o dejo de ser de entrada): se cae al
+                    # loopback por defecto.
+                    _LOGGER.debug(
+                        "Requested loopback device %s is unavailable.",
+                        normalized_req,
+                        exc_info=True,
+                    )
                     device_info = None
 
             if device_info is None:
@@ -145,8 +187,11 @@ class WasapiLoopbackStreamSession:
                 self._sample_rate = sample_rate
                 self._channels = channels
             return True
-        except Exception:
-            _LOGGER.debug("Could not open WASAPI loopback stream; returning standby silence.")
+        except WASAPI_DEVICE_ERRORS:
+            _LOGGER.debug(
+                "Could not open WASAPI loopback stream; returning standby silence.",
+                exc_info=True,
+            )
             self.close()
             return False
 
@@ -162,19 +207,8 @@ class WasapiLoopbackStreamSession:
             self._last_chunk_monotonic = 0.0
 
         if stream is not None:
-            try:
-                if hasattr(stream, "stop_stream"):
-                    stream.stop_stream()
-            except Exception:
-                _LOGGER.debug("Ignoring error while stopping WASAPI stream.", exc_info=True)
-            try:
-                if hasattr(stream, "close"):
-                    stream.close()
-            except Exception:
-                _LOGGER.debug("Ignoring error while closing WASAPI stream.", exc_info=True)
+            _release_native_resource(stream, "stop_stream", "stopping the WASAPI stream")
+            _release_native_resource(stream, "close", "closing the WASAPI stream")
 
         if pa is not None:
-            try:
-                pa.terminate()
-            except Exception:
-                _LOGGER.debug("Ignoring error while terminating PyAudio.", exc_info=True)
+            _release_native_resource(pa, "terminate", "terminating PyAudio")

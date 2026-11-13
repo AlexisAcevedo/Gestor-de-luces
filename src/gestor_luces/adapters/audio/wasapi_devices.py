@@ -12,6 +12,11 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from gestor_luces.adapters.audio.wasapi_session import (
+    WASAPI_DEVICE_ERRORS,
+    _release_native_resource,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_DEVICE: dict[str, Any] = {
@@ -35,7 +40,10 @@ def enumerate_loopback_devices(create_pyaudio: Callable[[], Any]) -> list[dict[s
             default_info = pa.get_default_wasapi_loopback()
             if isinstance(default_info, dict) and "index" in default_info:
                 default_index = int(default_info["index"])
-        except Exception:
+        except WASAPI_DEVICE_ERRORS:
+            # Sin endpoint por defecto la lista sigue siendo util: ningun item lleva la
+            # etiqueta "Default ·".
+            _LOGGER.debug("Default loopback endpoint unavailable.", exc_info=True)
             default_index = None
 
         gen_fn = getattr(pa, "get_loopback_device_info_generator", None)
@@ -58,16 +66,14 @@ def enumerate_loopback_devices(create_pyaudio: Callable[[], Any]) -> list[dict[s
                     "is_default": is_def,
                 }
             )
-    except Exception:
-        _LOGGER.debug("WASAPI loopback device enumeration fell back to default descriptor.")
+    except WASAPI_DEVICE_ERRORS:
+        _LOGGER.debug(
+            "WASAPI loopback device enumeration fell back to the default descriptor.",
+            exc_info=True,
+        )
     finally:
         if pa is not None:
-            try:
-                pa.terminate()
-            except Exception:
-                _LOGGER.debug(
-                    "Ignoring PyAudio terminate error during device enumeration.", exc_info=True
-                )
+            _release_native_resource(pa, "terminate", "terminating PyAudio after enumeration")
 
     if not devices:
         return [dict(_DEFAULT_DEVICE)]

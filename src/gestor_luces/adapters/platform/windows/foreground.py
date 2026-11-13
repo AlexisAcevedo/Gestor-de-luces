@@ -10,6 +10,7 @@ import sys
 from typing import Any
 
 from gestor_luces.adapters.platform.windows.window_chrome import (
+    NATIVE_CALL_ERRORS,
     _configure_fn_signature,
     _resolve_native_hwnd,
 )
@@ -63,6 +64,8 @@ def _activate_window_foreground(
         target_user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002)
         target_user32.SetForegroundWindow(hwnd)
         return True
-    except Exception:
+    except NATIVE_CALL_ERRORS:
+        # `ShowWindow`/`SetWindowPos`/`SetForegroundWindow` pueden faltar o rechazar el
+        # handle: la ventana se queda donde esta y el llamador no ve una excepcion.
         _LOGGER.debug("Native foreground activation skipped.", exc_info=True)
         return False

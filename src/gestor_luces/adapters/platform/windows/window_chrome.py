@@ -6,11 +6,28 @@ que se puede probar sin una ventana real ni una sesion de escritorio.
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import sys
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
+
+#: Unica politica de errores para las llamadas `ctypes` a una DLL de Win32 del paquete.
+#:
+#: Una llamada nativa solo puede fallar asi: la DLL o la funcion no estan (`OSError`,
+#: `AttributeError` en versiones viejas de Windows), los argumentos no coinciden con la
+#: firma declarada (`TypeError` y `ctypes.ArgumentError`), un `byref()`/puntero inutil
+#: (`ValueError`) o el estado interno de ctypes (`RuntimeError`). Cualquier otra excepcion
+#: es un defecto del programa y debe propagarse a quien pueda arreglarlo.
+NATIVE_CALL_ERRORS: tuple[type[BaseException], ...] = (
+    OSError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+    ctypes.ArgumentError,
+)
 
 
 THEME_WINDOW_CHROME: dict[str, dict[str, Any]] = {
@@ -43,12 +60,13 @@ def _resolve_native_hwnd(native_form: Any) -> int | None:
             try:
                 hwnd = int(converter())
                 return hwnd if hwnd > 0 else None
-            except Exception:
+            except (OverflowError, TypeError, ValueError):
+                # `ToInt32` desborda en un handle de 64 bits: se prueba la conversion siguiente.
                 _LOGGER.debug("Handle.%s() conversion failed.", method_name, exc_info=True)
     try:
         hwnd = int(handle)
         return hwnd if hwnd > 0 else None
-    except Exception:
+    except (OverflowError, TypeError, ValueError):
         return None
 
 
@@ -61,7 +79,9 @@ def _configure_fn_signature(fn: Any, argtypes: list[Any], restype: Any) -> None:
             fn.argtypes = argtypes
         if hasattr(fn, "restype"):
             fn.restype = restype
-    except Exception:
+    except (AttributeError, TypeError):
+        # Un puntero de ctypes solo rechaza la firma con `TypeError`; un doble de prueba
+        # que expone los atributos pero no los acepta, con `AttributeError`.
         _LOGGER.debug("Win32 function signature setup skipped.", exc_info=True)
 
 
@@ -100,7 +120,7 @@ def _set_windows_dark_titlebar_attribute(
             ctypes.sizeof(ctypes.c_int),
         )
         return True
-    except Exception:
+    except NATIVE_CALL_ERRORS:
         _LOGGER.debug("Windows dark titlebar attribute skipped.", exc_info=True)
         return False
 
@@ -146,6 +166,6 @@ def _apply_corner_preference(
             ctypes.sizeof(ctypes.c_int),
         )
         return int(result or 0) == 0
-    except Exception:
+    except NATIVE_CALL_ERRORS:
         _LOGGER.debug("DWM corner preference skipped.", exc_info=True)
         return False
