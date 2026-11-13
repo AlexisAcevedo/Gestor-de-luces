@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import ipaddress
 import json
+import logging
 import socket
 from typing import Any
 
@@ -24,6 +25,8 @@ from gestor_luces.domain.value_objects import Color, LightMode
 
 DEFAULT_WIZ_UDP_PORT = 38899
 _MAX_NETWORK_TEXT_LEN = 64
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -74,7 +77,9 @@ class _UdpResponseProtocol(asyncio.DatagramProtocol):
             if isinstance(decoded, dict):
                 self._future.set_result(decoded)
         except json.JSONDecodeError:
-            pass
+            # Un foco o un vecino de la red puede enviar un datagrama que no sea JSON valido;
+            # se descarta sin cortar el futuro del socket y queda registrado para diagnostico.
+            _LOGGER.debug("Discarded a malformed UDP payload from %s.", addr[0], exc_info=True)
 
     def error_received(self, exc: Exception) -> None:
         if not self._future.done():
@@ -175,7 +180,13 @@ class WizUdpController:
                     if probed is not None:
                         found_by_ip[item.ip] = probed
             except OSError:
-                pass
+                # El Firewall de Windows puede filtrar las respuestas broadcast: no es un
+                # error del usuario, y el respaldo unicast /24 de abajo cubre ese caso.
+                _LOGGER.debug(
+                    "Broadcast discovery failed for %s; falling back to unicast.",
+                    target_broadcast,
+                    exc_info=True,
+                )
 
         # Respaldo unicast /24 cuando el Firewall de Windows filtra las respuestas broadcast
         if not found_by_ip and local_ip:
