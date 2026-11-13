@@ -19,6 +19,7 @@ import pystray
 from PIL import Image
 
 from gestor_luces.adapters.platform.windows.menu_state import _is_menu_open
+from gestor_luces.adapters.platform.windows.window_chrome import NATIVE_CALL_ERRORS
 from gestor_luces.adapters.tray.menu_model import TrayMenuEntry
 from gestor_luces.adapters.tray.tray_view import (
     ICON_NAME,
@@ -59,7 +60,8 @@ def _default_icon_factory(
     if icon_class is not None:
         try:
             return icon_class(name, image, title, menu)
-        except Exception:
+        # Construir el icono Win32 cruza a `ctypes`: solo falla con `NATIVE_CALL_ERRORS`.
+        except NATIVE_CALL_ERRORS:
             _LOGGER.debug("Owned-popup icon unavailable; using the stock icon.", exc_info=True)
     return pystray.Icon(name, image, title, menu)
 
@@ -91,7 +93,10 @@ def _owner_popup_icon_class() -> Any:
 
         from pystray._util import win32
         from pystray._win32 import Icon as _Win32Icon
-    except Exception:
+    # Los internals de `pystray` solo pueden faltar con un `ImportError` (o un
+    # `AttributeError` si el modulo existe pero cambia el nombre): sin ellos se usa el
+    # icono estandar y el hover sigue necesitando clic.
+    except (ImportError, AttributeError):
         _LOGGER.debug("Owned-popup icon unavailable; menu hover stays click-only.", exc_info=True)
         return None
 
@@ -175,7 +180,8 @@ class PystrayTrayView:
             return
         try:
             icon.stop()
-        except Exception:
+        # `pystray` detiene el icono con llamadas Win32 a traves de `ctypes`.
+        except NATIVE_CALL_ERRORS:
             _LOGGER.exception("Failed to stop the pystray icon.")
 
     def apply(
@@ -235,7 +241,8 @@ class PystrayTrayView:
         try:
             icon.icon = render_icon_image(rgb)
             icon.title = title
-        except Exception:
+        # Imagen y tooltip son del icono Win32 de `pystray` (`ctypes` + PIL).
+        except NATIVE_CALL_ERRORS:
             _LOGGER.exception("Failed to update the tray icon image.")
         with self._lock:
             self._applied = _signature(state)
@@ -243,7 +250,8 @@ class PystrayTrayView:
         log_applied_menu(spec)
         try:
             icon.update_menu()
-        except Exception:
+        # `update_menu` destruye y recrea el `HMENU` con llamadas Win32 de `ctypes`.
+        except NATIVE_CALL_ERRORS:
             _LOGGER.exception("Failed to rebuild the pystray menu.")
 
     def _current_menu_items(self) -> tuple[pystray.MenuItem, ...]:

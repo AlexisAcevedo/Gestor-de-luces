@@ -21,7 +21,11 @@ from typing import Any
 from gestor_luces.adapters.platform.windows.window_chrome import _apply_corner_preference
 from gestor_luces.adapters.tray.menu_model import TrayMenuEntry
 from gestor_luces.adapters.tray.tray_view import Dispatch, resolve_entry_action
-from gestor_luces.adapters.tray.winforms_host import _load_winforms, _WinFormsApi
+from gestor_luces.adapters.tray.winforms_host import (
+    _load_winforms,
+    _WinFormsApi,
+    release_native,
+)
 from gestor_luces.adapters.tray.winforms_paint import (
     MENU_ITEM_PADDING_VERTICAL,
     TrayPalette,
@@ -68,11 +72,28 @@ def _item_draw_width(sender: Any) -> int:
     try:
         owner = sender.Owner
         owner_width = int(owner.Width) - int(sender.Bounds.X)
-    except Exception:
+    # Leer `Owner`/`Width`/`Bounds` de un item sin menu desplegado (o de un doble de
+    # prueba) solo puede fallar con un fallo de binding de pythonnet.
+    except (AttributeError, TypeError, ValueError, OverflowError):
         owner_width = width
     if owner_width > 0:
         width = min(width, owner_width)
     return max(1, width)
+
+
+def _paint_quietly(paint: Callable[[], None]) -> None:
+    """Dibuja una fila del menu sin dejar que el fallo llegue al bucle nativo.
+
+    FRONTERA: `ToolStripItem.Paint` corre dentro del despacho de .NET; una excepcion que
+    escape de un handler de evento llega al bombeo de mensajes y se lleva la bandeja. El
+    dibujo es cosmetico (T-3.9): si falla, la fila conserva el fondo del renderer y el menu
+    sigue funcionando, con la traza en el log. Es el unico guardia de los painters: lo
+    comparten las filas y los separadores.
+    """
+    try:
+        paint()
+    except Exception:
+        _LOGGER.debug("Tray menu paint failed.", exc_info=True)
 
 
 def _item_paint_handler(
@@ -84,7 +105,7 @@ def _item_paint_handler(
     """Handler de `ToolStripItem.Paint` de una fila del menu."""
 
     def _on_paint(sender: Any, event_args: Any) -> None:
-        try:
+        def _paint() -> None:
             paint_menu_item(
                 event_args.Graphics,
                 palette=palette,
@@ -98,8 +119,8 @@ def _item_paint_handler(
                 checked=bool(sender.Checked),
                 has_children=has_children,
             )
-        except Exception:
-            _LOGGER.debug("Tray menu item paint failed.", exc_info=True)
+
+        _paint_quietly(_paint)
 
     return _on_paint
 
@@ -108,7 +129,7 @@ def _separator_paint_handler(palette: TrayPalette, api: _WinFormsApi) -> Callabl
     """Handler de `ToolStripItem.Paint` de un separador."""
 
     def _on_paint(sender: Any, event_args: Any) -> None:
-        try:
+        def _paint() -> None:
             paint_menu_separator(
                 event_args.Graphics,
                 palette=palette,
@@ -116,8 +137,8 @@ def _separator_paint_handler(palette: TrayPalette, api: _WinFormsApi) -> Callabl
                 width=_item_draw_width(sender),
                 height=int(sender.Height),
             )
-        except Exception:
-            _LOGGER.debug("Tray menu separator paint failed.", exc_info=True)
+
+        _paint_quietly(_paint)
 
     return _on_paint
 
@@ -244,28 +265,46 @@ def attach_menu_chrome(control: Any, chrome: Callable[[Any], None]) -> None:
     """Engancha el acabado de ventana (`chrome`) a cada menu, incluidos los submenus."""
 
     def _on_opened(sender: Any, event_args: Any) -> None:
-        try:
-            chrome(sender)
-        except Exception:
-            _LOGGER.debug("Tray menu chrome failed.", exc_info=True)
+        _apply_chrome_quietly(chrome, sender)
 
     try:
         control.Opened += _on_opened
-    except Exception:
+    # Enganchar el evento de un control que no es un menu solo puede fallar con un fallo de
+    # binding de pythonnet; sin el enganche el menu se muestra sin esquinas modernas.
+    except (AttributeError, TypeError):
         _LOGGER.debug("Tray menu Opened hook failed.", exc_info=True)
     for item in list(getattr(control, "Items", [])):
         try:
             has_children = int(getattr(item, "DropDownItems", None).Count) > 0
-        except Exception:
+        # Leer el arbol de items de un control que no es un menu solo falla con un fallo de
+        # binding; sin hijos no hay submenu al que engancharle el acabado.
+        except (AttributeError, TypeError, ValueError):
             has_children = False
         if not has_children:
             continue
         try:
             dropdown = item.DropDown
-        except Exception:
+        # Un item cuyo `DropDown` no existe todavia se salta: el menu padre ya tiene su
+        # propio `Opened`.
+        except (AttributeError, TypeError):
             _LOGGER.debug("Tray submenu unavailable for its chrome.", exc_info=True)
             continue
         attach_menu_chrome(dropdown, chrome)
+
+
+def _apply_chrome_quietly(chrome: Callable[[Any], None], control: Any) -> None:
+    """Aplica el acabado del menu (DWM + `Region`) desde el evento `Opened` de .NET.
+
+    FRONTERA: una excepcion que escape de un handler de `Opened` llega al bombeo de
+    mensajes y se lleva la bandeja, y el acabado es cosmetico (T-3.9). Es el unico guardia
+    de esta preocupacion: `attach_menu_chrome` engancha este mismo handler en el menu y en
+    cada submenu, y cada paso degrada por dentro (`_apply_corner_preference` con
+    `NATIVE_CALL_ERRORS`, `apply_menu_region` con `clr_errors`).
+    """
+    try:
+        chrome(control)
+    except Exception:
+        _LOGGER.debug("Tray menu chrome failed.", exc_info=True)
 
 
 def apply_menu_chrome(
@@ -286,9 +325,6 @@ def apply_menu_chrome(
     apply_menu_region(control, api)
 
 
-def _dispose_menu(menu: Any) -> None:
+def _dispose_menu(menu: Any, api: _WinFormsApi) -> None:
     """Descarta un menu que ya no se muestra."""
-    try:
-        menu.Dispose()
-    except Exception:
-        _LOGGER.debug("Tray menu disposal failed.", exc_info=True)
+    release_native(menu.Dispose, api, what="Tray menu disposal")

@@ -19,8 +19,9 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from gestor_luces.adapters.platform.windows.window_chrome import NATIVE_CALL_ERRORS
 from gestor_luces.adapters.tray.tray_view import render_icon_image
-from gestor_luces.adapters.tray.winforms_host import _WinFormsApi
+from gestor_luces.adapters.tray.winforms_host import _WinFormsApi, release_native
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ def _destroy_icon_handle(handle: int) -> None:
     """Libera un `HICON` creado con `Bitmap.GetHicon()` (Windows no lo libera solo)."""
     try:
         ctypes.windll.user32.DestroyIcon(handle)
-    except Exception:
+    # `DestroyIcon` es una llamada `ctypes` pura: solo falla con `NATIVE_CALL_ERRORS`.
+    except NATIVE_CALL_ERRORS:
         _LOGGER.debug("DestroyIcon failed for handle %s.", handle, exc_info=True)
 
 
@@ -92,10 +94,11 @@ class IconCache:
             icon, handle = self._icon, self._handle
             self._icon, self._handle, self._rgb = None, 0, None
         if icon is not None:
-            try:
-                icon.Dispose()
-            except Exception:
-                _LOGGER.debug("Tray icon image disposal failed.", exc_info=True)
+            release_native(
+                icon.Dispose,
+                self._api,
+                what="Tray icon image disposal",
+            )
         if handle:
             self._destroy_icon(handle)
 
@@ -116,12 +119,13 @@ def apply_notify_state(notify: Any, *, title: str, icon: Any = None) -> None:
         notify.Visible = True
 
 
-def dispose_notify(notify: Any) -> None:
+def dispose_notify(notify: Any, api: _WinFormsApi) -> None:
     """Oculta y descarta el `NotifyIcon` (en el hilo de la vista)."""
     if notify is None:
         return
-    try:
+
+    def _teardown() -> None:
         notify.Visible = False
         notify.Dispose()
-    except Exception:
-        _LOGGER.debug("Tray icon disposal failed.", exc_info=True)
+
+    release_native(_teardown, api, what="Tray icon disposal")

@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from gestor_luces.adapters.tray.winforms_host import _WinFormsApi
+from gestor_luces.adapters.tray.winforms_host import _WinFormsApi, clr_errors
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -259,7 +259,13 @@ def menu_region_geometry(
 
 
 def apply_menu_region(control: Any, api: _WinFormsApi) -> bool:
-    """Recorta la ventana del menu con un rectangulo redondeado 1 px mas chico."""
+    """Recorta la ventana del menu con un rectangulo redondeado 1 px mas chico.
+
+    Este es el unico guardia de la `Region` redondeada: el import de
+    `System.Drawing.Drawing2D`, la construccion del `GraphicsPath` y la asignacion de la
+    `Region` son la misma pieza cosmetica (T-3.9). Si falla, el menu conserva el borde del
+    sistema y no lanza nunca hacia el bucle nativo.
+    """
     size = control.Size
     geometry = menu_region_geometry(
         int(size.Width),
@@ -268,14 +274,12 @@ def apply_menu_region(control: Any, api: _WinFormsApi) -> bool:
     )
     if geometry is None:
         return False
+    left, top, right, bottom, radius = geometry
+    path = None
     try:
         from System.Drawing.Drawing2D import GraphicsPath
-    except Exception:
-        _LOGGER.debug("Rounded tray menu geometry unavailable.", exc_info=True)
-        return False
-    left, top, right, bottom, radius = geometry
-    path = GraphicsPath()
-    try:
+
+        path = GraphicsPath()
         diameter = radius * 2
         path.AddArc(left, top, diameter, diameter, 180, 90)
         path.AddArc(right - diameter, top, diameter, diameter, 270, 90)
@@ -283,11 +287,13 @@ def apply_menu_region(control: Any, api: _WinFormsApi) -> bool:
         path.AddArc(left, bottom - diameter, diameter, diameter, 90, 90)
         path.CloseFigure()
         control.Region = api.drawing.Region(path)
-    except Exception:
-        _LOGGER.debug("Rounded tray menu region failed.", exc_info=True)
+    # `ImportError` cubre un runtime sin `System.Drawing.Drawing2D`; el resto es .NET.
+    except (*clr_errors(api), ImportError):
+        _LOGGER.debug("Rounded tray menu region skipped.", exc_info=True)
         return False
     finally:
-        path.Dispose()
+        if path is not None:
+            path.Dispose()
     return True
 
 
@@ -295,5 +301,7 @@ def _dpi_scale(control: Any) -> float:
     """Factor de escala del DPI de la ventana (1.0 si el runtime no lo expone)."""
     try:
         return float(control.DeviceDpi) / 96.0
-    except Exception:
+    # `DeviceDpi` existe desde .NET Framework 4.7; un runtime o un doble sin la propiedad
+    # deja la region en el radio logico (1.0).
+    except (AttributeError, TypeError, ValueError):
         return 1.0

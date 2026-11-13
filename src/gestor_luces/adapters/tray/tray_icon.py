@@ -56,6 +56,15 @@ ViewFactory = Callable[[Dispatch], TrayView | None]
 #: Constructor de icono de la vista de respaldo (`pystray.Icon` en produccion).
 IconFactory = Callable[[str, Any, str, Any], Any]
 
+#: Fallos reales de un callback de visibilidad: el composition root lee un booleano, asi que
+#: solo un callback ajeno puede fallar al leerlo.
+_VISIBILITY_ERRORS: tuple[type[BaseException], ...] = (
+    OSError,
+    RuntimeError,
+    TypeError,
+    AttributeError,
+)
+
 __all__ = [
     "ICON_NAME",
     "ICON_SIZE",
@@ -218,10 +227,21 @@ class TrayController:
         view = self._view
         if view is None:
             return
+        self._call_view(view.stop, "Failed to stop the tray view.")
+
+    def _call_view(self, call: Callable[[], None], failure: str) -> None:
+        """Ejecuta una llamada a la vista nativa sin propagar su excepcion al controlador.
+
+        FRONTERA (contrato `TrayView`): este modulo no importa ningun toolkit grafico, asi
+        que no puede nombrar la excepcion de `pystray` (`ctypes`) ni la del CLR cuando la
+        vista es WinForms. Un fallo al detener la vista o al aplicarle estado no puede
+        tumbar el hilo de refresco ni el cierre de la app; se registra con traza. Es el
+        unico guardia de esta preocupacion: lo comparten `stop` y `_push_state`.
+        """
         try:
-            view.stop()
+            call()
         except Exception:
-            _LOGGER.exception("Failed to stop the tray view.")
+            _LOGGER.exception(failure)
 
     def request_refresh(self) -> None:
         """Solicita un refresco asincrono sin bloquear al llamador (p. ej. el hilo GUI)."""
@@ -231,6 +251,11 @@ class TrayController:
         """Recalcula menu, tooltip e imagen y entrega el estado a la vista."""
         try:
             snapshot = self._actions.get_tray_snapshot()
+        # FRONTERA (refresco de la bandeja): `refresh` es el cuerpo del hilo de refresco y
+        # ademas se llama al arrancar, asi que su fallo deja la bandeja congelada o impide
+        # que exista. `get_tray_snapshot` corre dentro del bucle del puente (timeout propio)
+        # y lee un estado que otro hilo muta: se registra la traza y se conserva el estado
+        # anterior, que el sondeo vuelve a intentar en el proximo ciclo.
         except Exception:
             _LOGGER.exception("Failed to read lighting state for the tray.")
             return
@@ -272,10 +297,10 @@ class TrayController:
         view = self._view
         if view is None or self._stopped.is_set():
             return
-        try:
-            view.apply(list(spec), title, rgb, theme)
-        except Exception:
-            _LOGGER.exception("Failed to apply the tray state to the view.")
+        self._call_view(
+            lambda: view.apply(list(spec), title, rgb, theme),
+            "Failed to apply the tray state to the view.",
+        )
 
     def dispatch(self, action_id: str, payload: Any = None) -> None:
         """Encola una accion del menu en el ejecutor para no bloquear el bombeo nativo."""
@@ -291,8 +316,12 @@ class TrayController:
             return
         try:
             handler(payload)
+        # FRONTERA (hilo de acciones): el ejecutor crea un hilo por accion y el log es el
+        # unico lugar donde ver el fallo. Los manejadores cruz a pywebview (mostrar,
+        # ocultar, destruir la ventana) y a pythonnet, que no garantizan el tipo de
+        # excepcion del host; un fallo de red o de ventana nunca debe propagarse al hilo de
+        # la bandeja ni dejar el icono sin su proximo refresco.
         except Exception:
-            # Un fallo de red o de ventana nunca debe propagarse al hilo de la bandeja.
             _LOGGER.exception("Tray action '%s' failed.", action_id)
         if action_id != ACTION_QUIT:
             # Nunca se refresca desde el hilo de la accion: el estado nativo lo aplica el
@@ -305,10 +334,9 @@ class TrayController:
         if isinstance(response, dict) and not response.get("ok", True):
             _LOGGER.warning("Tray action rejected by the service: %s", response.get("error"))
         if self._notify_ui is not None:
-            try:
-                self._notify_ui()
-            except Exception:
-                _LOGGER.exception("Failed to notify the web UI about a tray change.")
+            # Sin guardia propio: un fallo del aviso a la UI sube a `_run_action`, que ya
+            # registra la accion concreta y conserva el refresco posterior.
+            self._notify_ui()
 
     def _refresh_worker(self) -> None:
         """Atiende solicitudes de refresco y sondea periodicamente cambios silenciosos.
@@ -335,6 +363,8 @@ class TrayController:
     def _safe_window_visible(self) -> bool:
         try:
             return bool(self._is_window_visible())
-        except Exception:
+        # Un callback de visibilidad que no responde no puede cortar el refresco (la vista
+        # asume ventana visible, que es el estado con el que arranca la app).
+        except _VISIBILITY_ERRORS:
             _LOGGER.exception("Failed to read window visibility.")
             return True

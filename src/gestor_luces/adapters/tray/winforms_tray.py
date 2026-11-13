@@ -26,6 +26,7 @@ from gestor_luces.adapters.tray.winforms_host import (
     _co_initialize_apartment,
     _load_winforms,
     _WinFormsApi,
+    clr_errors,
     create_host_form,
     create_view,
     dispose_host,
@@ -156,6 +157,11 @@ class WinFormsTrayView:
             # El primer estado se aplica en el propio hilo de la vista, antes del bombeo.
             self._apply_native(state)
             run_message_loop(api, form)
+        # FRONTERA (bucle de la bandeja): este es el unico punto que corre dentro del
+        # despacho nativo de WinForms y el hilo STA. Una excepcion que escape de aca no
+        # rompe solo una fila del menu: retira el icono, y con la ventana oculta el usuario
+        # pierde la unica forma de llegar a la app. Se registra con traza y el `finally`
+        # libera los recursos igual.
         except Exception:
             _LOGGER.exception("The WinForms tray message loop failed.")
         finally:
@@ -218,7 +224,9 @@ class WinFormsTrayView:
         try:
             icon = self._icon_for(rgb) if icon_changed else None
             apply_notify_state(notify, title=title, icon=icon)
-        except Exception:
+        # Tooltip e icono son propiedades de .NET (`NotifyIcon.Text`/`Icon`), asi que solo
+        # fallan con `clr_errors`; la vista se refresca de nuevo en el proximo cambio.
+        except clr_errors(self._api):
             _LOGGER.exception("Failed to update the tray icon.")
             return
         if rebuild and displayed:
@@ -233,7 +241,9 @@ class WinFormsTrayView:
             new_menu = self._build_menu(spec, resolve_palette(theme)) if rebuild else menu
             if rebuild:
                 notify.ContextMenuStrip = new_menu
-        except Exception:
+        # Construir el `ContextMenuStrip` cruza a .NET: si falla, el menu anterior sigue
+        # asignado y no se pierde ninguna accion.
+        except clr_errors(self._api):
             _LOGGER.exception("Failed to apply the tray menu.")
             return
         with self._lock:
@@ -245,7 +255,7 @@ class WinFormsTrayView:
             self._deferred_menu = None
         if rebuild:
             if previous is not None:
-                _dispose_menu(previous)
+                _dispose_menu(previous, self._api)
             log_applied_menu(spec)
 
     def _build_menu(self, spec: Sequence[TrayMenuEntry], palette: TrayPalette) -> Any:
@@ -271,7 +281,9 @@ class WinFormsTrayView:
         try:
             if event_args.Button != self._api.forms.MouseButtons.Left:
                 return
-        except Exception:
+        # Leer el boton del evento solo falla con un fallo de binding de pythonnet (o de un
+        # doble de prueba); sin boton legible no se despacha nada.
+        except (AttributeError, TypeError):
             _LOGGER.debug("Tray mouse event without a button could not be read.", exc_info=True)
             return
         with self._lock:
@@ -290,8 +302,8 @@ class WinFormsTrayView:
             form, notify, menu = self._form, self._notify, self._menu
             self._form = self._notify = self._menu = None
             self._applied_menu = None
-        dispose_notify(notify)
+        dispose_notify(notify, self._api)
         if menu is not None:
-            _dispose_menu(menu)
+            _dispose_menu(menu, self._api)
         self._icons.dispose()
-        dispose_host(form)
+        dispose_host(self._api, form)
