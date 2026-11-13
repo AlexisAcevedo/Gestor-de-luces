@@ -20,7 +20,7 @@ cambia de tamaño.
 | T2 fit real: medir solo la pestaña activa, eliminar el piso del baseline y el clamp de medición | S2, S3 | inline | `6efe4e4` |
 | T3 refit después de renders asíncronos y cambio de idioma | S4 | inline | `6efe4e4` |
 | T4 tests: guardrail de CSS y del contrato del fit | S1, S3 | inline | `6efe4e4` |
-| T5 checklist manual en Windows real (escenas crece, presets achica, sin scroll interno) | S1, S2 | usuario + inline | — |
+| T5 checklist manual en Windows real (escenas crece, presets achica, sin scroll interno) | S1, S2 | usuario + inline | verificado (L7) |
 
 ## Log
 
