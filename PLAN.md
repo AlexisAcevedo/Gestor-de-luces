@@ -685,4 +685,16 @@ razón. Excepciones aceptadas:
 Y se agrega **T-4.5** para `adapters/tray/winforms_tray.py` (920), que sí es lógica real y no una
 tabla ni cableado.
 
+**G11 — Enmienda a Gate 5 (2026-11-13, usuario): el objetivo de ≤10 se reemplaza por ≤25 documentado**
+Gate 5 («≤ 10 `except Exception`, todos de frontera y logueados») se escribió cuando el árbol
+tenía 75 handlers indiferenciados, 54 de ellos en `bridge.py` (34) y `main.py` (20). T-4.2 y
+T-3.3/T-3.4 reestructuraron esos dos archivos antes de que empezara la Fase 5, así que la
+premisa del número ya no existía. T-5.1 se ejecutó en tres slices y llevó `src/` de 76 a 24
+handlers. Enmienda: Gate 5 se cumple cuando (a) `grep -rn "except Exception" src/` ≤ 25,
+(b) cada superviviente tiene un comentario que justifica por qué es frontera, (c) cada
+preocupación tiene una sola política compartida y no un swallow por sitio, y (d)
+`grep -rn "except:\|except BaseException" src/` = 0. Bajar de 25 exigiría un `guard()`
+genérico usado en todas partes: el contador bajaría y el swallowing quedaría igual, solo que
+centralizado, perdiendo la auditabilidad que T-5.1 busca.
+
 **Decisiones resueltas (2026-11-08, usuario):** D1 = A · D2 = A · D3 = A · D4 = A.
