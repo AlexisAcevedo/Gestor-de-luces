@@ -256,6 +256,79 @@ def test_inner_hexagonal_layers_never_import_adapters() -> None:
                     )
 
 
+def test_webview_bridge_depends_on_the_port_not_the_concrete_service() -> None:
+    """El adaptador primario depende del puerto, nunca de la clase de aplicacion (T-4.3)."""
+    import ast
+
+    src_root = Path(__file__).resolve().parents[1] / "src" / "gestor_luces"
+    bridge_file = src_root / "adapters" / "ui_webview" / "bridge.py"
+    tree = ast.parse(bridge_file.read_text(encoding="utf-8"), filename=str(bridge_file))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith("gestor_luces.application"), (
+                    f"{bridge_file} imports {alias.name}"
+                )
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("gestor_luces.application"), (
+                f"{bridge_file} imports from {node.module}"
+            )
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                assert alias.name != "LightControlService", (
+                    f"{bridge_file} imports the concrete LightControlService"
+                )
+
+
+def test_light_control_port_covers_the_service_surface_the_bridge_uses() -> None:
+    """El puerto declara justo lo que el puente consume, y el servicio lo satisface."""
+    import ast
+    import inspect
+    from typing import get_origin, get_type_hints
+
+    from gestor_luces.ports.light_control import LightControlServicePort
+
+    def satisfies(port_return: object, service_return: object) -> bool:
+        """`service_return` cumple `port_return` si es el mismo o un subtipo estructural."""
+        if port_return == service_return:
+            return True
+        origin = get_origin(port_return) or port_return
+        return (
+            isinstance(service_return, type)
+            and isinstance(origin, type)
+            and issubclass(service_return, origin)
+        )
+
+    src_root = Path(__file__).resolve().parents[1] / "src" / "gestor_luces"
+    bridge_file = src_root / "adapters" / "ui_webview" / "bridge.py"
+    tree = ast.parse(bridge_file.read_text(encoding="utf-8"), filename=str(bridge_file))
+    consumed = {
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "_service"
+    }
+    declared = {name for name in vars(LightControlServicePort) if not name.startswith("_")}
+    assert consumed == declared
+
+    for name in sorted(declared):
+        port_params = inspect.signature(getattr(LightControlServicePort, name)).parameters
+        service_params = list(
+            inspect.signature(getattr(LightControlService, name)).parameters.values()
+        )[: len(port_params)]
+        assert list(port_params) == [param.name for param in service_params]
+        assert [param.default for param in port_params.values()] == [
+            param.default for param in service_params
+        ]
+        port_return = get_type_hints(getattr(LightControlServicePort, name))["return"]
+        service_return = get_type_hints(getattr(LightControlService, name))["return"]
+        assert satisfies(port_return, service_return), (
+            f"{name}: {service_return} does not satisfy {port_return}"
+        )
+
+
 def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
     import threading
 

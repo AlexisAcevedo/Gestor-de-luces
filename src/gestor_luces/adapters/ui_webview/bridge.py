@@ -1,11 +1,11 @@
-"""Puente IPC entre la ventana de PyWebView (JavaScript) y LightControlService.
+"""Puente IPC entre la ventana de PyWebView (JavaScript) y el puerto de control de luces.
 
 PyWebView invoca los metodos expuestos en `js_api` desde hilos de trabajo sincronos,
-mientras que el nucleo de comunicacion UDP (`WizUdpController` y `LightControlService`)
-es completamente asincrono sobre `asyncio`. Para evitar bloquear la interfaz grafica
-o crear bucles de eventos efimeros que rompan el transporte UDP en Windows, este
-adaptador mantiene un event loop dedicado en un hilo demonio en segundo plano y
-despacha cada operacion mediante `asyncio.run_coroutine_threadsafe`.
+mientras que el nucleo de comunicacion UDP (`WizUdpController`) y el servicio de control
+(`LightControlServicePort`) son completamente asincronos sobre `asyncio`. Para evitar
+bloquear la interfaz grafica o crear bucles de eventos efimeros que rompan el transporte
+UDP en Windows, este adaptador mantiene un event loop dedicado en un hilo demonio en
+segundo plano y despacha cada operacion mediante `asyncio.run_coroutine_threadsafe`.
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ from collections.abc import Callable, Coroutine
 from types import MethodType
 from typing import Any
 
-from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.models import Bulb
 from gestor_luces.domain.scenes import list_builtin_scenes
 from gestor_luces.ports.autostart import AutostartManager
+from gestor_luces.ports.light_control import LightControlServicePort
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,12 +45,14 @@ class WebviewBridge:
 
     def __init__(
         self,
-        service: LightControlService,
+        service: LightControlServicePort,
         default_timeout: float = 12.0,
         on_state_changed: Callable[[], None] | None = None,
         autostart: AutostartManager | None = None,
         fit_window_height: Callable[[int], bool] | None = None,
     ) -> None:
+        # Frontera hexagonal (T-4.3): el adaptador solo conoce el puerto; la fachada concreta
+        # de `gestor_luces.application` se inyecta desde la raiz de composicion.
         self._service = service
         # Private on purpose (see `_on_state_changed`): never exposed to JavaScript.
         self._autostart = autostart
