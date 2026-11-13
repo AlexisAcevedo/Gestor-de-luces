@@ -14,6 +14,7 @@ import asyncio
 import logging
 import threading
 from collections.abc import Callable, Coroutine
+from types import MethodType
 from typing import Any
 
 from gestor_luces.application.service import LightControlService
@@ -25,6 +26,18 @@ _LOGGER = logging.getLogger(__name__)
 
 FIT_WINDOW_MIN_PX = 200
 FIT_WINDOW_MAX_PX = 4000
+
+# Errores que un caso de uso puede lanzar al invocarse desde JavaScript y que la vista ya
+# sabe presentar como `{ok: False, error}`. Cualquier otra excepcion propaga: un fallo
+# inesperado no debe disfrazarse de error de validacion del puente.
+_SERVICE_CALL_ERRORS: tuple[type[BaseException], ...] = (
+    ValueError,  # validacion del servicio y conversiones int()/float() de argumentos JS
+    KeyError,  # preset o foco inexistente
+    TypeError,  # argumentos JS con la forma equivocada
+    OSError,  # E/S de persistencia y de red
+    RuntimeError,  # bucle asincrono detenido o fallo de plataforma
+    TimeoutError,  # el servicio no respondio dentro del timeout del puente
+)
 
 
 class WebviewBridge:
@@ -139,6 +152,8 @@ class WebviewBridge:
         try:
             return self._run_async(_snapshot(), timeout=3.0)
         except Exception:
+            # Frontera: si el bucle asincrono falla al serializar el estado, degradamos a
+            # la lectura directa en lugar de romper la respuesta que espera JavaScript.
             return self._collect_response_snapshot(ok=ok, error=error)
 
     def _success_response(self) -> dict[str, Any]:
@@ -157,6 +172,8 @@ class WebviewBridge:
         try:
             self._on_state_changed()
         except Exception:
+            # Frontera: el observador es codigo de la bandeja, no del puente; su fallo
+            # no debe impedir que la operacion pedida desde la vista se confirme.
             _LOGGER.exception("State change listener failed.")
 
     def shutdown(self) -> None:
@@ -180,6 +197,8 @@ class WebviewBridge:
                 else:
                     self._service.close_audio_sampler()
             except Exception:
+                # Frontera: `shutdown` corre en el cierre de la app y es idempotente; una
+                # excepcion aqui dejaria el bucle o el hilo sin liberar.
                 _LOGGER.debug(
                     "Ignoring error while cancelling streams during shutdown.", exc_info=True
                 )
@@ -244,7 +263,7 @@ class WebviewBridge:
 
             self._run_async(_init(), timeout=15.0)
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_language(self, language: str) -> dict[str, Any]:
@@ -256,7 +275,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_theme(self, theme: str) -> dict[str, Any]:
@@ -270,7 +289,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_fit_window_callback(self, callback: Callable[[int], bool] | None) -> None:
@@ -293,6 +312,8 @@ class WebviewBridge:
         try:
             return {"ok": bool(callback(content_px))}
         except Exception as exc:
+            # Frontera: el callback es el host nativo Win32 (ventana/DPI); su fallo debe
+            # volver a la vista como error de ajuste, no propagarse por el puente.
             _LOGGER.debug("Window fit callback failed.", exc_info=True)
             return {"ok": False, "error": str(exc)}
 
@@ -302,7 +323,7 @@ class WebviewBridge:
             return {"ok": False, "error": "Autostart is not available.", "enabled": False}
         try:
             return {"ok": True, "enabled": bool(self._autostart.is_enabled())}
-        except Exception as exc:
+        except OSError as exc:
             return {"ok": False, "error": str(exc), "enabled": False}
 
     def set_autostart(self, enabled: bool) -> dict[str, Any]:
@@ -316,7 +337,7 @@ class WebviewBridge:
                 self._autostart.disable()
             self._notify_state_changed()
             return {"ok": True, "enabled": bool(self._autostart.is_enabled())}
-        except Exception as exc:
+        except OSError as exc:
             return {"ok": False, "error": str(exc), "enabled": False}
 
     def discover_bulbs(self) -> dict[str, Any]:
@@ -324,7 +345,7 @@ class WebviewBridge:
         try:
             self._run_async(self._service.discover_bulbs(wait_time=2.0), timeout=15.0)
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def add_manual_bulb(self, ip: str, name: str = "") -> dict[str, Any]:
@@ -332,7 +353,7 @@ class WebviewBridge:
         try:
             self._run_async(self._service.add_manual_bulb(ip=str(ip), name=str(name)))
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def rename_bulb(self, ip: str, new_name: str) -> dict[str, Any]:
@@ -344,7 +365,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def select_targets(self, ips: list[str]) -> dict[str, Any]:
@@ -357,7 +378,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def refresh_states(self) -> dict[str, Any]:
@@ -371,7 +392,7 @@ class WebviewBridge:
 
             self._run_async(_refresh(), timeout=6.0)
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_power(
@@ -392,7 +413,7 @@ class WebviewBridge:
                 )
             )
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_brightness(
@@ -410,7 +431,7 @@ class WebviewBridge:
                 )
             )
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_color(
@@ -435,7 +456,7 @@ class WebviewBridge:
                 )
             )
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_temperature(
@@ -456,7 +477,7 @@ class WebviewBridge:
                 )
             )
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_builtin_scene(
@@ -480,7 +501,7 @@ class WebviewBridge:
                 )
             )
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def save_custom_scene(
@@ -500,7 +521,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def update_custom_scene(
@@ -528,7 +549,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def delete_custom_scene(self, scene_id: str) -> dict[str, Any]:
@@ -540,7 +561,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> dict[str, Any]:
@@ -555,7 +576,7 @@ class WebviewBridge:
 
             self._run_async(_apply())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def apply_custom_scene(
@@ -573,7 +594,7 @@ class WebviewBridge:
                 )
             )
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def start_sleep_timer(
@@ -593,7 +614,7 @@ class WebviewBridge:
 
             self._run_async(_start())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def cancel_sleep_timer(self) -> dict[str, Any]:
@@ -605,7 +626,7 @@ class WebviewBridge:
 
             self._run_async(_cancel())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def get_sleep_timer_status(self) -> dict[str, Any]:
@@ -613,7 +634,7 @@ class WebviewBridge:
         try:
             # Consulta de solo lectura sondeada cada segundo: no notifica a la bandeja.
             return self._build_response(ok=True)
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def start_ambilight(
@@ -643,7 +664,7 @@ class WebviewBridge:
 
             self._run_async(_start())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def stop_ambilight(self) -> dict[str, Any]:
@@ -655,7 +676,7 @@ class WebviewBridge:
 
             self._run_async(_stop())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def get_ambilight_status(self) -> dict[str, Any]:
@@ -663,7 +684,7 @@ class WebviewBridge:
         try:
             # Sondeo frecuente de previsualizacion: evita reconstruir el menu Win32 cada 400ms.
             return self._build_response(ok=True)
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def start_music_sync(
@@ -694,7 +715,7 @@ class WebviewBridge:
 
             self._run_async(_start())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def stop_music_sync(self) -> dict[str, Any]:
@@ -706,7 +727,7 @@ class WebviewBridge:
 
             self._run_async(_stop())
             return self._success_response()
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
     def get_music_sync_status(self) -> dict[str, Any]:
@@ -714,7 +735,7 @@ class WebviewBridge:
         try:
             # Sondeo de 250ms de barras espectrales: no reconstruye el menu de la bandeja.
             return self._build_response(ok=True)
-        except Exception as exc:
+        except _SERVICE_CALL_ERRORS as exc:
             return self._build_response(ok=False, error=str(exc))
 
 
@@ -727,13 +748,51 @@ JS_API_EXCLUDED: frozenset[str] = frozenset(
     }
 )
 
+# Tabla de despacho explicita (T-4.2): nombre visible desde JavaScript -> metodo del puente.
+# Escrita a mano y en orden alfabetico para que la superficie de IPC sea auditable de un
+# vistazo. Antes se inferia reflejando `dir(WebviewBridge)`, de modo que cualquier metodo
+# publico nuevo quedaba expuesto a la vista sin que nadie lo decidiera. `fit_window_height`
+# no esta aqui a proposito: `JsApi` lo reimplementa para no exponer el handle nativo.
+JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
+    "add_manual_bulb": WebviewBridge.add_manual_bulb,
+    "apply_custom_scene": WebviewBridge.apply_custom_scene,
+    "cancel_sleep_timer": WebviewBridge.cancel_sleep_timer,
+    "delete_custom_scene": WebviewBridge.delete_custom_scene,
+    "discover_bulbs": WebviewBridge.discover_bulbs,
+    "get_ambilight_status": WebviewBridge.get_ambilight_status,
+    "get_autostart": WebviewBridge.get_autostart,
+    "get_initial_state": WebviewBridge.get_initial_state,
+    "get_music_sync_status": WebviewBridge.get_music_sync_status,
+    "get_sleep_timer_status": WebviewBridge.get_sleep_timer_status,
+    "refresh_states": WebviewBridge.refresh_states,
+    "rename_bulb": WebviewBridge.rename_bulb,
+    "save_custom_scene": WebviewBridge.save_custom_scene,
+    "select_targets": WebviewBridge.select_targets,
+    "set_autostart": WebviewBridge.set_autostart,
+    "set_brightness": WebviewBridge.set_brightness,
+    "set_builtin_scene": WebviewBridge.set_builtin_scene,
+    "set_color": WebviewBridge.set_color,
+    "set_custom_scene_favorite": WebviewBridge.set_custom_scene_favorite,
+    "set_language": WebviewBridge.set_language,
+    "set_power": WebviewBridge.set_power,
+    "set_temperature": WebviewBridge.set_temperature,
+    "set_theme": WebviewBridge.set_theme,
+    "start_ambilight": WebviewBridge.start_ambilight,
+    "start_music_sync": WebviewBridge.start_music_sync,
+    "start_sleep_timer": WebviewBridge.start_sleep_timer,
+    "stop_ambilight": WebviewBridge.stop_ambilight,
+    "stop_music_sync": WebviewBridge.stop_music_sync,
+    "update_custom_scene": WebviewBridge.update_custom_scene,
+}
+
 
 class JsApi:
-    """Fachada que expone a JavaScript unicamente los metodos aptos para la UI.
+    """Fachada que expone a JavaScript unicamente los metodos de `JS_API_DISPATCH`.
 
-    pywebview publica todo metodo publico del objeto `js_api`. Los metodos de
-    ciclo de vida y de bandeja de `WebviewBridge` quedan fuera de esta fachada
-    para que el contenido web no pueda cerrar la app ni manipular la bandeja.
+    pywebview publica todo atributo publico del objeto `js_api`. La tabla de despacho es
+    la unica fuente de verdad de esa superficie, y los metodos de ciclo de vida y de
+    bandeja de `WebviewBridge` (`JS_API_EXCLUDED`) quedan fuera para que el contenido web
+    no pueda cerrar la app ni manipular la bandeja.
     """
 
     def __init__(
@@ -743,11 +802,8 @@ class JsApi:
     ) -> None:
         self._bridge = bridge
         self._fit_window = fit_window
-        for name in dir(WebviewBridge):
-            if name.startswith("_") or name in JS_API_EXCLUDED or name == "fit_window_height":
-                continue
-            if callable(getattr(WebviewBridge, name, None)):
-                setattr(self, name, getattr(bridge, name))
+        for name, handler in JS_API_DISPATCH.items():
+            setattr(self, name, MethodType(handler, bridge))
 
     def fit_window_height(self, content_px: int) -> dict[str, Any]:
         """Solicita al host redimensionar la ventana sin exponer el handle nativo a JavaScript."""
@@ -763,6 +819,7 @@ class JsApi:
             try:
                 return {"ok": bool(callback(content_px))}
             except Exception as exc:
+                # Frontera: el callback nativo de la ventana no debe romper el puente JS.
                 _LOGGER.debug("Window fit callback failed.", exc_info=True)
                 return {"ok": False, "error": str(exc)}
         bridge = getattr(self, "_bridge", None)

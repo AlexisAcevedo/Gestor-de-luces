@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 from gestor_luces.adapters.storage.json_repositories import _atomic_write_json
-from gestor_luces.adapters.ui_webview.bridge import JS_API_EXCLUDED, JsApi, WebviewBridge
+from gestor_luces.adapters.ui_webview.bridge import (
+    JS_API_DISPATCH,
+    JS_API_EXCLUDED,
+    JsApi,
+    WebviewBridge,
+)
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController, _safe_int, _safe_text
 from gestor_luces.application.service import (
     MAX_DISPLAY_NAME_LEN,
@@ -59,14 +65,115 @@ def test_max_explicit_targets_is_bounded() -> None:
     assert 1 <= MAX_EXPLICIT_TARGETS <= 256
 
 
+_JS_API_SURFACE = frozenset(
+    {
+        "add_manual_bulb",
+        "apply_custom_scene",
+        "cancel_sleep_timer",
+        "delete_custom_scene",
+        "discover_bulbs",
+        "fit_window_height",
+        "get_ambilight_status",
+        "get_autostart",
+        "get_initial_state",
+        "get_music_sync_status",
+        "get_sleep_timer_status",
+        "refresh_states",
+        "rename_bulb",
+        "save_custom_scene",
+        "select_targets",
+        "set_autostart",
+        "set_brightness",
+        "set_builtin_scene",
+        "set_color",
+        "set_custom_scene_favorite",
+        "set_language",
+        "set_power",
+        "set_temperature",
+        "set_theme",
+        "start_ambilight",
+        "start_music_sync",
+        "start_sleep_timer",
+        "stop_ambilight",
+        "stop_music_sync",
+        "update_custom_scene",
+    }
+)
+
+
+def test_js_api_dispatch_table_is_explicit_and_pinned() -> None:
+    """La superficie JS vive en una tabla escrita a mano, no en reflexion sobre la clase."""
+    assert set(JS_API_DISPATCH) == _JS_API_SURFACE - {"fit_window_height"}
+    for name, handler in JS_API_DISPATCH.items():
+        assert name in _JS_API_SURFACE
+        assert handler is getattr(WebviewBridge, name)
+
+
 def test_js_api_hides_lifecycle_methods() -> None:
-    api = JsApi.__new__(JsApi)
-    for name in dir(WebviewBridge):
-        if not name.startswith("_") and name not in JS_API_EXCLUDED:
-            setattr(api, name, lambda: None)
+    """Ni la tabla ni la instancia exponen los metodos de ciclo de vida o de bandeja."""
+    assert not set(JS_API_DISPATCH) & JS_API_EXCLUDED
+    api = JsApi(MagicMock())
     public = {n for n in dir(api) if not n.startswith("_")}
+    assert public == _JS_API_SURFACE
     assert not public & JS_API_EXCLUDED
     assert "set_power" in public
+
+
+def test_js_api_binds_every_exposed_method_to_the_bridge_instance() -> None:
+    """Cada nombre JS sigue siendo el metodo del puente ligado a esa instancia."""
+    bridge = MagicMock()
+    api = JsApi(bridge)
+    for name in JS_API_DISPATCH:
+        assert getattr(api, name).__self__ is bridge
+    assert api._bridge is bridge
+
+
+def test_bridge_narrows_service_errors_to_the_declared_tuple() -> None:
+    """Un error esperado del servicio sigue devolviendo `{ok: False, error}`."""
+
+    class ValidationService(LightControlService):
+        async def set_power(
+            self,
+            is_on: bool,
+            brightness: int | None = None,
+            ips: list[str] | None = None,
+        ) -> list[Bulb]:
+            raise ValueError("Brightness must be between 10 and 100.")
+
+    bridge = WebviewBridge(
+        service=ValidationService(controller=WizUdpController(probe_candidates=[]))
+    )
+    try:
+        response = bridge.set_power(True)
+    finally:
+        bridge.shutdown()
+    assert response["ok"] is False
+    assert response["error"] == "Brightness must be between 10 and 100."
+
+
+def test_bridge_propagates_errors_outside_the_declared_tuple() -> None:
+    """Un error inesperado ya no se silencia: sale del puente en vez de fingir un fallo de UI."""
+
+    class UnexpectedError(Exception):
+        pass
+
+    class ExplodingService(LightControlService):
+        async def set_power(
+            self,
+            is_on: bool,
+            brightness: int | None = None,
+            ips: list[str] | None = None,
+        ) -> list[Bulb]:
+            raise UnexpectedError("boom")
+
+    bridge = WebviewBridge(
+        service=ExplodingService(controller=WizUdpController(probe_candidates=[]))
+    )
+    try:
+        with pytest.raises(UnexpectedError):
+            bridge.set_power(True)
+    finally:
+        bridge.shutdown()
 
 
 async def test_discover_ignores_broadcast_hits_when_probe_fails(
