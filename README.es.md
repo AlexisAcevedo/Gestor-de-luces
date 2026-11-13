@@ -41,7 +41,9 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Mapeo de frecuencias a color con sensibilidad de ganancia configurable y caída suavizada.
 
 5. Bandeja del Sistema y Ejecución en Segundo Plano:
-   - Ejecución silenciosa en el Área de Notificación de Windows mediante `pystray`.
+   - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo
+     WinForms `NotifyIcon` pintado con el tema activo (con respaldo `pystray` si WinForms no
+     puede cargar).
    - Menú de presets rápidos, alternancia de encendido general y minimización elegante a la bandeja al cerrar la ventana.
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
 
@@ -66,7 +68,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 ```
                       +---------------------------------------+
                       |       Interfaz Gráfica (WebView2)     |
-                      |       Bandeja del Sistema (pystray)   |
+                      |   Bandeja del Sistema (NotifyIcon)    |
                       |       Utilidad de Diagnóstico CLI     |
                       +-------------------+-------------------+
                                           |
@@ -112,7 +114,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 | Entorno de Ejecución | Python | >= 3.11 (verificado en 3.14) | Plataforma base del lenguaje |
 | Red | `pywizlight` | 0.6.6 | Transporte por sockets UDP en puerto 38899 |
 | Contenedor de Escritorio | `pywebview` | 6.2.1 | Ventana nativa sobre Microsoft Edge WebView2 |
-| Bandeja del Sistema | `pystray` / `Pillow` | 0.19.5 / 13.0.0 | Icono y menú en el Área de Notificaciones de Windows |
+| Bandeja del Sistema | `Pillow` / `pystray` | 13.0.0 / 0.19.5 | `Pillow` dibuja el icono del foco; el menú es un `NotifyIcon` de WinForms y `pystray` queda como vista de respaldo |
 | Captura de Pantalla | `mss` | 10.2.0 | Captura eficiente del búfer GDI de Win32 |
 | Captura de Audio | `PyAudioWPatch` | 0.2.12.9 | Captura de la salida del sistema vía WASAPI loopback |
 | Procesamiento de Señal | `numpy` | 2.5.4 | Transformada Discreta de Fourier y análisis espectral en tiempo real |
@@ -169,18 +171,28 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           ├── storage/         # Repositorios en disco JSON (%LOCALAPPDATA%)
 │           ├── ambilight/       # Muestreador de pantalla MSS
 │           ├── audio/           # Muestreador de audio WASAPI loopback
-│           ├── tray/            # Bandeja del sistema con pystray y render compartido de la bombilla
+│           ├── tray/            # Controlador de bandeja, vistas WinForms/Pystray y render del icono
 │           ├── system/          # Autoinicio de Windows (registro) e instancia única
 │           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
 ├── tests/                       # Suite de pruebas automatizadas
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
 │   ├── js/                      # Pruebas unitarias del frontend (node --test, sin dependencias)
+│   ├── waits.py                 # Esperas acotadas por condición compartidas por la suite
+│   ├── test_cli.py              # Subcomandos del CLI contra el simulador UDP
+│   ├── test_coverage_badge_json.py # Endpoint JSON del badge de cobertura
+│   ├── test_coverage_gate.py    # Lógica del gate de cobertura por paquete
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
+│   ├── test_menu_state.py       # Pruebas del sondeo de menú de bandeja abierto
+│   ├── test_native_menu.py      # Pruebas del modelo de menú nativo y su sync en vivo
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
+│   ├── test_scene_catalog_sync.py # Sincronía entre ui/scenes.json y BUILTIN_SCENES
+│   ├── test_single_instance.py  # Guarda de instancia única con procesos reales
+│   ├── test_thread_lifecycle.py # Ningún hilo con nombre de la app sobrevive al cierre
 │   ├── test_persistence_and_scenes.py # Pruebas de persistencia JSON y presets
 │   ├── test_wiz_integration.py  # Pruebas de integración UDP contra el simulador
 │   ├── test_ui_bridge.py        # Pruebas del puente asíncrono con la interfaz gráfica
 │   ├── test_tray.py             # Pruebas de la bandeja del sistema y sincronización
+│   ├── test_winforms_tray.py    # Vista WinForms de la bandeja: paleta, painter, marshalling
 │   ├── test_ambilight.py        # Pruebas de captura de pantalla y suavizado EMA
 │   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
 │   ├── test_i18n.py             # Pruebas de localización bilingüe

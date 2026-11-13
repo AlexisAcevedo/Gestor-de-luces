@@ -41,7 +41,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Frequency-to-color mapping with configurable gain sensitivity and smoothing decay.
 
 5. System Tray & Background Residency:
-   - Runs silently in the Windows Notification Area via `pystray`.
+   - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`
+     menu painted with the active theme (with a `pystray` fallback when WinForms cannot load).
    - Quick presets menu, master power toggle, and graceful minimize-to-tray on window close.
    - Deadlock-free WinForms and PyWebView synchronization.
 
@@ -66,7 +67,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 ```
                       +---------------------------------------+
                       |       Desktop UI (WebView2 / HTML5)   |
-                      |       System Tray (pystray / Win32)   |
+                      |       System Tray (WinForms NotifyIcon)|
                       |       CLI Diagnostic Utility          |
                       +-------------------+-------------------+
                                           |
@@ -112,7 +113,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 | Runtime | Python | >= 3.11 (tested on 3.14) | Base language platform |
 | Networking | `pywizlight` | 0.6.6 | Local UDP 38899 socket transport |
 | Desktop Container | `pywebview` | 6.2.1 | Native window wrapping Microsoft Edge WebView2 |
-| System Tray | `pystray` / `Pillow` | 0.19.5 / 13.0.0 | Windows system notification area icon and menu |
+| System Tray | `Pillow` / `pystray` | 13.0.0 / 0.19.5 | `Pillow` renders the bulb icon; the tray menu is a WinForms `NotifyIcon`, with `pystray` as the fallback view |
 | Screen Capture | `mss` | 10.2.0 | High-performance Win32 GDI screen buffer grabber |
 | Audio Capture | `PyAudioWPatch` | 0.2.12.9 | WASAPI loopback system output capture |
 | DSP / FFT | `numpy` | 2.5.4 | Real-time Discrete Fourier Transform and spectral analysis |
@@ -169,18 +170,28 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           ├── storage/         # %LOCALAPPDATA% JSON file repositories
 │           ├── ambilight/       # MSS screen sampler
 │           ├── audio/           # WASAPI loopback audio sampler
-│           ├── tray/            # Pystray tray controller and shared bulb icon renderer
+│           ├── tray/            # Tray controller, WinForms/Pystray views and bulb icon renderer
 │           ├── system/          # Windows autostart (registry) and single-instance guard
 │           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
 ├── tests/                       # Automated test suite
 │   ├── simulators/              # In-memory WiZ UDP server simulator
 │   ├── js/                      # Frontend unit tests (node --test, zero dependencies)
+│   ├── waits.py                 # Bounded condition waits shared by the suite
+│   ├── test_cli.py              # CLI subcommands against the UDP simulator
+│   ├── test_coverage_badge_json.py # shields.io coverage endpoint JSON
+│   ├── test_coverage_gate.py    # Per-package coverage gate logic
 │   ├── test_domain.py           # Domain validation tests
+│   ├── test_menu_state.py       # Tray menu open-state probe tests
+│   ├── test_native_menu.py      # Native menu model and live MenuStrip sync tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
+│   ├── test_scene_catalog_sync.py # ui/scenes.json vs BUILTIN_SCENES sync test
+│   ├── test_single_instance.py  # Single-instance guard across real processes
+│   ├── test_thread_lifecycle.py # No app-named thread survives shutdown
 │   ├── test_persistence_and_scenes.py # JSON storage and preset tests
 │   ├── test_wiz_integration.py  # UDP integration tests against simulator
 │   ├── test_ui_bridge.py        # Asynchronous JS API bridge tests
 │   ├── test_tray.py             # System tray synchronization and menu tests
+│   ├── test_winforms_tray.py    # WinForms tray view: palette, painter, marshalling
 │   ├── test_ambilight.py        # Screen capture and EMA streaming tests
 │   ├── test_music_sync.py       # WASAPI and FFT DSP tests
 │   ├── test_i18n.py             # Bilingual localization tests
