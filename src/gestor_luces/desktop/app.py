@@ -18,7 +18,6 @@ from gestor_luces.adapters.platform.windows import (
     _activate_window_foreground,
     _compute_initial_window_geometry,
     _fit_native_window_height,
-    _is_menu_open,
     _set_windows_dark_titlebar_attribute,
     _sync_native_menu,
     _to_webview_menus,
@@ -26,7 +25,7 @@ from gestor_luces.adapters.platform.windows import (
 )
 from gestor_luces.adapters.storage.json_repositories import resolve_default_data_dir
 from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
-from gestor_luces.adapters.tray import TrayController
+from gestor_luces.adapters.tray import Dispatch, TrayController, TrayView
 from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_EXIT,
     ACTION_SHOW_ABOUT,
@@ -50,6 +49,24 @@ WINDOW_TITLE = "WiZ Architectural Lighting Console"
 MENU_SYNC_THREAD_NAME = "GestorLucesMenuSync"
 HIDE_ON_CLOSE_THREAD_NAME = "GestorLucesHideOnClose"
 HIDE_ON_MINIMIZE_THREAD_NAME = "GestorLucesHideOnMinimize"
+
+
+def create_tray_view(dispatch: Dispatch) -> TrayView | None:
+    """Elige la vista de bandeja: WinForms (colores explicitos) con respaldo `pystray`.
+
+    `create_winforms_view` devuelve None (nunca lanza) cuando pythonnet/WinForms no estan
+    disponibles, asi que la bandeja jamas desaparece por un fallo del CLR. Los imports son
+    perezosos para no cargar `pystray` ni .NET cuando el arranque no llega a la bandeja.
+    """
+    from gestor_luces.adapters.tray.winforms_tray import create_winforms_view
+
+    view = create_winforms_view(dispatch)
+    if view is not None:
+        return view
+    _LOGGER.info("WinForms tray unavailable; using the pystray fallback view.")
+    from gestor_luces.adapters.tray.pystray_tray import create_pystray_view
+
+    return create_pystray_view(dispatch)
 
 
 class DesktopApplication:
@@ -154,7 +171,7 @@ class DesktopApplication:
             quit_app=self.quit_app,
             is_window_visible=lambda: self.is_window_visible,
             notify_ui=self.notify_ui,
-            menu_is_open=_is_menu_open,
+            view_factory=create_tray_view,
         )
         self._bridge.set_state_change_listener(self.on_state_changed)
         self._window.events.shown += self.on_window_shown

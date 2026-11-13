@@ -79,7 +79,11 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
      - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\GestorDeLuces`.
      - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows a alta velocidad con `mss`.
      - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` y aplicando `numpy.fft.rfft`.
-     - `adapters.tray.tray_icon`: Integra el icono y menú de la bandeja del sistema mediante `pystray`.
+     - `adapters.tray`: Integra la bandeja del sistema detrás de un contrato mínimo `TrayView`:
+      - `tray_icon`: `TrayController` posee el modelo de menú, los handlers, el ejecutor y el único hilo de refresco; no importa ningún toolkit gráfico.
+      - `tray_view`: protocolo `TrayView` (`run`/`stop`/`apply`) más el mapeo modelo→acción y el generador del icono.
+      - `winforms_tray`: vista principal. `NotifyIcon` + `ContextMenuStrip` en un hilo STA propio, con paletas explícitas por tema y submenús por hover.
+      - `pystray_tray`: vista de respaldo (menú Win32 clásico) cuando pythonnet/WinForms no puede cargar.
      - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApi`), impidiendo la invocación de métodos o callbacks internos desde JavaScript.
 
 ---
@@ -107,10 +111,10 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
        | Snapshot periódico de estado                                   | Paquetes de streaming
        v                                                                |
 +--------------------------------------+   +------------------------------------+
-| HILO 3: Bandeja del Sistema          |   | HILO 4: Hilos de Streaming Continuo|
-|   - Corre el bucle Win32 nativo      |   |   - Bucle de Ambilight a 10 Hz     |
-|     mediante icon.run_detached().    |   |   - Callback de audio por WASAPI   |
-|   - Renderiza menús contextuales.    |   |   - Hilo de análisis espectral FFT |
+| HILO 3: Vista de la Bandeja          |   | HILO 4: Hilos de Streaming Continuo|
+|   - `NotifyIcon` + menú contextual   |   |   - Bucle de Ambilight a 10 Hz     |
+|     en su propio hilo STA (WinForms).|   |   - Callback de audio por WASAPI   |
+|   - Vista de respaldo con `pystray`. |   |   - Hilo de análisis espectral FFT |
 +--------------------------------------+   +------------------------------------+
 ```
 
@@ -127,9 +131,10 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
    - Las invocaciones de JavaScript (`window.pywebview.api`) se despachan con `asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)` con un tiempo límite de protección para no bloquear la interfaz en caso de problemas de red.
    - Sincroniza las instantáneas de estado (`_build_response()`): canaliza las lecturas de estado (`_collect_response_snapshot()`) hacia el hilo de trabajo dedicado `GestorLucesAsyncLoop` (manteniendo en caché las listas de monitores y dispositivos de audio tras su enumeración inicial) para prevenir condiciones de carrera entre el hilo de la interfaz y las operaciones asíncronas.
 
-3. **Hilo Demonio de la Bandeja del Sistema**:
-   - Ejecuta `pystray.Icon.run()` en un hilo demonio dedicado (`GestorLucesTray`), nunca `run_detached()`, para que un `stop()` omitido no mantenga vivo el proceso.
-   - Mantiene un bucle Win32 secundario para renderizar el icono en el Área de Notificaciones y sus menús desplegables.
+3. **Hilo de la Vista de Bandeja**:
+   - Ejecuta `TrayView.run()` en un hilo demonio dedicado (`GestorLucesTray`), nunca en el hilo de la UI y nunca como hilo no demonio, para que un `stop()` omitido no mantenga vivo el proceso.
+   - Vista principal (`winforms_tray`): el hilo llama `CoInitializeEx` (STA) y hospeda el bombeo `Application.Run(form)` de un `Form` oculto de 0×0 que es dueño del `NotifyIcon` y su `ContextMenuStrip`.
+   - Vista de respaldo (`pystray_tray`): el hilo ejecuta `pystray.Icon.run()`, que mantiene su propio bombeo Win32 para el icono clásico.
    - Opera de forma desacoplada de la ventana principal, permitiendo que esta se oculte, restaure o minimice sin afectar el proceso en segundo plano.
 
 4. **Hilos de Streaming de Hardware (Ambilight y Música)**:
@@ -141,7 +146,7 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
 
 ## 3. Seguridad de Concurrencia y Prevención de Deadlocks
 
-La comunicación entre hilos entre `pystray` (WinForms/Win32) y `pywebview` (WinForms/WebView2) requiere un cuidado especial con el orden de adquisición de bloqueos.
+La comunicación entre hilos entre la vista de bandeja (`pystray` o WinForms) y `pywebview` (WinForms/WebView2) requiere un cuidado especial con el orden de adquisición de bloqueos.
 
 ### Caso de Estudio: Resolución del Bloqueo Mutuo en el Menú de la Bandeja
 
@@ -168,12 +173,22 @@ def set_state_snapshot(self, snapshot: dict[str, Any]) -> None:
 
 ### Regla de Hilos del Menú de Bandeja (T-3.6)
 
-En Windows, `pystray.Icon.update_menu()` empieza destruyendo el `HMENU` vigente y creando uno nuevo. Si eso ocurre con el menú desplegado, todos los IDs de item y todos los `hSubMenu` ya creados quedan invalidados: los clics cancelan en silencio y los submenús dejan de abrir.
+En la vista de respaldo `pystray`, `pystray.Icon.update_menu()` empieza destruyendo el `HMENU` vigente y creando uno nuevo. Si eso ocurre con el menú desplegado, todos los IDs de item y todos los `hSubMenu` ya creados quedan invalidados: los clics cancelan en silencio y los submenús dejan de abrir.
 
-La regla que impone `TrayController`:
-- Las acciones del menú solo encolan trabajo en el ejecutor y terminan con `request_refresh()`; nunca tocan el icono.
-- Todo el estado nativo del icono (imagen, tooltip, modelo de menú) lo aplica el único hilo `GestorLucesTrayRefresh`.
-- Ese hilo reconstruye el menú nativo solo cuando no hay ninguno desplegado: `adapters.platform.windows.menu_state._is_menu_open` lee las banderas de modo menú del hilo en primer plano vía `GetGUIThreadInfo`. Si hay un menú abierto, el rebuild queda pendiente y se reintenta en el próximo refresco, de modo que un menú desplegado nunca se destruye debajo del usuario.
+La regla que impone `TrayController` para cualquier vista:
+- Las acciones del menú solo encolan trabajo en el ejecutor y terminan con `request_refresh()`; nunca tocan la vista.
+- Solo el único hilo `GestorLucesTrayRefresh` llama `TrayView.apply`, de modo que el estado nativo de la bandeja siempre tiene un único escritor.
+- La vista decide si el menú nativo se puede reconstruir en ese instante. La vista `pystray` consulta `adapters.platform.windows.menu_state._is_menu_open` (banderas de modo menú del hilo en primer plano vía `GetGUIThreadInfo`) y, si hay un menú abierto, deja el rebuild pendiente y lo reintenta en el próximo `apply`. La vista WinForms difiere mientras su `ContextMenuStrip.Visible` es verdadero y luego reemplaza y libera el menú en el siguiente refresco.
+
+### Render del Menú de Bandeja y Paletas por Tema (T-3.8)
+
+El menú clásico de `pystray` es un popup Win32 que se pinta con la clase de ventana que registra con `hbrBackground = COLOR_WINDOW + 1`, así que siempre usa el fondo blanco del sistema y el texto claro se vuelve ilegible («fondo blanco, letras blancas pareciera, mucho brillo»). Por eso la bandeja usa `System.Windows.Forms.NotifyIcon` + `ContextMenuStrip` como vista principal:
+
+- `TrayView` (`adapters.tray.tray_view`) es el único contrato entre el controlador y una vista: `run()` (bombeo bloqueante), `stop()` y `apply(spec, title, rgb, theme)`. `resolve_entry_action` traduce una hoja del modelo a la acción a despachar, incluida la acción sintética `toggle_window` del ítem por defecto (mostrar/ocultar ventana).
+- `winforms_tray` traduce el modelo puro `menu_model` a objetos `ToolStripMenuItem` reales: los submenús son `DropDownItems` (WinForms los abre al pasar el cursor, sin hacks de clic), los clics de hoja despachan `(action_id, payload)`, los niveles de brillo usan `CheckOnClick = False` + `Checked`, y una llamada UDP lenta no bloquea nada porque `TrayController` sigue despachando en su ejecutor.
+- Los colores vienen de una tabla explícita indexada por el tema activo (`architectural-stone` → clara, `atmospheric-dark` → oscura, desconocido → clara). Fondo, texto y texto deshabilitado se aplican al `ContextMenuStrip`, a cada ítem y a cada panel de submenú (`selection`); `RenderMode = System` evita que el cromo del dropdown repinte un margen de imagen brillante. El nivel de brillo activo además lleva un punto generado en el color de texto de la paleta, porque el glifo de check nativo tiene color fijo y desaparece sobre la paleta oscura.
+- Restricción verificada del entorno: pythonnet 3.2.1 sobre .NET Framework 4.8 no emite tipos derivados aquí, así que las subclases Python de `ProfessionalColorTable`/`ToolStripRenderer` no reciben despacho virtual desde .NET. Por eso no hay tabla de colores ni renderer propio y la paleta se aplica control por control.
+- Si WinForms no carga, `create_winforms_view` devuelve `None` y la raíz de composición cae a `pystray_tray`, de modo que el icono de bandeja nunca desaparece por un fallo del CLR.
 
 ### Ocultamiento y Restauración de Ventana
 

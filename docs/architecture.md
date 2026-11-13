@@ -79,7 +79,11 @@ The core principle behind this project is **strict isolation of business invaria
      - `adapters.storage.json_repositories`: Implements filesystem atomic persistence into `%LOCALAPPDATA%\GestorDeLuces`.
      - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss`.
      - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture and `numpy.fft.rfft`.
-     - `adapters.tray.tray_icon`: Implements Windows notification area integration using `pystray`.
+     - `adapters.tray`: Implements Windows notification area integration behind a minimal `TrayView` contract:
+      - `tray_icon`: `TrayController` owns the menu model, handlers, executor and the single refresh thread; it never imports a GUI toolkit.
+      - `tray_view`: `TrayView` protocol (`run`/`stop`/`apply`) plus the shared model-to-action mapping and icon rendering.
+      - `winforms_tray`: Primary view. `NotifyIcon` + `ContextMenuStrip` on its own STA thread with explicit theme palettes and hover submenus.
+      - `pystray_tray`: Fallback view (classic Win32 menu) used when pythonnet/WinForms cannot load.
      - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApi` whitelist) so internal methods and callbacks cannot be invoked from JavaScript.
 
 ---
@@ -107,10 +111,10 @@ The desktop application spans four distinct thread contexts that must interact s
        | Periodic State Snapshot                                        | Stream Frames
        v                                                                |
 +--------------------------------------+   +------------------------------------+
-| THREAD 3: System Tray (pystray)      |   | THREAD 4: Streaming Workers        |
-|   - Runs native Win32 message loop   |   |   - Ambilight 10 Hz capture loop   |
-|     via icon.run_detached().         |   |   - WASAPI loopback audio callback |
-|   - Renders context menus on demand. |   |   - FFT spectral analysis thread   |
+| THREAD 3: System Tray View           |   | THREAD 4: Streaming Workers        |
+|   - `NotifyIcon` + context menu on   |   |   - Ambilight 10 Hz capture loop   |
+|     its own STA thread (WinForms).   |   |   - WASAPI loopback audio callback |
+|   - `pystray` fallback view.         |   |   - FFT spectral analysis thread   |
 +--------------------------------------+   +------------------------------------+
 ```
 
@@ -127,9 +131,10 @@ The desktop application spans four distinct thread contexts that must interact s
    - JavaScript calls invoked via the `window.pywebview.api` interface are routed through `asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)` with a guarded timeout to prevent indefinitely blocking the UI thread on network timeouts.
    - Synchronizes state snapshots (`_build_response()`): marshals state reads (`_collect_response_snapshot()`) onto the dedicated `GestorLucesAsyncLoop` worker thread (with hardware monitor and audio device lists cached after initial enumeration) to prevent cross-thread data races between the UI thread and async operations.
 
-3. **System Tray Daemon Thread**:
-   - Runs `pystray.Icon.run()` in a dedicated daemon thread (`GestorLucesTray`), never `run_detached()`, so a missed `stop()` cannot keep the process alive.
-   - Maintains a secondary Win32 message pump for the notification area tray icon and context menus.
+3. **System Tray View Thread**:
+   - Runs `TrayView.run()` in a dedicated daemon thread (`GestorLucesTray`), never on the UI thread and never as a non-daemon thread, so a missed `stop()` cannot keep the process alive.
+   - Primary view (`winforms_tray`): the thread calls `CoInitializeEx` (STA) and hosts the `Application.Run(form)` message pump of a hidden 0×0 `Form` that owns the `NotifyIcon` and its `ContextMenuStrip`.
+   - Fallback view (`pystray_tray`): the thread runs `pystray.Icon.run()`, which keeps its own Win32 message pump for the classic tray icon.
    - Operates detached from the main window, permitting the window to be hidden, restored, or destroyed independently.
 
 4. **Hardware Streaming Threads (Ambilight & Audio)**:
@@ -141,7 +146,7 @@ The desktop application spans four distinct thread contexts that must interact s
 
 ## 3. Concurrency Safety & Deadlock Prevention
 
-Inter-thread communication between `pystray` (WinForms/Win32) and `pywebview` (WinForms/WebView2) introduces severe deadlock hazards if locks are held while evaluating menus or restoring windows.
+Inter-thread communication between the tray view (`pystray` or WinForms) and `pywebview` (WinForms/WebView2) introduces severe deadlock hazards if locks are held while evaluating menus or restoring windows.
 
 ### Case Study: System Tray Menu Deadlock Resolution
 
@@ -168,12 +173,22 @@ def set_state_snapshot(self, snapshot: dict[str, Any]) -> None:
 
 ### Tray Menu Threading Rule (T-3.6)
 
-On Windows, `pystray.Icon.update_menu()` starts by destroying the current `HMENU` and creating a new one. If that happens while the popup menu is displayed, every item ID and every `hSubMenu` already created becomes invalid: clicks cancel silently and submenus stop opening.
+In the `pystray` fallback view, `pystray.Icon.update_menu()` starts by destroying the current `HMENU` and creating a new one. If that happens while the popup menu is displayed, every item ID and every `hSubMenu` already created becomes invalid: clicks cancel silently and submenus stop opening.
 
-The rule enforced by `TrayController`:
-- Menu actions only queue work on the executor thread and end with `request_refresh()`; they never touch the icon.
-- All native icon state (image, tooltip, menu model) is applied by the single `GestorLucesTrayRefresh` thread.
-- That thread rebuilds the native menu only when no menu is displayed: `adapters.platform.windows.menu_state._is_menu_open` reads the foreground thread's menu-mode flags via `GetGUIThreadInfo`. If a menu is open, the rebuild is marked pending and retried on the next refresh, so a displayed menu is never destroyed underneath the user.
+The rule enforced by `TrayController` for every view:
+- Menu actions only queue work on the executor thread and end with `request_refresh()`; they never touch the view.
+- Only the single `GestorLucesTrayRefresh` thread calls `TrayView.apply`, so native tray state always has one writer.
+- The view decides whether the native menu can be rebuilt right now. The `pystray` view asks `adapters.platform.windows.menu_state._is_menu_open` (foreground menu-mode flags via `GetGUIThreadInfo`) and, when a menu is open, marks the rebuild pending and retries it on the next `apply`. The WinForms view defers while its `ContextMenuStrip.Visible` is true, then swaps and disposes the menu on the next refresh.
+
+### Tray Menu Rendering and Theme Palettes (T-3.8)
+
+The classic `pystray` menu is a Win32 popup painted by the window class it registers with `hbrBackground = COLOR_WINDOW + 1`, so it always uses the system white background and light text becomes illegible ("white background, white letters, too much brightness"). The tray therefore uses `System.Windows.Forms.NotifyIcon` + `ContextMenuStrip` as its primary view:
+
+- `TrayView` (`adapters.tray.tray_view`) is the only contract between the controller and a view: `run()` (blocking pump), `stop()`, and `apply(spec, title, rgb, theme)`. `resolve_entry_action` maps a model leaf to the action to dispatch, including the synthetic `toggle_window` action for the default show/hide item.
+- `winforms_tray` maps the pure `menu_model` to real `ToolStripMenuItem` objects: submenus are `DropDownItems` (so WinForms opens them on hover, no click hack), leaf clicks dispatch `(action_id, payload)`, checked radio levels use `CheckOnClick = False` + `Checked`, and a synthetic action cannot be blocked by a slow UDP call because `TrayController` still dispatches on its executor.
+- Colors come from an explicit palette table keyed by the active theme (`architectural-stone` → light, `atmospheric-dark` → dark, unknown → light). Background, text and disabled text are applied to the `ContextMenuStrip`, each item and each submenu panel (`selection`); `RenderMode = System` keeps the dropdown chrome from re-painting a bright image margin. The checked brightness level also gets a generated dot image in the palette text color, because the native check glyph has a fixed dark color and disappears on the dark palette.
+- Verified environment constraint: pythonnet 3.2.1 on .NET Framework 4.8 does not emit derived .NET types here, so Python subclasses of `ProfessionalColorTable`/`ToolStripRenderer` receive no virtual dispatch from .NET. A custom color table or renderer is therefore not available, which is why the palette is applied per control instead.
+- If WinForms cannot load, `create_winforms_view` returns `None` and the composition root falls back to `pystray_tray`, so the tray icon can never disappear because of the CLR.
 
 ### Case Study: Window Hide and Restore Lifecycle
 
