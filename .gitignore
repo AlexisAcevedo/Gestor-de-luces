@@ -8,8 +8,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
 
 # Build and packaging (PyInstaller)
 build/
@@ -50,6 +48,10 @@ Desktop.ini
 .coverage
 coverage.json
 htmlcov/
+badge-out/
+
+# Frontend tooling (the UI test suite has zero npm dependencies)
+node_modules/
 
 
 # Pi local agent definitions (not for GitHub)
