@@ -308,7 +308,14 @@ class TrayController:
             # Importante: `update_menu()` evalua `_current_menu_items()`, que adquiere
             # `self._lock`. Como `threading.Lock` no es reentrante, debemos llamarlo
             # fuera del bloque `with self._lock:` para no provocar un interbloqueo (deadlock).
-            if self._menu_is_open():
+            menu_open = self._menu_is_open()
+            # Rastro para el checklist manual: que etiqueta se ofrece y que accion despacha.
+            _LOGGER.info(
+                "Tray menu %s: %s",
+                "rebuild deferred (menu open)" if menu_open else "rebuilt",
+                [(entry.label, entry.action_id) for entry in spec],
+            )
+            if menu_open:
                 # Destruir el HMENU con el popup abierto invalida sus IDs y submenus:
                 # el rebuild queda pendiente y el proximo refresco lo reintenta.
                 self._menu_rebuild_pending = True

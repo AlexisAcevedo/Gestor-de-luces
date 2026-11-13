@@ -139,10 +139,14 @@ export function setupGlobalShortcuts({ activateTab }) {
 const FIT_THRESHOLD_PX = 2;
 const FIT_RETRY_MS = 180;
 const FIT_OWN_RESIZE_WINDOW_MS = 800;
+const FIT_BURST_LIMIT = 3;
+const FIT_BURST_WINDOW_MS = 1000;
 let fitFrame = 0;
 let fitForced = false;
 let fitLastSent = 0;
 let fitLastSentAt = 0;
+let fitSentAt = [];
+let fitBudgetTripped = false;
 
 function readNaturalHeight(stage) {
   const topbar = document.querySelector(".compact-topbar");
@@ -165,6 +169,24 @@ function measureNaturalHeight(stage) {
   }
 }
 
+/*
+ * Cortafuegos: si la medicion oscilara (por ejemplo porque el ancho util cambia al aparecer
+ * una barra de scroll), cada ciclo pediria un resize nativo nuevo y la ventana quedaria
+ * saturada de WM_SIZE, con la UI sin responder a los clics. El presupuesto es un pestillo:
+ * al agotarse se cortan todos los pedidos automaticos hasta el proximo `requestFit(true)`
+ * (cambio de seccion, idioma o tema), que lo reinicia.
+ */
+function fitBudgetAllows() {
+  if (fitBudgetTripped) return false;
+  const now = performance.now();
+  fitSentAt = fitSentAt.filter((sentAt) => now - sentAt < FIT_BURST_WINDOW_MS);
+  if (fitSentAt.length >= FIT_BURST_LIMIT) {
+    fitBudgetTripped = true;
+    return false;
+  }
+  return true;
+}
+
 function runFit() {
   fitFrame = 0;
   const forced = fitForced;
@@ -183,8 +205,10 @@ function runFit() {
   if (!stage || !api || typeof api.fit_window_height !== "function") return;
   const target = measureNaturalHeight(stage);
   if (target < 200 || Math.abs(target - fitLastSent) < FIT_THRESHOLD_PX) return;
+  if (!fitBudgetAllows()) return;
   fitLastSent = target;
   fitLastSentAt = performance.now();
+  fitSentAt.push(fitLastSentAt);
   try {
     Promise.resolve(api.fit_window_height(target)).catch(() => {});
   } catch (_err) {
@@ -197,7 +221,12 @@ function scheduleFit() {
 }
 
 export function requestFit(force) {
-  if (force) fitForced = true;
+  if (force) {
+    fitForced = true;
+    // Un pedido explicito siempre puede reajustar: reinicia el presupuesto anti-oscilacion.
+    fitSentAt = [];
+    fitBudgetTripped = false;
+  }
   scheduleFit();
 }
 

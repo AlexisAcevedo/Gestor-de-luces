@@ -229,3 +229,25 @@ def test_language_change_refits_the_window_to_the_new_labels() -> None:
     match = re.search(r"function syncLanguageUi\(lang\) \{(.*?)\n\}", app_js, re.S)
     assert match is not None
     assert "requestFit(true)" in match.group(1)
+
+
+def test_window_fit_cannot_enter_a_resize_oscillation() -> None:
+    """El auto-fit necesita cortafuegos contra un ciclo medir/redimensionar.
+
+    Si el ancho util cambia al aparecer la barra de scroll, la medicion oscila y cada
+    ciclo pide un resize nativo: la ventana se satura de WM_SIZE y la UI deja de responder.
+    """
+    root = Path(__file__).resolve().parent.parent
+    css_text = (root / "ui" / "styles.css").read_text(encoding="utf-8")
+    fit_js = (root / "ui" / "js" / "shortcuts.js").read_text(encoding="utf-8")
+
+    stage_match = re.search(r"\.photometric-stage\s*\{([^}]*)\}", css_text)
+    assert stage_match is not None
+    stage_body = stage_match.group(1)
+    assert "overflow-y: auto" in stage_body
+    assert "scrollbar-gutter: stable" in stage_body
+
+    assert "FIT_BURST_LIMIT" in fit_js
+    assert "fitBudgetTripped = true" in fit_js
+    assert "if (!fitBudgetAllows()) return;" in fit_js
+    assert "fitBudgetTripped = false;" in fit_js

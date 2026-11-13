@@ -221,7 +221,10 @@ class DesktopApplication:
         try:
             screens = getattr(self._webview, "screens", None)
             fallback = int(screens[0].height) if screens else None
-            return _fit_native_window_height(self._window, content_px, fallback)
+            resized = _fit_native_window_height(self._window, content_px, fallback)
+            # Una linea por ajuste pedido: si la medicion oscila, el log lo muestra.
+            _LOGGER.info("Window fit requested: content=%spx applied=%s", content_px, resized)
+            return resized
         except Exception:
             _LOGGER.debug("Window fit skipped.", exc_info=True)
             return False

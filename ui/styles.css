@@ -195,6 +195,9 @@
     padding: 6px 16px 6px;
     gap: 8px;
     overflow-y: auto;
+    /* Reserva siempre el ancho de la barra: si apareciera solo al desbordar, el ancho util
+       cambiaria y la medicion del auto-fit entraria en un ciclo crecer/achicar. */
+    scrollbar-gutter: stable;
     overscroll-behavior: contain;
     min-height: 0;
     min-width: 0;
