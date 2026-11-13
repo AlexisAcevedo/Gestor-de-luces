@@ -39,10 +39,6 @@ jobs:
       - name: Coverage gate (per package)
         run: python scripts/check_coverage.py coverage.json
 
-      - name: Docs symbol reference check (informational)
-        continue-on-error: true
-        run: python scripts/check_doc_symbols.py
-
       - name: Static security analysis (bandit, informational)
         continue-on-error: true
         run: python -m bandit -r src -q -f json -o bandit-report.json

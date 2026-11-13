@@ -38,6 +38,9 @@ launch-*.cmd
 odd/
 PLAN.md
 
+# Internal design exploration specs (the shipped design is documented in docs/architecture)
+docs/design/
+
 # Editors and OS
 .vscode/
 .idea/
