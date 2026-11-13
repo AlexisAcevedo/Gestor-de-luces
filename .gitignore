@@ -34,8 +34,9 @@ _agents/
 .worktrees/
 launch-*.cmd
 
-# ODD working documents (feature specs and task logs): local only, not published
+# Internal working documents (hardening plan, ODD feature specs and task logs): local only
 odd/
+PLAN.md
 
 # Editors and OS
 .vscode/
