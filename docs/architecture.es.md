@@ -84,7 +84,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
       - `tray_view`: protocolo `TrayView` (`run`/`stop`/`apply`) más el mapeo modelo→acción y el generador del icono.
       - `winforms_tray`: vista principal. `NotifyIcon` + `ContextMenuStrip` en un hilo STA propio, con paletas explícitas por tema y submenús por hover.
       - `pystray_tray`: vista de respaldo (menú Win32 clásico) cuando pythonnet/WinForms no puede cargar.
-     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApi`), impidiendo la invocación de métodos o callbacks internos desde JavaScript.
+     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApi`), impidiendo la invocación de métodos o callbacks internos desde JavaScript. El adaptador está partido en `dispatch` (la tabla explícita `JS_API_DISPATCH`, `JsApi` y el contrato de ajuste de ventana), `handlers` (un handler por capacidad) y `lifecycle` (event loop propio, sellado de envelopes, notificaciones de estado y apagado); `bridge.py` conserva `WebviewBridge` y reexporta toda la superficie, así que quien lo importa no cambia.
 
 ---
 

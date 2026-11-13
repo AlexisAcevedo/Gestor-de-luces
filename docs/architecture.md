@@ -84,7 +84,7 @@ The core principle behind this project is **strict isolation of business invaria
       - `tray_view`: `TrayView` protocol (`run`/`stop`/`apply`) plus the shared model-to-action mapping and icon rendering.
       - `winforms_tray`: Primary view. `NotifyIcon` + `ContextMenuStrip` on its own STA thread with explicit theme palettes and hover submenus.
       - `pystray_tray`: Fallback view (classic Win32 menu) used when pythonnet/WinForms cannot load.
-     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApi` whitelist) so internal methods and callbacks cannot be invoked from JavaScript.
+     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApi` whitelist) so internal methods and callbacks cannot be invoked from JavaScript. The adapter is split into `dispatch` (the explicit `JS_API_DISPATCH` table, `JsApi` and the window-fit contract), `handlers` (one handler per capability) and `lifecycle` (dedicated event loop, envelope sealing, state notifications and shutdown); `bridge.py` keeps `WebviewBridge` and re-exports the whole surface, so importers are unaffected.
 
 ---
 
