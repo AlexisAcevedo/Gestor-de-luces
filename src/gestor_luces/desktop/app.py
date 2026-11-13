@@ -18,6 +18,7 @@ from gestor_luces.adapters.platform.windows import (
     _activate_window_foreground,
     _compute_initial_window_geometry,
     _fit_native_window_height,
+    _is_menu_open,
     _set_windows_dark_titlebar_attribute,
     _sync_native_menu,
     _to_webview_menus,
@@ -153,6 +154,7 @@ class DesktopApplication:
             quit_app=self.quit_app,
             is_window_visible=lambda: self.is_window_visible,
             notify_ui=self.notify_ui,
+            menu_is_open=_is_menu_open,
         )
         self._bridge.set_state_change_listener(self.on_state_changed)
         self._window.events.shown += self.on_window_shown
@@ -265,15 +267,20 @@ class DesktopApplication:
             _LOGGER.debug("Skipped UI notification because webview was not ready.")
 
     def quit_app(self) -> None:
-        """Autoriza el cierre definitivo de la ventana y libera la bandeja y el bucle UDP."""
+        """Autoriza el cierre definitivo y destruye la ventana nativa.
+
+        La bandeja y el bucle del puente no se liberan aca: `quit_app` corre en el hilo
+        de acciones de la bandeja, y detener el icono desde ese hilo mientras pystray
+        reaplica el menu deja el proceso a medio cerrar. Al destruir la ventana,
+        `webview.start()` retorna y `cleanup()` libera todo en el orden correcto.
+        """
         self.is_quitting = True
-        if self._tray is not None:
-            self._tray.stop()
-        self._bridge.shutdown()
         try:
             self._window.destroy()
+            return
         except Exception:
-            _LOGGER.debug("Window destroy skipped because window was already closed.")
+            _LOGGER.exception("Window destroy failed while quitting; releasing resources.")
+        self.cleanup()
 
     def on_closing(self) -> bool:
         """Intercepta el boton [X] para minimizar a la bandeja salvo cuando se invoca Quit.

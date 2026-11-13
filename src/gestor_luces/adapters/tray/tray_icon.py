@@ -7,8 +7,11 @@ Decisiones de hilos (verificadas con pystray 0.19.5 y pywebview 6.2.1 en Windows
 - Win32 invoca los callbacks del menu dentro del bombeo de mensajes del icono. Una
   llamada UDP lenta alli congelaria la bandeja, asi que cada accion se despacha a un
   ejecutor (hilo de trabajo) y el bombeo queda libre de inmediato.
-- pystray construye el HMENU nativo solo en `update_menu()`, no al abrirlo; por eso el
-  menu se recalcula de forma explicita tras cada cambio de estado.
+- pystray construye el HMENU nativo solo en `update_menu()`, no al abrirlo; en Windows esa
+  reconstruccion empieza con `DestroyMenu` sobre el HMENU vigente, asi que jamas puede
+  ocurrir mientras el popup esta desplegado (invalida sus IDs y sus `hSubMenu` y todos
+  los clics cancelan). Por eso solo el hilo de refresco toca el icono, y si el menu esta
+  abierto el rebuild queda pendiente hasta el proximo refresco.
 """
 
 from __future__ import annotations
@@ -45,6 +48,7 @@ ICON_SIZE = 64
 
 IconFactory = Callable[[str, Image.Image, str, pystray.Menu], Any]
 Executor = Callable[[Callable[[], None]], None]
+MenuIsOpen = Callable[[], bool]
 
 
 class TrayActions(Protocol):
@@ -85,6 +89,11 @@ def _constant(value: bool) -> Callable[[Any], bool]:
     return lambda _item: value
 
 
+def _menu_never_open() -> bool:
+    """Respaldo multiplataforma: sin sondeo disponible se asume que no hay menu abierto."""
+    return False
+
+
 class TrayController:
     """Posee el `pystray.Icon`, traduce el modelo de menu y despacha sus acciones."""
 
@@ -99,6 +108,7 @@ class TrayController:
         notify_ui: Callable[[], None] | None = None,
         icon_factory: IconFactory | None = None,
         executor: Executor | None = None,
+        menu_is_open: MenuIsOpen | None = None,
         poll_interval: float = 5.0,
     ) -> None:
         self._actions = actions
@@ -109,12 +119,14 @@ class TrayController:
         self._notify_ui = notify_ui
         self._icon_factory = icon_factory or _default_icon_factory
         self._executor = executor or _default_executor
+        self._menu_is_open = menu_is_open or _menu_never_open
         self._poll_interval = poll_interval
         self._lock = threading.Lock()
         self._stopped = threading.Event()
         self._refresh_requested = threading.Event()
         self._icon: Any = None
         self._signature: tuple[Any, ...] | None = None
+        self._menu_rebuild_pending = False
         self._spec: list[TrayMenuEntry] = build_tray_menu_spec(
             is_on=False,
             brightness=100,
@@ -238,7 +250,8 @@ class TrayController:
         )
         signature = (tuple(spec), title, rgb)
         with self._lock:
-            if signature == self._signature:
+            # Un rebuild pendiente (menu abierto) obliga a reintentar aunque nada cambio.
+            if signature == self._signature and not self._menu_rebuild_pending:
                 return
             self._signature = signature
             self._spec, self._title, self._rgb = spec, title, rgb
@@ -246,6 +259,9 @@ class TrayController:
 
     def dispatch(self, action_id: str, payload: Any = None) -> None:
         """Encola una accion del menu en el ejecutor para no bloquear el bombeo Win32."""
+        # Deja rastro en el log: distinguir "la accion se ejecuto" de "el popup cancelo"
+        # es lo unico que permite diagnosticar un menu nativo que no responde.
+        _LOGGER.info("Tray action requested: %s", action_id)
         self._executor(lambda: self._run_action(action_id, payload))
 
     def _run_action(self, action_id: str, payload: Any) -> None:
@@ -259,7 +275,9 @@ class TrayController:
             # Un fallo de red o de ventana nunca debe propagarse al hilo de la bandeja.
             _LOGGER.exception("Tray action '%s' failed.", action_id)
         if action_id != ACTION_QUIT:
-            self.refresh()
+            # Nunca se refresca desde el hilo de la accion: todo el estado nativo del icono
+            # lo aplica el hilo de refresco, que sabe si hay un menu desplegado.
+            self.request_refresh()
 
     def _call_bridge(self, method: Callable[..., dict[str, Any]], *args: Any) -> None:
         """Invoca el puente y sincroniza la ventana aunque la operacion haya fallado."""
@@ -290,7 +308,13 @@ class TrayController:
             # Importante: `update_menu()` evalua `_current_menu_items()`, que adquiere
             # `self._lock`. Como `threading.Lock` no es reentrante, debemos llamarlo
             # fuera del bloque `with self._lock:` para no provocar un interbloqueo (deadlock).
+            if self._menu_is_open():
+                # Destruir el HMENU con el popup abierto invalida sus IDs y submenus:
+                # el rebuild queda pendiente y el proximo refresco lo reintenta.
+                self._menu_rebuild_pending = True
+                return
             icon.update_menu()
+            self._menu_rebuild_pending = False
         except Exception:
             _LOGGER.exception("Failed to update the tray icon.")
 

@@ -12,6 +12,9 @@ Cubre dos niveles complementarios:
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +52,20 @@ from gestor_luces.application.service import LightControlService
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 
 
+async def _wait_for(predicate: Callable[[], bool], timeout: float = 2.0) -> None:
+    """Espera a que el hilo de refresco de la bandeja aplique el estado esperado.
+
+    Desde T-3.6 las acciones del menu ya no tocan el icono: encolan un refresco, y el
+    estado nativo (titulo y modelo del menu) lo aplica el hilo de refresco.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("tray refresh did not apply the expected state in time")
+
+
 class FakeTrayIcon:
     """Doble de prueba de `pystray.Icon` para inspeccionar estado sin abrir Win32."""
 
@@ -60,6 +77,7 @@ class FakeTrayIcon:
         self.run_called = False
         self.stop_called = False
         self.update_menu_count = 0
+        self.update_menu_threads: list[str] = []
 
     def run(self) -> None:
         self.run_called = True
@@ -69,6 +87,7 @@ class FakeTrayIcon:
 
     def update_menu(self) -> None:
         self.update_menu_count += 1
+        self.update_menu_threads.append(threading.current_thread().name)
 
 
 def _find_entry_by_label(entries: list[TrayMenuEntry], label: str) -> TrayMenuEntry:
@@ -258,7 +277,7 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             # 1. Apagar y volver a encender desde el menu de bandeja
             await asyncio.to_thread(tray.dispatch, ACTION_TURN_OFF)
             assert server.pilot_state["state"] is False
-            assert fake_icon.title == "WiZ Lighting - Off"
+            await _wait_for(lambda: fake_icon.title == "WiZ Lighting - Off")
             assert ui_notifications >= 1
 
             await asyncio.to_thread(tray.dispatch, ACTION_TURN_ON)
@@ -267,7 +286,7 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             # 2. Ajustar brillo desde el submenu de bandeja
             await asyncio.to_thread(tray.dispatch, ACTION_SET_BRIGHTNESS, 25)
             assert server.pilot_state["dimming"] == 25
-            assert fake_icon.title == "WiZ Lighting - On 25%"
+            await _wait_for(lambda: fake_icon.title == "WiZ Lighting - On 25%")
 
             # 3. Aplicar preset favorito desde la bandeja tras haber cambiado a blanco
             await asyncio.to_thread(bridge.set_temperature, 2700, 90)
@@ -283,12 +302,12 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             await asyncio.to_thread(tray.dispatch, ACTION_HIDE_WINDOW)
             assert hide_count == 1
             assert window_visible is False
-            assert tray.spec[1].action_id == ACTION_SHOW_WINDOW
+            await _wait_for(lambda: tray.spec[1].action_id == ACTION_SHOW_WINDOW)
 
             await asyncio.to_thread(tray.dispatch, ACTION_SHOW_WINDOW)
             assert show_count == 1
             assert window_visible is True
-            assert tray.spec[1].action_id == ACTION_HIDE_WINDOW
+            await _wait_for(lambda: tray.spec[1].action_id == ACTION_HIDE_WINDOW)
 
             # 5. Iniciar temporizador desde la UI y cancelarlo desde la bandeja
             await asyncio.to_thread(bridge.start_sleep_timer, 15)
@@ -296,7 +315,9 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             assert any(e.action_id == ACTION_CANCEL_SLEEP_TIMER for e in tray.spec)
 
             await asyncio.to_thread(tray.dispatch, ACTION_CANCEL_SLEEP_TIMER)
-            assert all(e.action_id != ACTION_CANCEL_SLEEP_TIMER for e in tray.spec)
+            await _wait_for(
+                lambda: all(e.action_id != ACTION_CANCEL_SLEEP_TIMER for e in tray.spec)
+            )
 
             # 6. Verificar que un cambio originado en la UI dispare el listener de bandeja
             prev_updates = fake_icon.update_menu_count
@@ -312,3 +333,172 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             tray.stop()
             assert created_icons[0].stop_called is True
             bridge.shutdown()
+
+
+class FakeTrayActions:
+    """Estado luminico falso: evita bridge, UDP y relojes en las pruebas de menu."""
+
+    def __init__(self) -> None:
+        self.snapshot: dict[str, Any] = {
+            "is_on": False,
+            "brightness": 100,
+            "language": "en",
+            "mode": None,
+            "color": None,
+            "temperature": None,
+            "presets": [],
+            "sleep_timer_active": False,
+        }
+        self.power_calls: list[bool] = []
+        self.brightness_calls: list[int] = []
+        self.preset_calls: list[str] = []
+        self.cancel_calls = 0
+
+    def set_power(self, is_on: bool) -> dict[str, Any]:
+        self.power_calls.append(is_on)
+        return {"ok": True}
+
+    def set_brightness(self, brightness: int) -> dict[str, Any]:
+        self.brightness_calls.append(brightness)
+        return {"ok": True}
+
+    def apply_custom_scene(self, scene_id: str) -> dict[str, Any]:
+        self.preset_calls.append(scene_id)
+        return {"ok": True}
+
+    def cancel_sleep_timer(self) -> dict[str, Any]:
+        self.cancel_calls += 1
+        return {"ok": True}
+
+    def get_tray_snapshot(self) -> dict[str, Any]:
+        return dict(self.snapshot)
+
+
+class _TrayHarness:
+    """Controlador ya arrancado con icono falso y contadores de las acciones de ventana."""
+
+    def __init__(self, *, menu_open: Any = None, poll_interval: float = 0.0) -> None:
+        self.actions = FakeTrayActions()
+        self.actions.snapshot["presets"] = [
+            {"id": "p1", "name": "Warm Desk", "is_favorite": True},
+        ]
+        self.icons: list[FakeTrayIcon] = []
+        self.shown = 0
+        self.hidden = 0
+        self.quits = 0
+        self.menu_open = menu_open if menu_open is not None else (lambda: False)
+
+        def factory(name: str, image: Any, title: str, menu: Any) -> FakeTrayIcon:
+            icon = FakeTrayIcon(name, image, title, menu)
+            self.icons.append(icon)
+            return icon
+
+        self.tray = TrayController(
+            self.actions,
+            show_window=self._on_show,
+            hide_window=self._on_hide,
+            quit_app=self._on_quit,
+            is_window_visible=lambda: True,
+            icon_factory=factory,
+            executor=lambda task: task(),
+            menu_is_open=lambda: self.menu_open(),
+            poll_interval=poll_interval,
+        )
+
+    def _on_show(self) -> None:
+        self.shown += 1
+
+    def _on_hide(self) -> None:
+        self.hidden += 1
+
+    def _on_quit(self) -> None:
+        self.quits += 1
+
+    def __enter__(self) -> _TrayHarness:
+        self.tray.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.tray.stop()
+
+    @property
+    def icon(self) -> FakeTrayIcon:
+        return self.icons[0]
+
+
+def test_menu_rebuild_is_deferred_while_the_popup_menu_is_open() -> None:
+    """Regresion: destruir el HMENU con el menu abierto deja todos los items muertos.
+
+    `pystray._win32._update_menu` hace `DestroyMenu` + `CreatePopupMenu` mientras el
+    popup modal esta leyendo los IDs y los submenus ya creados. Si el refresco en
+    segundo plano cae en ese instante, todos los clics cancelan y los submenus no
+    abren: por eso el rebuild debe esperar a que no haya menu desplegado.
+    """
+    menu_open = {"value": True}
+    with _TrayHarness(menu_open=lambda: menu_open["value"]) as harness:
+        icon = harness.icon
+        icon.update_menu_count = 0
+
+        harness.actions.snapshot["is_on"] = True
+        harness.tray.refresh()
+
+        assert icon.update_menu_count == 0
+        assert "On 100%" in icon.title
+
+        menu_open["value"] = False
+        harness.tray.refresh()
+
+        assert icon.update_menu_count == 1
+
+
+def _find_menu_item(menu: Any, text: str) -> Any:
+    """Busca un item (hoja o padre) en todo el arbol del menu construido."""
+    for item in menu:
+        if item.text == text:
+            return item
+        submenu = item.submenu
+        if submenu is not None:
+            try:
+                return _find_menu_item(submenu, text)
+            except AssertionError:
+                continue
+    raise AssertionError(f"Menu item '{text}' not found")
+
+
+def test_menu_items_dispatch_every_leaf_action() -> None:
+    """Cada hoja del menu construido ejecuta su accion (Encender, Brillo, Preset, Salir)."""
+    with _TrayHarness() as harness:
+        menu = harness.icon.menu
+        for label in ("Turn on", "Hide window", "25%", "Warm Desk", "Quit"):
+            _find_menu_item(menu, label)(object())
+
+        assert harness.actions.power_calls == [True]
+        assert harness.hidden == 1
+        assert harness.actions.brightness_calls == [25]
+        assert harness.actions.preset_calls == ["p1"]
+        assert harness.quits == 1
+
+
+def test_submenu_parents_are_populated_and_do_not_dispatch() -> None:
+    """Brillo y Escenas favoritas deben exponer submenus reales con items."""
+    with _TrayHarness() as harness:
+        menu = harness.icon.menu
+        for label in ("Brightness", "Favorite presets"):
+            parent = _find_menu_item(menu, label)
+            submenu = parent.submenu
+            assert submenu is not None, f"{label} must be a submenu"
+            assert len(list(submenu)) > 0, f"{label} submenu must not be empty"
+            parent(object())
+
+        assert harness.actions.brightness_calls == []
+        assert harness.actions.preset_calls == []
+
+
+def test_action_thread_never_rebuilds_the_native_menu() -> None:
+    """Una accion del menu no puede tocar el HMENU: el rebuild queda para el refresco."""
+    with _TrayHarness(poll_interval=3600.0) as harness:
+        harness.icon.update_menu_threads.clear()
+
+        harness.tray.dispatch(ACTION_TURN_OFF)
+
+        assert "MainThread" not in harness.icon.update_menu_threads

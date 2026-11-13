@@ -128,7 +128,7 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
    - Sincroniza las instantáneas de estado (`_build_response()`): canaliza las lecturas de estado (`_collect_response_snapshot()`) hacia el hilo de trabajo dedicado `GestorLucesAsyncLoop` (manteniendo en caché las listas de monitores y dispositivos de audio tras su enumeración inicial) para prevenir condiciones de carrera entre el hilo de la interfaz y las operaciones asíncronas.
 
 3. **Hilo Demonio de la Bandeja del Sistema**:
-   - Se inicia mediante `pystray.Icon.run_detached()`.
+   - Ejecuta `pystray.Icon.run()` en un hilo demonio dedicado (`GestorLucesTray`), nunca `run_detached()`, para que un `stop()` omitido no mantenga vivo el proceso.
    - Mantiene un bucle Win32 secundario para renderizar el icono en el Área de Notificaciones y sus menús desplegables.
    - Opera de forma desacoplada de la ventana principal, permitiendo que esta se oculte, restaure o minimice sin afectar el proceso en segundo plano.
 
@@ -165,6 +165,15 @@ def set_state_snapshot(self, snapshot: dict[str, Any]) -> None:
     # update_menu() se ejecuta completamente fuera del bloqueo
     self.update_menu()
 ```
+
+### Regla de Hilos del Menú de Bandeja (T-3.6)
+
+En Windows, `pystray.Icon.update_menu()` empieza destruyendo el `HMENU` vigente y creando uno nuevo. Si eso ocurre con el menú desplegado, todos los IDs de item y todos los `hSubMenu` ya creados quedan invalidados: los clics cancelan en silencio y los submenús dejan de abrir.
+
+La regla que impone `TrayController`:
+- Las acciones del menú solo encolan trabajo en el ejecutor y terminan con `request_refresh()`; nunca tocan el icono.
+- Todo el estado nativo del icono (imagen, tooltip, modelo de menú) lo aplica el único hilo `GestorLucesTrayRefresh`.
+- Ese hilo reconstruye el menú nativo solo cuando no hay ninguno desplegado: `adapters.platform.windows.menu_state._is_menu_open` lee las banderas de modo menú del hilo en primer plano vía `GetGUIThreadInfo`. Si hay un menú abierto, el rebuild queda pendiente y se reintenta en el próximo refresco, de modo que un menú desplegado nunca se destruye debajo del usuario.
 
 ### Ocultamiento y Restauración de Ventana
 

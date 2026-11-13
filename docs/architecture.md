@@ -128,7 +128,7 @@ The desktop application spans four distinct thread contexts that must interact s
    - Synchronizes state snapshots (`_build_response()`): marshals state reads (`_collect_response_snapshot()`) onto the dedicated `GestorLucesAsyncLoop` worker thread (with hardware monitor and audio device lists cached after initial enumeration) to prevent cross-thread data races between the UI thread and async operations.
 
 3. **System Tray Daemon Thread**:
-   - Initialized via `pystray.Icon.run_detached()`.
+   - Runs `pystray.Icon.run()` in a dedicated daemon thread (`GestorLucesTray`), never `run_detached()`, so a missed `stop()` cannot keep the process alive.
    - Maintains a secondary Win32 message pump for the notification area tray icon and context menus.
    - Operates detached from the main window, permitting the window to be hidden, restored, or destroyed independently.
 
@@ -165,6 +165,15 @@ def set_state_snapshot(self, snapshot: dict[str, Any]) -> None:
     # update_menu() is executed outside the lock
     self.update_menu()
 ```
+
+### Tray Menu Threading Rule (T-3.6)
+
+On Windows, `pystray.Icon.update_menu()` starts by destroying the current `HMENU` and creating a new one. If that happens while the popup menu is displayed, every item ID and every `hSubMenu` already created becomes invalid: clicks cancel silently and submenus stop opening.
+
+The rule enforced by `TrayController`:
+- Menu actions only queue work on the executor thread and end with `request_refresh()`; they never touch the icon.
+- All native icon state (image, tooltip, menu model) is applied by the single `GestorLucesTrayRefresh` thread.
+- That thread rebuilds the native menu only when no menu is displayed: `adapters.platform.windows.menu_state._is_menu_open` reads the foreground thread's menu-mode flags via `GetGUIThreadInfo`. If a menu is open, the rebuild is marked pending and retried on the next refresh, so a displayed menu is never destroyed underneath the user.
 
 ### Case Study: Window Hide and Restore Lifecycle
 

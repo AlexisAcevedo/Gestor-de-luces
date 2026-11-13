@@ -8,6 +8,12 @@ de los modulos.
 from __future__ import annotations
 
 from gestor_luces.adapters.platform.windows.foreground import _activate_window_foreground
+from gestor_luces.adapters.platform.windows.menu_state import (
+    GUI_INMENUMODE,
+    GUI_POPUPMENUMODE,
+    GUI_SYSTEMMENUMODE,
+    _is_menu_open,
+)
 from gestor_luces.adapters.platform.windows.menu_sync import (
     _sync_native_menu,
     _to_webview_menus,
@@ -31,6 +37,9 @@ from gestor_luces.adapters.platform.windows.window_geometry import (
 
 __all__ = [
     "DARK_TITLEBAR_ENABLED",
+    "GUI_INMENUMODE",
+    "GUI_POPUPMENUMODE",
+    "GUI_SYSTEMMENUMODE",
     "THEME_WINDOW_CHROME",
     "WINDOW_DEFAULT_SIZE",
     "WINDOW_FALLBACK_SIZE",
@@ -40,6 +49,7 @@ __all__ = [
     "_compute_initial_window_geometry",
     "_configure_fn_signature",
     "_fit_native_window_height",
+    "_is_menu_open",
     "_resolve_native_hwnd",
     "_set_windows_dark_titlebar_attribute",
     "_sync_native_menu",
