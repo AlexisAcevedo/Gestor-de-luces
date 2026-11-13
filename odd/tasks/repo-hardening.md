@@ -41,7 +41,7 @@ usuario.
 | T-3.4 `print` → `logging` | S3 | inline | `017c5ad` |
 | T-3.5 descomponer `tray_icon.py` | S3 (§11/G2) | worker | — |
 | T-3.6 arreglar los 5 bugs del menú de bandeja | S5 | inline | `da0cb4a` |
-| T-3.7 submenús de bandeja por hover | S5 | inline | — |
+| T-3.7 submenús de bandeja por hover | S5 | inline | `b278acd` |
 | T-4.1 partir `LightControlService` | S3 | worker | — |
 | T-4.2 dispatch explícito en bridge | S3 | worker | — |
 | T-4.3 bridge contra ports | S3 | inline | — |
