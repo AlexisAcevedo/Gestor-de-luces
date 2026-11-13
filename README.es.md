@@ -308,6 +308,8 @@ Para correr las pruebas:
 pytest
 ```
 
+La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
+
 Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
 
 El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.

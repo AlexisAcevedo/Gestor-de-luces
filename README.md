@@ -308,6 +308,8 @@ Execute the test suite with:
 pytest
 ```
 
+Coverage is gated **per package**, not as one global percentage: `domain` at least 90 %, `application` at least 75 % and `adapters` at least 55 % (`scripts/check_coverage.py`, run by CI). Measure it locally with `pytest --cov=gestor_luces --cov-report=term-missing` and check the gate with `python scripts/check_coverage.py coverage.json`.
+
 All tests should pass (see the CI badge at the top of this file for the live status).
 
 Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
