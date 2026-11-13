@@ -164,26 +164,15 @@ La comunicación entre hilos entre la vista de bandeja (`pystray` o WinForms) y 
 
 ### Caso de Estudio: Resolución del Bloqueo Mutuo en el Menú de la Bandeja
 
-En prototipos iniciales, invocar `update_menu()` dentro de `TrayController` manteniendo un cerrojo interno provocaba bloqueos completos:
+En prototipos iniciales, invocar `update_menu()` dentro de `TrayController` manteniendo un cerrojo interno provocaba bloqueos completos (histórico, se conserva porque explica la forma actual):
 - `update_menu()` invoca internamente generadores dinámicos de menú (`_create_menu()`).
-- Dichos generadores consultan propiedades protegidas como `is_any_on`, `selected_ips` o `favorite_scenes`, intentando adquirir el mismo bloqueo.
+- Dichos generadores consultaban propiedades del controlador (`is_any_on`, `selected_ips`, `favorite_scenes`) que intentaban adquirir el mismo bloqueo.
 - Si simultáneamente el despachador de eventos Win32 procesaba un clic del usuario esperando dicho bloqueo, se producía un clásico deadlock AB-BA.
 
-**Solución Arquitectónica**:
-1. **Separación de la Instantánea de Estado y el Renderizado**:
-   - `TrayController` almacena una instantánea (`_state_snapshot`) protegida por un cerrojo reentrante (`threading.RLock`).
-   - `update_menu()` se ejecuta **estrictamente fuera** de la sección protegida, una vez copiada la información requerida.
-2. **Sincronización Reentrante**:
-   - Todos los mutex internos están configurados como `threading.RLock`, permitiendo inspecciones recursivas desde el mismo hilo sin autobloqueo.
-
-```python
-# Patrón seguro implementado en TrayController:
-def set_state_snapshot(self, snapshot: dict[str, Any]) -> None:
-    with self._lock:
-        self._state_snapshot = dict(snapshot)
-    # update_menu() se ejecuta completamente fuera del bloqueo
-    self.update_menu()
-```
+**Solución Arquitectónica (diseño vigente)**:
+1. **El estado llega por una costura, no generando el menú**: `TrayController` ya no expone las propiedades que leía un menú vivo. Pide una instantánea por refresco a `TrayActions.get_tray_snapshot()` (la implementa el puente, dueño del estado del servicio y de su propio timeout), así que construir un menú no puede reentrar en el controlador.
+2. **El cerrojo protege solo el modelo cacheado**: `_spec`, `_title` y `_theme` viven detrás de un `threading.Lock` común que solo toman sus accesores y el refresco que los publica. Nunca se sostiene un cerrojo mientras se llama a una `TrayView` o a `pywebview`, lo que elimina el riesgo AB-BA por estructura y no por disciplina.
+3. **Un único escritor por objeto nativo**: solo el hilo `GestorLucesTrayRefresh` aplica estado a la vista (ver la regla de hilos más abajo), así que el menú nativo no puede mutarse desde un segundo hilo que igual necesitaría un cerrojo.
 
 ### Regla de Hilos del Menú de Bandeja (T-3.6)
 

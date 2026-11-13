@@ -40,16 +40,17 @@ Los dispositivos WiZ admiten descubrimiento automático en la subred local. No o
 
 Emitir paquetes de descubrimiento a `255.255.255.255` suele fallar en equipos Windows donde existen adaptadores de red virtuales activos (como WSL, Hyper-V, VMware o adaptadores virtuales de Docker). Windows puede enrutar el paquete `255.255.255.255` hacia una placa virtual en lugar de la interfaz física conectada al router.
 
-**Implementación en `gestor_luces.cli`**:
-1. Inspección de Ruta de Socket: Se abre un socket UDP ficticio hacia una dirección externa (`8.8.8.8:80`) para detectar qué dirección IPv4 física selecciona la tabla de enrutamiento del sistema operativo.
-2. Cálculo de Broadcast Dirigido: Se calcula la dirección de difusión de la subred `/24` (por ejemplo, `192.168.100.255`) y se transmite el paquete de descubrimiento directamente a dicha dirección.
+**Implementación en `gestor_luces.adapters.wiz.udp_controller`**:
+1. Inspección de Ruta de Socket: se abre un socket UDP ficticio hacia una dirección externa (`8.8.8.8:80`) para detectar qué dirección IPv4 física selecciona la tabla de enrutamiento del sistema operativo.
+2. Cálculo de Broadcast Dirigido: `compute_subnet_broadcast()` deriva la dirección de difusión de la subred `/24` (por ejemplo, `192.168.100.255`) y `WizUdpController.discover()` transmite el paquete de descubrimiento directamente a esa dirección.
+El CLI y la aplicación de escritorio usan ese mismo controlador, así que el descubrimiento tiene una sola implementación y los subcomandos de `gestor-luces` ejercitan el mismo camino que la UI.
 
 ### Mecanismo de Apertura de Firewall por Unicast Directo
 
 Cuando la PC envía un paquete de broadcast UDP, los focos responden con paquetes UDP unicast dirigidos a la IP de la computadora. En diversas configuraciones de Windows Defender Firewall, estos paquetes entrantes no solicitados son descartados silenciosamente por considerarse tráfico no confiable.
 
-**Sondeo por Unicast Directo (`probe_single_ip`)**:
-Si el descubrimiento por broadcast no recibe respuestas, `gestor_luces` envía un datagrama unicast directo (`getSystemConfig`) a la dirección `192.168.X.Y:38899`. Al ser un paquete saliente originado en la PC, el firewall de Windows abre de forma automática un paso de retorno (*hole punching* por inspección de estado), permitiendo que la respuesta del foco ingrese sin necesidad de alterar las reglas globales del firewall.
+**Sondeo por Unicast Directo (`WizUdpController.probe_bulb`)**:
+Si el descubrimiento por broadcast no recibe respuestas, `probe_bulb()` envía un datagrama unicast directo (`getSystemConfig`) a la dirección `192.168.X.Y:38899`. Al ser un paquete saliente originado en la PC, el firewall de Windows abre de forma automática un paso de retorno (*hole punching* por inspección de estado), permitiendo que la respuesta del foco ingrese sin necesidad de alterar las reglas globales del firewall.
 
 ---
 

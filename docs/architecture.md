@@ -164,26 +164,15 @@ Inter-thread communication between the tray view (`pystray` or WinForms) and `py
 
 ### Case Study: System Tray Menu Deadlock Resolution
 
-In early prototypes, calling `update_menu()` inside `TrayController` while holding an internal lock caused hard lockups:
+In early prototypes, calling `update_menu()` inside `TrayController` while holding an internal lock caused hard lockups (historical, kept here because it explains the current shape):
 - `update_menu()` internally invokes dynamic menu generators (`_create_menu()`).
-- Those generators query `is_any_on`, `selected_ips`, or `favorite_scenes`, which attempted to acquire the same lock.
+- Those generators queried controller properties (`is_any_on`, `selected_ips`, `favorite_scenes`) that attempted to acquire the same lock.
 - If the Win32 message pump was simultaneously dispatching a tray click callback waiting for the lock, a classic AB-BA deadlock occurred.
 
-**Architectural Fix**:
-1. **Separation of State Snapshot from View Rendering**:
-   - `TrayController` maintains a lightweight internal `_state_snapshot` dictionary protected by a reentrant `threading.RLock`.
-   - `update_menu()` is called strictly **outside** the locked section after copying the snapshot.
-2. **Re-entrant Synchronization**:
-   - All internal mutexes are configured as `threading.RLock` to allow recursive inspections from the same thread without self-deadlock.
-
-```python
-# Safe pattern implemented in TrayController:
-def set_state_snapshot(self, snapshot: dict[str, Any]) -> None:
-    with self._lock:
-        self._state_snapshot = dict(snapshot)
-    # update_menu() is executed outside the lock
-    self.update_menu()
-```
+**Architectural Fix (current design)**:
+1. **The state arrives through a seam, not through menu generation**: `TrayController` no longer exposes the properties a live menu reads. It pulls one snapshot per refresh from `TrayActions.get_tray_snapshot()` (implemented by the bridge, which owns the service state and its own timeout), so building a menu can never re-enter the controller.
+2. **The lock guards only the cached model**: `_spec`, `_title` and `_theme` sit behind a plain `threading.Lock` taken only by their accessors and by the refresh that publishes them. No lock is held while calling into a `TrayView` or into `pywebview`, which removes the AB-BA hazard structurally instead of by discipline.
+3. **One writer per native object**: only the `GestorLucesTrayRefresh` thread applies state to the view (see the threading rule below), so the native menu cannot be mutated from a second thread that would need a lock anyway.
 
 ### Tray Menu Threading Rule (T-3.6)
 
