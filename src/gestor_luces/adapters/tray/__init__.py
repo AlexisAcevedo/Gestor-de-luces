@@ -4,7 +4,10 @@ Reexporta el controlador de bandeja, el contrato de vista y las funciones puras 
 de menu e icono para que el punto de entrada y las pruebas interactuen con una interfaz
 unica sin acoplarse a la organizacion interna de los modulos. Las vistas concretas
 (`winforms_tray` y el respaldo `pystray_tray`) se importan desde su propio modulo para no
-cargar .NET ni `pystray` cuando el arranque no llega a la bandeja.
+cargar .NET ni `pystray` cuando el arranque no llega a la bandeja. La vista WinForms se
+compone de modulos hermanos (`winforms_host`, `winforms_icon`, `winforms_menu` y
+`winforms_paint`); `winforms_tray` los orquesta y reexporta su superficie, asi que este
+paquete no necesita conocer el reparto.
 """
 
 from __future__ import annotations
