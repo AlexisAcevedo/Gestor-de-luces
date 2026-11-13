@@ -94,7 +94,7 @@ The core principle behind this project is **strict isolation of business invaria
 
 ## 2. Concurrency and Threading Model
 
-The desktop application spans four distinct thread contexts that must interact safely without freezing the user interface, dropping streaming frames, or causing deadlocks.
+The desktop application declares eight named threads and also runs four thread contexts that it does not create itself. They must interact safely without freezing the user interface, dropping streaming frames, or causing deadlocks. The inventory below is derived from `grep -rn "threading.Thread(" src/` and from following each thread's lifecycle; it is verified by `tests/test_thread_lifecycle.py`.
 
 ```
 +-------------------------------------------------------------------------------+
@@ -106,7 +106,7 @@ The desktop application spans four distinct thread contexts that must interact s
        | Synchronous JS API Call                                        | UI State Callback
        v                                                                |
 +-------------------------------------------------------------------------------+
-| THREAD 2: Dedicated Asyncio Event Loop Worker (_bridge_worker)                |
+| THREAD 2: Dedicated Asyncio Event Loop (GestorLucesAsyncLoop)                 |
 |   - Executes all network I/O, coroutines, and service workflows.             |
 |   - Runs asyncio.run_coroutine_threadsafe() to dispatch work safely.         |
 |   - Interfaces with WizUdpController sockets.                                |
@@ -122,29 +122,39 @@ The desktop application spans four distinct thread contexts that must interact s
 +--------------------------------------+   +------------------------------------+
 ```
 
-### Thread Descriptions & Responsibilities
+### Thread Inventory (every `threading.Thread(` in `src/`)
 
-1. **Main UI Thread**:
-   - Initialized by `webview.start()`.
-   - Runs the Win32/WinForms window loop and hosts Microsoft Edge Chromium (WebView2).
-   - Any long-running or blocking call on this thread immediately freezes the user interface.
+Every call site passes an explicit `name=` and `daemon=True`: an omitted `stop()` can never keep the process alive, and every thread is identifiable in `threading.enumerate()`. The `name` column is the exact `threading.Thread.name` value.
 
-2. **Asyncio Bridge Worker Thread (`GestorLucesAsyncLoop`)**:
-   - Created at application startup in `WebviewBridge.start_event_loop()`.
-   - Owns an isolated, long-running `asyncio.AbstractEventLoop`.
-   - JavaScript calls invoked via the `window.pywebview.api` interface are routed through `asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)` with a guarded timeout to prevent indefinitely blocking the UI thread on network timeouts.
-   - Synchronizes state snapshots (`_build_response()`): marshals state reads (`_collect_response_snapshot()`) onto the dedicated `GestorLucesAsyncLoop` worker thread (with hardware monitor and audio device lists cached after initial enumeration) to prevent cross-thread data races between the UI thread and async operations.
+| Thread (`name=`) | Owner (module → creator) | Lifetime | How it is stopped |
+| --- | --- | --- | --- |
+| `GestorLucesAsyncLoop` (`ASYNC_LOOP_THREAD_NAME`) | `adapters/ui_webview/lifecycle.py` → `BridgeLifecycle._start_async_loop`, started by `WebviewBridge.__init__` | Long-lived: one per session, runs the bridge's private `asyncio` loop (`loop.run_forever()`) | `WebviewBridge.shutdown()` cancels the active streams, calls `loop.call_soon_threadsafe(loop.stop)` and `thread.join(timeout=2.0)`. Idempotent behind `_shutdown_lock`; invoked by `DesktopApplication.cleanup()` and by the window `closed` event. |
+| `GestorLucesTray` (`ICON_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start`, runs `TrayView.run` | Long-lived: the view's native message pump (WinForms `Application.Run` on an STA thread, or `pystray.Icon.run`) for the whole session | `TrayController.stop()` sets `_stopped` and calls `TrayView.stop()` (WinForms closes the hidden form, `pystray` stops the icon), so `run` returns. Safe to call repeatedly and from any thread. |
+| `GestorLucesTrayRefresh` (`REFRESH_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start` → `_refresh_worker` | Long-lived: waits on `_refresh_requested` with the `poll_interval` timeout (5 s) | Same `TrayController.stop()`: it sets `_stopped` and `_refresh_requested` and the worker exits on the flag. It is the single writer of native tray state (T-3.6). |
+| `GestorLucesTrayAction` (literal in `_default_executor`) | `adapters/tray/tray_icon.py` → `TrayController.dispatch` → `_run_action` | Short-lived: one thread per dispatched menu action | Self-terminating; nothing joins it. `quit_app` deliberately does not tear the tray down from this thread — the teardown runs later in `cleanup()`. |
+| `GestorLucesMenuSync` (`MENU_SYNC_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.start` → `_menu_sync_worker` | Long-lived: waits on `_menu_sync_requested` and re-applies the live native `MenuStrip` (pywebview has no menu update API) | `DesktopApplication.cleanup()` sets `is_quitting` and calls `request_menu_sync()` once: the loop wakes, sees the flag and exits before re-applying. |
+| `GestorLucesHideOnClose` (`HIDE_ON_CLOSE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_closing` (window `closing` event) | Short-lived: calls `hide_window` and exits | Self-terminating. pywebview raises `closing` synchronously on the GUI thread with `should_lock`, so hiding from inside the handler could re-enter or deadlock; hence the thread. |
+| `GestorLucesHideOnMinimize` (`HIDE_ON_MINIMIZE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_minimized` (window `minimized` event) | Short-lived: calls `hide_window` and exits | Self-terminating, for the same reason as hide-on-close. |
+| `GestorLucesSingleInstance` (literal in `listen`) | `adapters/system/single_instance.py` → `SingleInstanceGuard.listen` | Long-lived: polls `WaitForSingleObject(handle, 500 ms)` for a second launch | `SingleInstanceGuard.release()` sets `self._stop`; the thread exits within one 500 ms poll. Called by `DesktopApplication.cleanup()`. |
 
-3. **System Tray View Thread**:
-   - Runs `TrayView.run()` in a dedicated daemon thread (`GestorLucesTray`), never on the UI thread and never as a non-daemon thread, so a missed `stop()` cannot keep the process alive.
-   - Primary view (`winforms_tray` + `winforms_host`): the thread calls `CoInitializeEx` (STA) and hosts the `Application.Run(form)` message pump of a hidden 0×0 `Form` that owns the `NotifyIcon` and its `ContextMenuStrip`.
-   - Fallback view (`pystray_tray`): the thread runs `pystray.Icon.run()`, which keeps its own Win32 message pump for the classic tray icon.
-   - Operates detached from the main window, permitting the window to be hidden, restored, or destroyed independently.
+Thread contexts the application does not create itself:
 
-4. **Hardware Streaming Threads (Ambilight & Audio)**:
-   - Managed as background daemon threads by `AmbilightStreamManager` and `MusicSyncStreamManager`.
-   - Wake up on fixed intervals (e.g., 100 ms for Ambilight) or audio hardware buffer interrupts (WASAPI loopback).
-   - Use fire-and-forget UDP packets (`stream_pilot`) without waiting for network ACKs, preventing pipeline stalls.
+| Context | Owner (module) | Lifetime | How it is stopped |
+| --- | --- | --- | --- |
+| `MainThread` (UI pump) | `webview.start()` (pywebview/WinForms), called from `DesktopApplication.start` | Long-lived: blocks until the native window is destroyed | `window.destroy()` from `quit_app` (tray Quit or File → Exit); `webview.start()` returns and `cleanup()` runs in its `finally`. |
+| Default-executor workers (asyncio_0, asyncio_1, …) | the `GestorLucesAsyncLoop` loop's default executor thread pool, filled lazily by `asyncio.to_thread` in `application/ambilight_stream.py` (~10 Hz) and `application/music_stream.py` (~10.5 Hz) | Long-lived while the session runs; idle between frames | `BridgeLifecycle.shutdown()` stops both streams first, and `loop.close()` inside `_run_loop` shuts the default executor down (`shutdown(wait=False)`) when the loop exits. |
+| PortAudio callback thread (surfaces as `Dummy-N`) | PortAudio/WASAPI: it calls the `stream_callback` closure of `adapters/audio/wasapi_session.py` | Long-lived while the music stream is active: one call per audio buffer | `WasapiLoopbackStreamSession.close()` (`stop_stream`, `close`, `pa.terminate()`), reached from `LightControlService.close_audio_sampler()` inside `shutdown()`. |
+| `Thread-N (setup_handler)` | `pystray.Icon.run()` in the fallback view `adapters/tray/pystray_tray.py`; pystray creates it **without a name and without `daemon`** | Short-lived: sets `icon.visible = True` once the pump starts | `pystray.Icon.stop()` joins it with `SETUP_THREAD_TIMEOUT` (5 s) from the thread that calls `TrayView.stop()`. The WinForms view creates no such thread. |
+
+`cli.py` runs `asyncio.run(...)` on the calling thread, so the command-line tool adds no thread of its own.
+
+### Thread Rules
+
+- Every `threading.Thread(` in `src/` keeps an explicit `name=` and `daemon=True`; a new call site without both is a defect.
+- Only `GestorLucesTrayRefresh` applies native tray state, and only `GestorLucesMenuSync` re-applies the native window menu: one writer per native surface.
+- Only `GestorLucesTrayAction` performs tray menu actions, so a slow UDP call never runs inside a native message pump. The window menu bar dispatches on `MainThread` through pywebview and only re-applies state through `GestorLucesMenuSync`.
+- Closing the app releases the long-lived threads (`GestorLucesAsyncLoop`, `GestorLucesTray`, `GestorLucesTrayRefresh`, `GestorLucesSingleInstance`); the short-lived ones (`GestorLucesTrayAction`, `GestorLucesHideOnClose`, `GestorLucesHideOnMinimize`) have already finished by then and are never joined at close.
+- **Closing rule:** `DesktopApplication.cleanup()` stops every app-owned thread: it sets `is_quitting` and wakes `GestorLucesMenuSync`, releases the single-instance guard, stops the tray view and its refresh thread, and shuts the bridge loop down. `tests/test_thread_lifecycle.py` proves with `threading.enumerate()` that no app-named thread survives close, using bounded condition waits rather than fixed sleeps.
 
 ---
 

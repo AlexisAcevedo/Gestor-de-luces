@@ -94,7 +94,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 
 ## 2. Modelo de Concurrencia y Topología de Hilos
 
-La aplicación coordina cuatro contextos de ejecución concurrentes que deben interactuar fluidamente sin congelar la interfaz gráfica, sin perder paquetes de streaming y sin generar bloqueos mutuos (*deadlocks*).
+La aplicación declara ocho hilos con nombre y además ejecuta cuatro contextos de hilo que no crea ella misma. Todos deben interactuar fluidamente sin congelar la interfaz gráfica, sin perder paquetes de streaming y sin generar bloqueos mutuos (*deadlocks*). El inventario de abajo sale de `grep -rn "threading.Thread(" src/` y de seguir el ciclo de vida de cada hilo; lo verifica `tests/test_thread_lifecycle.py`.
 
 ```
 +-------------------------------------------------------------------------------+
@@ -106,7 +106,7 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
        | Llamada síncrona a la API JS                                   | Notificación de Estado
        v                                                                |
 +-------------------------------------------------------------------------------+
-| HILO 2: Bucle de Eventos Asíncrono Dedicado (_bridge_worker)                  |
+| HILO 2: Bucle de Eventos Asíncrono Dedicado (GestorLucesAsyncLoop)            |
 |   - Ejecuta todo el I/O de red, corrutinas y flujos de servicio.              |
 |   - Recibe tareas mediante asyncio.run_coroutine_threadsafe().                |
 |   - Se comunica directamente con los sockets de WizUdpController.             |
@@ -122,29 +122,39 @@ La aplicación coordina cuatro contextos de ejecución concurrentes que deben in
 +--------------------------------------+   +------------------------------------+
 ```
 
-### Roles y Responsabilidades de los Hilos
+### Inventario de Hilos (cada `threading.Thread(` en `src/`)
 
-1. **Hilo Principal de UI**:
-   - Se inicia con `webview.start()`.
-   - Controla el bucle de mensajes de la ventana Win32/WinForms y hospeda Microsoft Edge Chromium (WebView2).
-   - Cualquier operación pesada o bloqueante en este hilo congela de inmediato la interfaz.
+Cada llamada pasa un `name=` explícito y `daemon=True`: un `stop()` omitido no puede mantener vivo el proceso y todo hilo es identificable en `threading.enumerate()`. La columna `name` es el valor exacto de `threading.Thread.name`.
 
-2. **Hilo Asíncrono de Trabajo (`_bridge_worker` / `GestorLucesAsyncLoop`)**:
-   - Se crea durante el arranque de la aplicación en `WebviewBridge.start_event_loop()`.
-   - Contiene un `asyncio.AbstractEventLoop` independiente de larga duración.
-   - Las invocaciones de JavaScript (`window.pywebview.api`) se despachan con `asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)` con un tiempo límite de protección para no bloquear la interfaz en caso de problemas de red.
-   - Sincroniza las instantáneas de estado (`_build_response()`): canaliza las lecturas de estado (`_collect_response_snapshot()`) hacia el hilo de trabajo dedicado `GestorLucesAsyncLoop` (manteniendo en caché las listas de monitores y dispositivos de audio tras su enumeración inicial) para prevenir condiciones de carrera entre el hilo de la interfaz y las operaciones asíncronas.
+| Hilo (`name=`) | Dueño (módulo → creador) | Vida | Cómo se detiene |
+| --- | --- | --- | --- |
+| `GestorLucesAsyncLoop` (`ASYNC_LOOP_THREAD_NAME`) | `adapters/ui_webview/lifecycle.py` → `BridgeLifecycle._start_async_loop`, arrancado por `WebviewBridge.__init__` | Larga: uno por sesión, ejecuta el bucle `asyncio` privado del puente (`loop.run_forever()`) | `WebviewBridge.shutdown()` cancela los flujos activos, llama `loop.call_soon_threadsafe(loop.stop)` y `thread.join(timeout=2.0)`. Idempotente tras `_shutdown_lock`; lo invocan `DesktopApplication.cleanup()` y el evento `closed` de la ventana. |
+| `GestorLucesTray` (`ICON_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start`, ejecuta `TrayView.run` | Larga: el bombeo nativo de mensajes de la vista (WinForms `Application.Run` en un hilo STA, o `pystray.Icon.run`) durante toda la sesión | `TrayController.stop()` marca `_stopped` y llama `TrayView.stop()` (WinForms cierra el form oculto, `pystray` detiene el icono), así que `run` retorna. Seguro de invocar varias veces y desde cualquier hilo. |
+| `GestorLucesTrayRefresh` (`REFRESH_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start` → `_refresh_worker` | Larga: espera en `_refresh_requested` con el timeout de `poll_interval` (5 s) | El mismo `TrayController.stop()`: marca `_stopped` y `_refresh_requested`, y el worker sale por la bandera. Es el único escritor del estado nativo de la bandeja (T-3.6). |
+| `GestorLucesTrayAction` (literal en `_default_executor`) | `adapters/tray/tray_icon.py` → `TrayController.dispatch` → `_run_action` | Corta: un hilo por acción de menú despachada | Termina solo; nadie lo une (*join*). `quit_app` no desmonta la bandeja desde este hilo a propósito: el desmontaje ocurre después en `cleanup()`. |
+| `GestorLucesMenuSync` (`MENU_SYNC_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.start` → `_menu_sync_worker` | Larga: espera en `_menu_sync_requested` y reaplica en vivo el `MenuStrip` nativo (pywebview no tiene API de actualización de menú) | `DesktopApplication.cleanup()` marca `is_quitting` y llama una vez a `request_menu_sync()`: el bucle despierta, ve la bandera y sale antes de reaplicar. |
+| `GestorLucesHideOnClose` (`HIDE_ON_CLOSE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_closing` (evento `closing` de la ventana) | Corta: llama `hide_window` y termina | Termina sola. pywebview dispara `closing` de forma síncrona en el hilo GUI con `should_lock`, así que ocultar dentro del manejador podría reentrar o bloquearse; de ahí el hilo. |
+| `GestorLucesHideOnMinimize` (`HIDE_ON_MINIMIZE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_minimized` (evento `minimized` de la ventana) | Corta: llama `hide_window` y termina | Termina sola, por la misma razón que el cierre. |
+| `GestorLucesSingleInstance` (literal en `listen`) | `adapters/system/single_instance.py` → `SingleInstanceGuard.listen` | Larga: sondea `WaitForSingleObject(handle, 500 ms)` esperando un segundo lanzamiento | `SingleInstanceGuard.release()` marca `self._stop` y el hilo sale dentro de un sondeo de 500 ms. Lo llama `DesktopApplication.cleanup()`. |
 
-3. **Hilo de la Vista de Bandeja**:
-   - Ejecuta `TrayView.run()` en un hilo demonio dedicado (`GestorLucesTray`), nunca en el hilo de la UI y nunca como hilo no demonio, para que un `stop()` omitido no mantenga vivo el proceso.
-   - Vista principal (`winforms_tray` + `winforms_host`): el hilo llama `CoInitializeEx` (STA) y hospeda el bombeo `Application.Run(form)` de un `Form` oculto de 0×0 que es dueño del `NotifyIcon` y su `ContextMenuStrip`.
-   - Vista de respaldo (`pystray_tray`): el hilo ejecuta `pystray.Icon.run()`, que mantiene su propio bombeo Win32 para el icono clásico.
-   - Opera de forma desacoplada de la ventana principal, permitiendo que esta se oculte, restaure o minimice sin afectar el proceso en segundo plano.
+Contextos de hilo que la aplicación no crea:
 
-4. **Hilos de Streaming de Hardware (Ambilight y Música)**:
-   - Administrados como hilos demonio en segundo plano por `AmbilightStreamManager` y `MusicSyncStreamManager`.
-   - Se activan por intervalos fijos (100 ms para Ambilight) o por interrupciones del búfer de audio (WASAPI loopback).
-   - Transmiten paquetes UDP sin confirmación (`stream_pilot`), evitando que la espera de respuestas de red congele el flujo continuo.
+| Contexto | Dueño (módulo) | Vida | Cómo se detiene |
+| --- | --- | --- | --- |
+| `MainThread` (bombeo de UI) | `webview.start()` (pywebview/WinForms), invocado desde `DesktopApplication.start` | Larga: bloquea hasta que la ventana nativa se destruye | `window.destroy()` desde `quit_app` (Salir de la bandeja o Archivo → Salir); `webview.start()` retorna y `cleanup()` corre en su `finally`. |
+| Workers del ejecutor por defecto (asyncio_0, asyncio_1, …) | el pool por defecto del bucle `GestorLucesAsyncLoop`, poblado de forma perezosa por `asyncio.to_thread` en `application/ambilight_stream.py` (~10 Hz) y `application/music_stream.py` (~10.5 Hz) | Larga mientras corre la sesión; inactivos entre fotogramas | `BridgeLifecycle.shutdown()` detiene ambos flujos primero, y `loop.close()` dentro de `_run_loop` apaga el ejecutor por defecto (`shutdown(wait=False)`) al salir el bucle. |
+| Hilo de callback de PortAudio (aparece como `Dummy-N`) | PortAudio/WASAPI: invoca el closure `stream_callback` de `adapters/audio/wasapi_session.py` | Larga mientras el flujo de música está activo: una llamada por búfer de audio | `WasapiLoopbackStreamSession.close()` (`stop_stream`, `close`, `pa.terminate()`), alcanzado desde `LightControlService.close_audio_sampler()` dentro de `shutdown()`. |
+| `Thread-N (setup_handler)` | `pystray.Icon.run()` en la vista de respaldo `adapters/tray/pystray_tray.py`; pystray lo crea **sin nombre y sin `daemon`** | Corta: marca `icon.visible = True` cuando arranca el bombeo | `pystray.Icon.stop()` lo une con `SETUP_THREAD_TIMEOUT` (5 s) desde el hilo que llama `TrayView.stop()`. La vista WinForms no crea ese hilo. |
+
+`cli.py` ejecuta `asyncio.run(...)` en el hilo llamador, así que la herramienta de línea de comandos no agrega hilos propios.
+
+### Reglas de Hilos
+
+- Cada `threading.Thread(` en `src/` conserva un `name=` explícito y `daemon=True`; un sitio nuevo sin ambos es un defecto.
+- Solo `GestorLucesTrayRefresh` aplica el estado nativo de la bandeja, y solo `GestorLucesMenuSync` reaplica el menú nativo de la ventana: un escritor por superficie nativa.
+- Solo `GestorLucesTrayAction` ejecuta acciones del menú de bandeja, así que una llamada UDP lenta nunca corre dentro de un bombeo nativo. La barra de menú de la ventana despacha en `MainThread` a través de pywebview y solo reaplica estado mediante `GestorLucesMenuSync`.
+- Cerrar la aplicación libera los hilos de vida larga (`GestorLucesAsyncLoop`, `GestorLucesTray`, `GestorLucesTrayRefresh`, `GestorLucesSingleInstance`); los de vida corta (`GestorLucesTrayAction`, `GestorLucesHideOnClose`, `GestorLucesHideOnMinimize`) ya terminaron para entonces y nunca se unen al cerrar.
+- **Regla de cierre:** `DesktopApplication.cleanup()` detiene todos los hilos de la app: marca `is_quitting` y despierta a `GestorLucesMenuSync`, libera la instancia única, detiene la vista de bandeja y su hilo de refresco, y apaga el bucle del puente. `tests/test_thread_lifecycle.py` demuestra con `threading.enumerate()` que ningún hilo con nombre de la app sobrevive al cierre, usando esperas acotadas por condición y no `sleep` fijos.
 
 ---
 

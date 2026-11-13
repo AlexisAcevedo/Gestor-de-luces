@@ -210,6 +210,11 @@ class DesktopApplication:
 
     def cleanup(self) -> None:
         """Libera la instancia unica, la bandeja y el bucle asincrono del puente."""
+        # El hilo que reaplica el menu nativo queda aparcado en su Event: marcarlo como
+        # cierre y despertarlo es lo que lo saca del wait y lo hace salir del bucle. Sin
+        # esto sobrevive al cierre y solo muere porque es demonio.
+        self.is_quitting = True
+        self.request_menu_sync()
         if self._guard is not None:
             self._guard.release()
         if self._tray is not None:
