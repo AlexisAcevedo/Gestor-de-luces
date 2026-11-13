@@ -16,10 +16,10 @@ cambia de tamaño.
 
 | ID | Spec | Route | Commit |
 | --- | --- | --- | --- |
-| T1 quitar los topes de `40dvh`/`320px` de `.scenes-grid` y `.custom-scenes-grid` | S1, S2, S3 | inline | — |
-| T2 fit real: medir solo la pestaña activa, eliminar el piso del baseline y el clamp de medición | S2, S3 | inline | — |
-| T3 refit después de renders asíncronos y cambio de idioma | S4 | inline | — |
-| T4 tests: guardrail de CSS y del contrato del fit | S1, S3 | inline | — |
+| T1 quitar los topes de `40dvh`/`320px` de `.scenes-grid` y `.custom-scenes-grid` | S1, S2, S3 | inline | `6efe4e4` |
+| T2 fit real: medir solo la pestaña activa, eliminar el piso del baseline y el clamp de medición | S2, S3 | inline | `6efe4e4` |
+| T3 refit después de renders asíncronos y cambio de idioma | S4 | inline | `6efe4e4` |
+| T4 tests: guardrail de CSS y del contrato del fit | S1, S3 | inline | `6efe4e4` |
 | T5 checklist manual en Windows real (escenas crece, presets achica, sin scroll interno) | S1, S2 | usuario + inline | — |
 
 ## Log
@@ -27,3 +27,4 @@ cambia de tamaño.
 - L1 (2026-11-12, usuario): «busca la sesion de repo hardening, estabamos con algunos bugs de anoche. Quiero agregar algo del comportamiento de la ventana que no es tan responsive como me gustaria, en la seccion escenas la ventana queda chica y no alcanza a mostrar casi el menu de escenas y hay que agrandar la ventana, cuando vas a presets queda con el tamaño de main y no cambia».
 - L2 (2026-11-12): diagnóstico (explorer `gentle-ai-explore`, tarea `mweae4ui-1-hu13`). El fit calcula `max(baseline(White al ancho actual), altura natural de la pestaña activa)` (`ui/js/shortcuts.js:193-218`): de ahí el «queda con el tamaño de main y no cambia» de Presets. Además las dos grillas están topeadas con `max-height: min(40dvh, 320px); overflow-y: auto` (`ui/styles.css:1344-1354`, `:1667-1677`) y durante la medición se fuerzan a `max-height: 48px` (`ui/styles.css:2365-2369`), así que 36 escenas en 3 columnas se miden como ~48-320 px y scrollean adentro: de ahí el «queda chica» de Escenas. El clamp del backend es `[640, alto del área de trabajo]` (`window_geometry.py:213-218`), o sea el límite es de CSS/JS, no del SO.
 - L3 (2026-11-12, usuario): decisiones S2 (a) y (b) confirmadas en el cuestionario de esta sesión; se ejecuta después de T-3.6 (bugs de bandeja) por pedido del usuario.
+- L4 (2026-11-12): **T1-T4 completas** (inline, commit `6efe4e4`). CSS: `.scenes-grid` y `.custom-scenes-grid` quedan sin `max-height` ni `overflow`, y la regla `.is-measuring` de las grillas conserva solo `flex: 0 0 auto` (sin el tope de 48 px). Eliminado todo el mecanismo de baseline (`measureBaseline`, `fitBaseline`, `invalidateFitBaseline`, CSS `.is-measuring-baseline` y el listener de `resize` que invalidaba la caché): el target del fit es ahora `measureNaturalHeight(stage)`, o sea el contenido real de la sección activa, y la ventana puede achicarse hasta el mínimo configurado (`WINDOW_MIN_SIZE[1]` = 640) o crecer hasta el área de trabajo. `syncLanguageUi` pide `requestFit(true)` cuando cambia el idioma (antes solo invalidaba el baseline). Tests nuevos en `tests/test_window_fit.py`: guardrail de que las grillas no tienen tope ni scroll interno ni clamp de medición, de que el target es `measureNaturalHeight` y de que el cambio de idioma reajusta. RED verificado (los dos tests fallan con el UI previo, `git stash` de `ui/`) → GREEN. Suite 129 passed, `node --check` OK en `shortcuts.js`/`app.js`, `ruff check`/`format --check` limpios. Docs actualizados: `README.md`/`README.es.md` (§interfaz) y `docs/design/ui_redesign_spec{,.es}.md` (§2 geometría). PENDIENTE: T5, checklist manual en Windows real (Escenas debe crecer hasta mostrar todas las tarjetas sin scroll interno; Presets debe achicar la ventana).
