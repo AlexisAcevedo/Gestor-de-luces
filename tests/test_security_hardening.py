@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -15,6 +16,8 @@ from gestor_luces.adapters.ui_webview.bridge import (
     JsApi,
     WebviewBridge,
 )
+from gestor_luces.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
+from gestor_luces.adapters.wiz import udp_controller as udp_controller_module
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController, _safe_int, _safe_text
 from gestor_luces.application.service import (
     MAX_DISPLAY_NAME_LEN,
@@ -137,7 +140,6 @@ def test_js_api_binds_every_exposed_method_to_the_bridge_instance() -> None:
     api = JsApi(bridge)
     for name in JS_API_DISPATCH:
         assert getattr(api, name).__self__ is bridge
-    assert api._bridge is bridge
 
 
 def test_bridge_narrows_service_errors_to_the_declared_tuple() -> None:
@@ -234,19 +236,47 @@ def test_atomic_write_json_cleans_up_temp_files(tmp_path: Path) -> None:
     assert leftovers == []
 
 
-async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly() -> None:
+async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El flujo continuo abre UN solo socket UDP y `close()` lo libera.
+
+    Se observa el socket mismo (cuantos se crean y si queda con descriptor), no un atributo
+    privado del controlador: el contrato es «no filtrar sockets», y eso se mide en el objeto
+    que el sistema operativo entrega.
+    """
     from gestor_luces.domain.value_objects import Color
 
+    created: list[socket.socket] = []
+    real_socket = socket.socket
+
+    def _counting_socket(*args: object, **kwargs: object) -> socket.socket:
+        sock = real_socket(*args, **kwargs)  # type: ignore[arg-type]
+        created.append(sock)
+        return sock
+
+    class _SocketModuleShim:
+        """Reemplaza solo el nombre `socket` del modulo; el modulo real queda intacto."""
+
+        socket = staticmethod(_counting_socket)
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(socket, name)
+
+    # Se sustituye el nombre en el modulo del adaptador, no el modulo `socket` global: parchear
+    # el global rompe el bucle Proactor de asyncio, que hace `isinstance(conn, socket.socket)`.
+    monkeypatch.setattr(udp_controller_module, "socket", _SocketModuleShim())
+
     controller = WizUdpController(port=49999)
-    await controller.stream_pilot("127.0.0.1", Color(255, 100, 50), 80)
-    first_sock = controller._stream_sock
-    assert first_sock is not None and first_sock.fileno() >= 0
-
-    await controller.stream_pilot("127.0.0.1", Color(10, 200, 90), 60)
-    assert controller._stream_sock is first_sock
-
-    controller.close()
-    assert controller._stream_sock is None
+    try:
+        await controller.stream_pilot("127.0.0.1", Color(255, 100, 50), 80)
+        await controller.stream_pilot("127.0.0.1", Color(10, 200, 90), 60)
+        assert len(created) == 1, "the continuous stream opened more than one UDP socket"
+        stream_sock = created[0]
+        assert stream_sock.fileno() >= 0
+    finally:
+        controller.close()
+    assert stream_sock.fileno() == -1, "close() left the streaming socket open"
 
 
 def test_inner_hexagonal_layers_never_import_adapters() -> None:
@@ -356,7 +386,7 @@ def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
     try:
         resp = bridge.get_sleep_timer_status()
         assert resp["ok"] is True
-        assert "GestorLucesAsyncLoop" in observed_threads
+        assert ASYNC_LOOP_THREAD_NAME in observed_threads
     finally:
         bridge.shutdown()
 
