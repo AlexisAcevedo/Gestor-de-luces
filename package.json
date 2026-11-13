@@ -4,6 +4,6 @@
   "type": "module",
   "description": "Frontend test harness for the Gestor de Luces WebView UI (browser ES modules under ui/js).",
   "scripts": {
-    "test": "node --test --experimental-test-coverage --test-coverage-include=ui/js/store.js --test-coverage-include=ui/js/scenes.js --test-coverage-lines=60 tests/js"
+    "test": "node --test --experimental-test-coverage --test-coverage-include=ui/js/store.js --test-coverage-include=ui/js/scenes.js --test-coverage-lines=60 tests/js/store.test.js tests/js/scenes.test.js"
   }
 }
