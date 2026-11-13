@@ -25,7 +25,7 @@ WINDOW_FALLBACK_SIZE = WINDOW_DEFAULT_SIZE
 # El auto-fit no lleva la ventana mas alla de esta fraccion del area de trabajo: una
 # seccion larga (la grilla de escenas pide ~1310 px) no debe ocupar toda la pantalla;
 # lo que sobra scrollea en el escenario, nunca dentro de una grilla.
-WINDOW_FIT_COMFORT_RATIO = 0.78
+WINDOW_FIT_COMFORT_RATIO = 0.72
 
 
 def _compute_initial_window_geometry(
