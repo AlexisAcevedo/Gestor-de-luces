@@ -56,13 +56,10 @@ usuario.
 | T-6.1 tests de `SingleInstanceGuard` | S3 | inline | `12fe946` |
 | T-6.3 des-*flakear* la suite | S3 | inline | `2818db0` + `d1078e7` |
 | T-6.4 desacoplar tests de internals | S3 (§11/G12) | inline | `7323f8c` + `f5a6ca0` |
-| T-6.5 expandir tests de dominio | S3 | inline | ` |
+| T-6.5 expandir el dominio | S3 | inline | `75fbee4` |
+| T-6.6 cobertura por paquete + badge | S3 | inline + worker | `3a7a4d2` + `a81b98a` + `eb000cb` + `0fc9bef` |
 75fbee4`| T-6.1 tests `SingleInstanceGuard` | S3 | worker | — |
 | T-6.2 tests de JS | S3 | worker | — |
-| T-6.3 des-flakear la suite | S3 | worker | — |
-| T-6.4 desacoplar tests de internals | S3 | inline | — |
-| T-6.5 expandir el dominio | S3 | worker | — |
-| T-6.6 cobertura por paquete | S3 | inline | — |
 | Verificación final + merge a main | S1, S4 | usuario + inline | — |
 
 ## Log
