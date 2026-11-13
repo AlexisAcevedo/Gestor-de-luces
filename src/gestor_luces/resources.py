@@ -32,7 +32,9 @@ def resolve_app_version() -> str:
             return version("gestor-luces")
         except PackageNotFoundError:
             _LOGGER.debug("Package 'gestor-luces' not installed; reading pyproject.toml.")
-    except Exception:
+    # Un build congelado puede quedar sin `importlib.metadata` completo (modulo ausente en
+    # `_MEIPASS`): sin metadatos instalados se cae a `pyproject.toml`.
+    except ImportError:
         _LOGGER.debug(
             "Could not query importlib.metadata; falling back to pyproject.toml.", exc_info=True
         )
@@ -42,5 +44,9 @@ def resolve_app_version() -> str:
 
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         return str(data["project"]["version"])
-    except Exception:
+    # `pyproject.toml` no existe en un build congelado (`OSError`), puede estar corrupto
+    # (`TOMLDecodeError` es un `ValueError`) o no declarar `project.version`
+    # (`KeyError`/`TypeError`). Sin fuente de version se informa "0.0.0".
+    except (OSError, ValueError, KeyError, TypeError):
+        _LOGGER.debug("Could not read the version from pyproject.toml.", exc_info=True)
         return "0.0.0"

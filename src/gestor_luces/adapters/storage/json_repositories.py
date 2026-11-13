@@ -59,16 +59,21 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
         dir=str(target_path.parent),
     )
     tmp_path = Path(tmp_raw)
+    replaced = False
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(serialized)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, target_path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            tmp_path.unlink(missing_ok=True)
-        raise
+        replaced = True
+    finally:
+        # El temporal se descarta ante cualquier salida que no sea el reemplazo exitoso,
+        # incluido un `KeyboardInterrupt` durante el apagado. Un `finally` no necesita
+        # nombrar `BaseException` y deja propagar la excepcion original intacta.
+        if not replaced:
+            with contextlib.suppress(OSError):
+                tmp_path.unlink(missing_ok=True)
 
 
 def _safe_read_json_list(target_path: Path) -> list[dict[str, Any]]:

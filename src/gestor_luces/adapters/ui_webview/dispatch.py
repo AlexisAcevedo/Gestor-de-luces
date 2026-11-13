@@ -75,6 +75,22 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
 }
 
 
+def _run_fit_callback(callback: Callable[[int], bool], content_px: int) -> dict[str, Any]:
+    """Invoca el callback nativo de ajuste de ventana y sella su resultado para JavaScript.
+
+    Compartido por `JsApi` y `WindowFitHandlers`: es el unico punto de frontera del ajuste,
+    asi que no hay dos politicas de error para el mismo callback.
+    """
+    try:
+        return {"ok": bool(callback(content_px))}
+    # FRONTERA: el callback es el host nativo de la ventana (pywebview, pythonnet/WinForms y
+    # ctypes para DWM), que no garantiza el tipo de excepcion. Su fallo debe volver a la
+    # vista como error de ajuste en lugar de propagarse por el puente.
+    except Exception as exc:
+        _LOGGER.debug("Window fit callback failed.", exc_info=True)
+        return {"ok": False, "error": str(exc)}
+
+
 class WindowFitHandlers:
     """Contrato de ajuste de altura de la ventana hospedada (fuera de la tabla JS)."""
 
@@ -95,13 +111,7 @@ class WindowFitHandlers:
         callback = getattr(self, "_fit_window_height", None)
         if callback is None:
             return {"ok": False, "error": "Window fit callback is not configured."}
-        try:
-            return {"ok": bool(callback(content_px))}
-        except Exception as exc:
-            # Frontera: el callback es el host nativo Win32 (ventana/DPI); su fallo debe
-            # volver a la vista como error de ajuste, no propagarse por el puente.
-            _LOGGER.debug("Window fit callback failed.", exc_info=True)
-            return {"ok": False, "error": str(exc)}
+        return _run_fit_callback(callback, content_px)
 
 
 class JsApi:
@@ -132,12 +142,7 @@ class JsApi:
             }
         callback = getattr(self, "_fit_window", None)
         if callback is not None:
-            try:
-                return {"ok": bool(callback(content_px))}
-            except Exception as exc:
-                # Frontera: el callback nativo de la ventana no debe romper el puente JS.
-                _LOGGER.debug("Window fit callback failed.", exc_info=True)
-                return {"ok": False, "error": str(exc)}
+            return _run_fit_callback(callback, content_px)
         bridge = getattr(self, "_bridge", None)
         if bridge is not None and hasattr(bridge, "fit_window_height"):
             return bridge.fit_window_height(content_px)

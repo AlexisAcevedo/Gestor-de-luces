@@ -242,6 +242,10 @@ class MusicSyncStreamManager:
                             self._frames_sent += 1
                 except asyncio.CancelledError:
                     raise
+                # FRONTERA: cada iteracion lee el endpoint de audio nativo (PortAudio/WASAPI
+                # via ctypes y NumPy) en un hilo y envia por UDP. Un fotograma fallido no
+                # puede terminar el flujo que el usuario inicio: se registra con traza y la
+                # proxima iteracion reintenta.
                 except Exception:
                     _LOGGER.exception("Music sync frame sampling iteration failed.")
 

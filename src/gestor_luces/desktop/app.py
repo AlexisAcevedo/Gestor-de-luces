@@ -230,7 +230,9 @@ class DesktopApplication:
         try:
             if self._autostart is not None and self._autostart.refresh_if_stale():
                 _LOGGER.info("Autostart entry was stale and has been refreshed.")
-        except Exception:
+        # `WindowsRegistryAutostart` solo falla con winreg, es decir con `OSError`; una
+        # entrada de autostart obsoleta no puede impedir que la consola arranque.
+        except OSError:
             _LOGGER.exception("Autostart refresh failed.")
 
     def fit_window(self, content_px: int) -> bool:
@@ -242,6 +244,9 @@ class DesktopApplication:
             # Una linea por ajuste pedido: si la medicion oscila, el log lo muestra.
             _LOGGER.info("Window fit requested: content=%spx applied=%s", content_px, resized)
             return resized
+        # FRONTERA: el ajuste cruza a pywebview (`screens`) y a pythonnet/WinForms; el CLR
+        # no garantiza el tipo de excepcion. Un fallo del host devuelve `False` y la UI
+        # conserva el tamano actual en vez de romper el hilo que pidio el ajuste.
         except Exception:
             _LOGGER.debug("Window fit skipped.", exc_info=True)
             return False
@@ -261,8 +266,11 @@ class DesktopApplication:
         self._window.show()
         try:
             self._window.restore()
+        # FRONTERA: `restore` se marshalea a WinForms con pythonnet, que puede rechazar el
+        # handle nativo cuando la ventana no estaba minimizada. Mostrar la ventana ya
+        # ocurrio, asi que el resultado deseado se mantiene.
         except Exception:
-            _LOGGER.debug("Window restore skipped because window was not minimized.")
+            _LOGGER.debug("Window restore skipped because window was not minimized.", exc_info=True)
         self.sync_theme_titlebar()
         self.request_menu_sync()
         _activate_window_foreground(self._window)
@@ -281,10 +289,24 @@ class DesktopApplication:
         """Avisa a la vista web que una accion de la bandeja modifico el estado luminico."""
         if not self.is_window_visible or self.is_quitting:
             return
+        self._evaluate_js_quietly(
+            "window.onTrayStateChanged && window.onTrayStateChanged()",
+            "tray state notification",
+        )
+
+    def _evaluate_js_quietly(self, script: str, context: str) -> None:
+        """Ejecuta JavaScript en la vista sin dejar que un fallo del webview propague.
+
+        FRONTERA: `evaluate_js` corre sobre pythonnet/WebView2, que puede fallar mientras la
+        vista no esta lista, esta navegando o ya se cerro. Ambos usos son notificaciones
+        accesorias (aviso de la bandeja y dialogo de atajos), asi que se registra la traza y
+        la accion nativa que las origino sigue su curso.
+        """
         try:
-            self._window.evaluate_js("window.onTrayStateChanged && window.onTrayStateChanged()")
+            self._window.evaluate_js(script)
+        # FRONTERA (ver el docstring): el fallo de la vista no revierte la accion nativa.
         except Exception:
-            _LOGGER.debug("Skipped UI notification because webview was not ready.")
+            _LOGGER.debug("Skipped UI notification (%s).", context, exc_info=True)
 
     def quit_app(self) -> None:
         """Autoriza el cierre definitivo y destruye la ventana nativa.
@@ -298,6 +320,9 @@ class DesktopApplication:
         try:
             self._window.destroy()
             return
+        # FRONTERA: `destroy` se marshalea a WinForms con pythonnet durante el cierre. Si
+        # falla, la liberacion de bandeja y bucle asincrono debe ocurrir igual, asi que se
+        # cae explicitamente a `cleanup()`.
         except Exception:
             _LOGGER.exception("Window destroy failed while quitting; releasing resources.")
         self.cleanup()
@@ -353,6 +378,9 @@ class DesktopApplication:
                 break
             try:
                 _sync_native_menu(self._window, self.current_menu_spec())
+            # FRONTERA: este es el bucle que serializa los refrescos del menu nativo y cruza
+            # a WinForms con pythonnet; una reaplicacion fallida no puede matar el unico
+            # hilo que reaplica el menu hasta el cierre.
             except Exception:
                 _LOGGER.debug("Menu refresh skipped.", exc_info=True)
 
@@ -370,13 +398,11 @@ class DesktopApplication:
     def show_shortcuts(self) -> None:
         """Muestra la ventana y abre el dialogo de atajos de la UI."""
         self.show_window()
-        try:
-            self._window.evaluate_js(
-                "(function(){var d=document.getElementById('shortcuts-dialog');"
-                "if(d&&!d.open){d.showModal();}})()"
-            )
-        except Exception:
-            _LOGGER.debug("Shortcuts dialog could not be opened.")
+        self._evaluate_js_quietly(
+            "(function(){var d=document.getElementById('shortcuts-dialog');"
+            "if(d&&!d.open){d.showModal();}})()",
+            "shortcuts dialog",
+        )
 
     def show_about(self) -> None:
         """Muestra el cuadro nativo 'Acerca de' con la version y la licencia."""
@@ -400,6 +426,9 @@ class DesktopApplication:
             return
         try:
             handler()
+        # FRONTERA: esto corre dentro del callback de accion de la bandeja nativa; una
+        # accion fallida (ventana, registro o dialogo nativo) no debe propagarse al CLR que
+        # despacha el menu, y el refresco posterior mantiene el menu coherente.
         except Exception:
             _LOGGER.exception("Menu action '%s' failed.", action_id)
         if action_id != ACTION_EXIT:

@@ -162,9 +162,11 @@ class BridgeLifecycle:
 
         try:
             return self._run_async(_snapshot(), timeout=3.0)
+        # FRONTERA: este es el bucle asincrono del puente, el punto de frontera del proceso
+        # para el IPC. Si el bucle falla al serializar el estado, degradamos a la lectura
+        # directa en lugar de romper la respuesta que espera JavaScript.
         except Exception:
-            # Frontera: si el bucle asincrono falla al serializar el estado, degradamos a
-            # la lectura directa en lugar de romper la respuesta que espera JavaScript.
+            _LOGGER.debug("Async state snapshot failed; reading the state directly.", exc_info=True)
             return self._collect_response_snapshot(ok=ok, error=error)
 
     def _success_response(self) -> dict[str, Any]:
@@ -182,9 +184,9 @@ class BridgeLifecycle:
             return
         try:
             self._on_state_changed()
+        # FRONTERA: el observador es codigo de la bandeja, no del puente; su fallo no debe
+        # impedir que la operacion pedida desde la vista se confirme.
         except Exception:
-            # Frontera: el observador es codigo de la bandeja, no del puente; su fallo
-            # no debe impedir que la operacion pedida desde la vista se confirme.
             _LOGGER.exception("State change listener failed.")
 
     def shutdown(self) -> None:
@@ -207,9 +209,10 @@ class BridgeLifecycle:
                     self._run_async(_cancel(), timeout=1.5)
                 else:
                     self._service.close_audio_sampler()
+            # FRONTERA: `shutdown` corre en el cierre de la app y es idempotente; cancelar
+            # los flujos cruza al muestreador nativo de audio. Una excepcion aqui dejaria
+            # el bucle y el hilo sin liberar, que es peor que no haber cancelado nada.
             except Exception:
-                # Frontera: `shutdown` corre en el cierre de la app y es idempotente; una
-                # excepcion aqui dejaria el bucle o el hilo sin liberar.
                 _LOGGER.debug(
                     "Ignoring error while cancelling streams during shutdown.", exc_info=True
                 )
