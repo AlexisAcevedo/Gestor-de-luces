@@ -697,4 +697,17 @@ preocupación tiene una sola política compartida y no un swallow por sitio, y (
 genérico usado en todas partes: el contador bajaría y el swallowing quedaría igual, solo que
 centralizado, perdiendo la auditabilidad que T-5.1 busca.
 
+**G12 — Enmienda a T-6.4 / Gate 6 (2026-11-13, usuario): costuras de test de la bandeja**
+La aceptación de T-6.4 («ningún test toca un atributo con prefijo `_` de `src/`») se escribió
+antes de T-4.5, que partió `winforms_tray.py` en cuatro módulos y dejó tres métodos como
+punto de inyección de los tests (`_apply_native`, `_icon_for`, `_dispose_native`). Esos
+métodos no son estado interno observado desde afuera: son la costura con la que la suite
+verifica el marshalling al hilo STA, la caché de HICON y la liberación de recursos nativos
+sin abrir un escritorio interactivo. Enmienda: Gate 6 se cumple cuando (a) ningún test
+depende de un nombre de hilo literal (se usan las constantes exportadas), (b) los tests
+observan comportamiento a través de la interfaz pública salvo en las costuras de test de la
+bandeja listadas acá, y (c) toda costura nueva de ese tipo se documenta en esta sección.
+Costuras aceptadas: `tests/test_winforms_tray.py` usa `WinFormsTrayView._apply_native`,
+`._icon_for` y `._dispose_native`.
+
 **Decisiones resueltas (2026-11-08, usuario):** D1 = A · D2 = A · D3 = A · D4 = A.
