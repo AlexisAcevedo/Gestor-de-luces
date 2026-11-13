@@ -656,4 +656,33 @@ test están en `requirements.txt:19-23`; los ignores citados son `.gitignore:36`
   (`tests/test_security_hardening.py:61`); `test_ambilight.py` y `test_music_sync.py`
   pasan sin modificarse. **Esfuerzo:** L · **Riesgo:** ítem 2 · **Depende de:** T-4.2, T-4.3.
 
+**T-4.5 — Partir `winforms_tray.py` por debajo de 300 (G10)**
+- `adapters/tray/winforms_tray.py` (920 líneas) mezcla cuatro responsabilidades: el host STA
+  (form oculto 0x0 + `Application.Run`), el `NotifyIcon` con su caché de HICON y tooltip, la
+  construcción del `ContextMenuStrip` desde el modelo `TrayMenuEntry`, y el acabado (paleta,
+  painter de filas, separadores, check, chevron, DWM attr 33 y `Region` redondeada). Partir en:
+  `winforms_host.py` (hilo STA y ciclo de mensajes), `winforms_icon.py` (NotifyIcon, HICON por
+  color, tooltip), `winforms_menu.py` (construcción del menú y submenús desde el modelo) y
+  `winforms_paint.py` (paleta y todo el dibujo). `winforms_tray.py` sobrevive como el módulo
+  que compone `WinFormsTrayView` y reexporta lo que importan sus consumidores.
+- **Aceptación:** `wc -l` < 300 por archivo nuevo; `tests/test_winforms_tray.py` y
+  `tests/test_tray.py` pasan **sin modificarse**; la bandeja sigue funcionando en Windows real
+  (checklist manual: menú legible en ambos temas, submenús por hover, las 5 acciones
+  despachando). **Esfuerzo:** M · **Riesgo:** ítem 6 · **Depende de:** T-3.9.
+
+**G10 — Enmienda a Gate 4 (2026-11-13, usuario): excepciones documentadas**
+Gate 4 («ningún módulo de `src/` supera 300 líneas») se escribió cuando los únicos infractores
+medidos eran `bridge.py` (758) y `wasapi_sampler.py` (485). T-3.3, T-3.8 y T-3.9 agregaron
+módulos grandes después, así que la letra del gate dejó de describir el árbol real. Enmienda:
+Gate 4 se cumple cuando (a) ningún módulo **nuevo** de Fase 4 supera 300 líneas, (b) `bridge.py`
+y `wasapi_sampler.py` quedan bajo 300, y (c) todo módulo que excede el techo figura acá con su
+razón. Excepciones aceptadas:
+- `application/service.py` (364): fachada de delegación de 39 métodos de una línea; partirla en
+  mixins subiría la carga cognitiva para bajar la métrica.
+- `desktop/app.py` (420): composition root; su trabajo es cablear.
+- `adapters/wiz/udp_controller.py` (353): 18 % sobre el techo y cohesivo; se revisa si crece.
+- `adapters/tray/tray_icon.py` (340): 13 % sobre el techo; ídem.
+Y se agrega **T-4.5** para `adapters/tray/winforms_tray.py` (920), que sí es lógica real y no una
+tabla ni cableado.
+
 **Decisiones resueltas (2026-11-08, usuario):** D1 = A · D2 = A · D3 = A · D4 = A.
