@@ -502,3 +502,25 @@ def test_action_thread_never_rebuilds_the_native_menu() -> None:
         harness.tray.dispatch(ACTION_TURN_OFF)
 
         assert "MainThread" not in harness.icon.update_menu_threads
+
+
+def test_icon_factory_owns_the_popup_menu_on_windows() -> None:
+    """El popup debe mostrarse con la ventana del icono como duenya.
+
+    pystray usa una segunda ventana invisible como owner, que nunca es la ventana en
+    primer plano: con ese owner Windows no auto-despliega los submenus al pasar el cursor
+    y hay que hacer clic. La subclase solo redefine `_on_notify` para pasar la ventana ya
+    activada, y debe degradar al icono estandar si los internals cambian.
+    """
+    import pystray
+
+    from gestor_luces.adapters.tray.tray_icon import _owner_popup_icon_class
+
+    icon_class = _owner_popup_icon_class()
+    assert icon_class is not None
+    assert issubclass(icon_class, pystray.Icon)
+    assert icon_class is not pystray.Icon
+    assert icon_class._on_notify is not pystray.Icon._on_notify
+    # `_message_handlers` se arma en __init__ con metodos ligados al objeto, asi que la
+    # subclase se usa de verdad para WM_NOTIFY.
+    assert icon_class.__dict__["_on_notify"] is not None

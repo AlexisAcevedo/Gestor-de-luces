@@ -16,7 +16,9 @@ Decisiones de hilos (verificadas con pystray 0.19.5 y pywebview 6.2.1 en Windows
 
 from __future__ import annotations
 
+import ctypes
 import logging
+import sys
 import threading
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -76,8 +78,73 @@ def _default_icon_factory(
     image: Image.Image,
     title: str,
     menu: pystray.Menu,
-) -> pystray.Icon:
+) -> Any:
+    """Crea el icono nativo, con el popup del menu corregido en Windows cuando se puede."""
+    icon_class = _owner_popup_icon_class()
+    if icon_class is not None:
+        try:
+            return icon_class(name, image, title, menu)
+        except Exception:
+            _LOGGER.debug("Owned-popup icon unavailable; using the stock icon.", exc_info=True)
     return pystray.Icon(name, image, title, menu)
+
+
+_OWNER_POPUP_ICON_CLASS: Any = None
+_OWNER_POPUP_ICON_CLASS_READY = False
+
+
+def _owner_popup_icon_class() -> Any:
+    """Clase de icono cuya ventana propia es tambien duenya del popup (Windows).
+
+    `pystray 0.19.5` muestra el menu con `TrackPopupMenuEx` pasando `self._menu_hwnd`: una
+    segunda ventana invisible que nunca llega a ser la ventana en primer plano (pystray
+    activa `_hwnd` con `SetForegroundWindow`). Con ese owner, Windows no auto-despliega
+    los submenus al pasar el cursor: hay que hacer clic. Pasar la ventana ya activada
+    devuelve el comportamiento nativo de cualquier menu de Windows.
+
+    Se construye una sola vez y se cachea. Si `pystray` cambia sus internals, el import
+    falla, se devuelve None y el controlador usa el icono estandar sin romperse.
+    """
+    global _OWNER_POPUP_ICON_CLASS, _OWNER_POPUP_ICON_CLASS_READY
+    if _OWNER_POPUP_ICON_CLASS_READY:
+        return _OWNER_POPUP_ICON_CLASS
+    _OWNER_POPUP_ICON_CLASS_READY = True
+    if sys.platform != "win32":
+        return None
+    try:
+        from ctypes import wintypes
+
+        from pystray._util import win32
+        from pystray._win32 import Icon as _Win32Icon
+    except Exception:
+        _LOGGER.debug("Owned-popup icon unavailable; menu hover stays click-only.", exc_info=True)
+        return None
+
+    class _OwnerPopupIcon(_Win32Icon):
+        """Icono cuyo popup se muestra con la ventana del icono como duenya."""
+
+        def _on_notify(self, wparam: int, lparam: int) -> None:
+            menu_handle = getattr(self, "_menu_handle", None)
+            if lparam != win32.WM_RBUTTONUP or not menu_handle:
+                super()._on_notify(wparam, lparam)
+                return
+            win32.SetForegroundWindow(self._hwnd)
+            point = wintypes.POINT()
+            win32.GetCursorPos(ctypes.byref(point))
+            hmenu, descriptors = menu_handle
+            index = win32.TrackPopupMenuEx(
+                hmenu,
+                win32.TPM_RIGHTALIGN | win32.TPM_BOTTOMALIGN | win32.TPM_RETURNCMD,
+                point.x,
+                point.y,
+                self._hwnd,
+                None,
+            )
+            if index > 0:
+                descriptors[index - 1](self)
+
+    _OWNER_POPUP_ICON_CLASS = _OwnerPopupIcon
+    return _OWNER_POPUP_ICON_CLASS
 
 
 def _default_executor(task: Callable[[], None]) -> None:
