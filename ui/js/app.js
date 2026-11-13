@@ -33,7 +33,6 @@ import {
   renderScenesGrid
 } from "./scenes.js";
 import {
-  invalidateFitBaseline,
   requestFit,
   setupDialogLightDismissFallbacks,
   setupGlobalShortcuts,
@@ -74,7 +73,8 @@ function syncLanguageUi(lang) {
     btn.setAttribute("aria-pressed", String(isMatch));
   });
   if (prevLang !== normalized) {
-    invalidateFitBaseline();
+    // Las etiquetas cambian de largo y de alto: la ventana se reajusta al contenido nuevo.
+    requestFit(true);
   }
 }
 
@@ -104,7 +104,6 @@ function syncThemeUi(theme, { persist = true } = {}) {
     saveUiPref("theme", normalized);
   }
   if (prevTheme !== normalized || prevDomTheme !== normalized) {
-    invalidateFitBaseline();
     requestFit(true);
   }
 }

@@ -131,10 +131,9 @@ export function setupGlobalShortcuts({ activateTab }) {
 }
 
 /*
- * Window auto-fit ("widget" behavior): the native window height is
- * max(baseline, natural content height). The baseline is the natural height of the
- * White tab with every collapsible closed, so the window never shrinks below it.
- * Heights are summed from the stage children (never scrollHeight, which reports the
+ * Window auto-fit ("widget" behavior): the native window height follows the natural content
+ * height of the active section, so every tab shows its own content in full and no grid scrolls
+ * inside. Heights are summed from the stage children (never scrollHeight, which reports the
  * stretched stage itself) while `.is-measuring` disables stretching, all in one task.
  */
 const FIT_THRESHOLD_PX = 2;
@@ -144,8 +143,6 @@ let fitFrame = 0;
 let fitForced = false;
 let fitLastSent = 0;
 let fitLastSentAt = 0;
-let fitBaseline = { width: -1, value: 0 };
-let invalidateWindowFitBaseline = null;
 
 function readNaturalHeight(stage) {
   const topbar = document.querySelector(".compact-topbar");
@@ -168,28 +165,6 @@ function measureNaturalHeight(stage) {
   }
 }
 
-function measureBaseline(stage) {
-  const width = Math.round(stage.getBoundingClientRect().width);
-  if (fitBaseline && fitBaseline.width === width && fitBaseline.value > 0) return fitBaseline.value;
-  const panels = Array.from(stage.querySelectorAll(":scope > .mode-panel"));
-  const previousHidden = panels.map((panel) => panel.hidden);
-  panels.forEach((panel) => {
-    panel.hidden = panel.id !== "panel-temperature";
-  });
-  stage.classList.add("is-measuring-baseline");
-  let value = 0;
-  try {
-    value = measureNaturalHeight(stage);
-  } finally {
-    stage.classList.remove("is-measuring-baseline");
-    panels.forEach((panel, index) => {
-      panel.hidden = previousHidden[index];
-    });
-  }
-  fitBaseline = { width, value };
-  return value;
-}
-
 function runFit() {
   fitFrame = 0;
   const forced = fitForced;
@@ -206,7 +181,7 @@ function runFit() {
   const api = getBackendApi();
   const stage = document.querySelector(".photometric-stage");
   if (!stage || !api || typeof api.fit_window_height !== "function") return;
-  const target = Math.max(measureBaseline(stage), measureNaturalHeight(stage));
+  const target = measureNaturalHeight(stage);
   if (target < 200 || Math.abs(target - fitLastSent) < FIT_THRESHOLD_PX) return;
   fitLastSent = target;
   fitLastSentAt = performance.now();
@@ -226,18 +201,9 @@ export function requestFit(force) {
   scheduleFit();
 }
 
-export function invalidateFitBaseline() {
-  if (typeof invalidateWindowFitBaseline === "function") {
-    invalidateWindowFitBaseline();
-  }
-}
-
 export function setupWindowFit() {
   const stage = document.querySelector(".photometric-stage");
   if (!stage) return;
-  invalidateWindowFitBaseline = () => {
-    fitBaseline = null;
-  };
   if (typeof ResizeObserver === "function") {
     const observer = new ResizeObserver(() => requestFit(false));
     Array.from(stage.children).forEach((el) => observer.observe(el));
@@ -249,17 +215,9 @@ export function setupWindowFit() {
       if (grid) mutations.observe(grid, { childList: true });
     });
   }
-  window.addEventListener("resize", () => {
-    if (fitBaseline && Math.abs(stage.clientWidth - fitBaseline.width) > 1) {
-      fitBaseline = null;
-    }
-  }, { passive: true });
   requestFit(true);
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => {
-      fitBaseline = null;
-      requestFit(true);
-    });
+    document.fonts.ready.then(() => requestFit(true));
   }
 }
 

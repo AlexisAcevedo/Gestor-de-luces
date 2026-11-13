@@ -4,6 +4,8 @@ InvokeRequired."""
 from __future__ import annotations
 
 import ctypes
+import re
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -184,3 +186,46 @@ def test_scenes_grid_prevents_css_grid_row_collapse() -> None:
     custom_grid_match = re.search(r"\.custom-scenes-grid\s*\{([^}]*)\}", css_text)
     assert custom_grid_match is not None
     assert "grid-auto-rows: max-content" in custom_grid_match.group(1)
+
+
+def test_window_fit_measures_full_section_content_without_inner_grid_scroll() -> None:
+    """El fit debe medir el contenido completo: grillas sin tope y sin scroll interno.
+
+    Regresion doble que dejaba la ventana chica en Escenas: (1) un `max-height`/
+    `overflow-y` en las grillas hacia que 36 escenas se midieran como una caja de 320 px
+    con scroll adentro; (2) el tope de 48 px aplicado durante la medicion dejaba el
+    contenido real fuera de la cuenta.
+    """
+    root = Path(__file__).resolve().parent.parent
+    css_text = (root / "ui" / "styles.css").read_text(encoding="utf-8")
+    fit_js = (root / "ui" / "js" / "shortcuts.js").read_text(encoding="utf-8")
+
+    for pattern in (r"\.scenes-grid\s*\{([^}]*)\}", r"\.custom-scenes-grid\s*\{([^}]*)\}"):
+        match = re.search(pattern, css_text)
+        assert match is not None
+        body = match.group(1)
+        assert "max-height" not in body
+        assert "overflow" not in body
+
+    measuring_match = re.search(
+        r"\.is-measuring \.scenes-grid,\s*\.is-measuring \.custom-scenes-grid\s*\{([^}]*)\}",
+        css_text,
+    )
+    assert measuring_match is not None
+    assert "max-height" not in measuring_match.group(1)
+
+    assert "is-measuring-baseline" not in css_text
+
+    assert "measureBaseline" not in fit_js
+    assert "fitBaseline" not in fit_js
+    assert "const target = measureNaturalHeight(stage);" in fit_js
+
+
+def test_language_change_refits_the_window_to_the_new_labels() -> None:
+    """Cambiar de idioma cambia el alto de las etiquetas: la ventana se reajusta."""
+    app_js = (Path(__file__).resolve().parent.parent / "ui" / "js" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"function syncLanguageUi\(lang\) \{(.*?)\n\}", app_js, re.S)
+    assert match is not None
+    assert "requestFit(true)" in match.group(1)

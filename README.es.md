@@ -52,7 +52,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Cambio de tema en tiempo de ejecución entre **Architectural Stone** (tema claro predeterminado inspirado en botoneras de hardware Braun/Lutron) y **Atmospheric Dark** (cristal esmerilado y halo fotométrico dinámico en espacio `oklab`), persistido en `settings.json` con sincronización automática de la barra de título de Windows DWM.
 
 8. Integración con el Escritorio de Windows:
-   - Geometría de widget compacta (base de `620x760` con ajuste dinámico de altura según el contenido) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
+   - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
    - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de).
    - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
    - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).

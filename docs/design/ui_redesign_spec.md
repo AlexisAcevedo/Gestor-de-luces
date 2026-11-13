@@ -141,7 +141,7 @@ The dual-worktree UI redesign exploration has been completed and **unified into 
    - Theme selection is validated in the domain layer (`SUPPORTED_THEMES`, `DEFAULT_THEME = "architectural-stone"`), persisted in `settings.json` (`SettingsRepository.get_theme` / `set_theme`), exposed in the top bar (`#theme-btn-stone` / `#theme-btn-dark`), and synchronized with the Windows DWM titlebar (`DwmSetWindowAttribute` 20) and WebView2 background color (`THEME_WINDOW_CHROME`).
 2. **Window Geometry & Dynamic Widget Auto-Fit:**
    - Configured with `WINDOW_DEFAULT_SIZE = (620, 760)` and `WINDOW_MIN_SIZE = (480, 640)`, calibrated for zero vertical scroll across all 6 mode tabs.
-   - Includes dynamic content-driven height auto-fit (`fit_window_height` in `WebviewBridge` and `_fit_native_window_height` in `adapters/platform/windows/window_geometry.py`), using the White (Kelvin) tab with collapsibles closed as the baseline window height.
+   - Includes dynamic content-driven height auto-fit (`fit_window_height` in `WebviewBridge` and `_fit_native_window_height` in `adapters/platform/windows/window_geometry.py`): the window height follows the natural content height of the active section, so it grows for the scenes grid and shrinks for shorter sections. There is no floor above the configured minimum and no scrolling inside the grids; only the stage scrolls when the content exceeds the monitor work area.
 3. **Package Entrypoint, Multi-Instance Diagnostics & Automated Test Suite:**
    - Added package entrypoint `src/gestor_luces/__main__.py` (`python -m gestor_luces`) alongside `python -m gestor_luces.main`.
    - Added the `--multi-instance` CLI flag to bypass the single-instance mutex when running side-by-side diagnostic comparisons.

@@ -52,7 +52,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Runtime theme switching between **Architectural Stone** (default Light theme inspired by Braun/Lutron hardware keypads) and **Atmospheric Dark** (frosted glass and dynamic `oklab` photometric halo), persisted in `settings.json` with automatic Windows DWM titlebar synchronization.
 
 8. Windows Desktop Integration:
-   - Compact widget geometry (`620x760` baseline with automatic content-driven height adjustment) and custom light-bulb icon for the window, taskbar, tray and executable.
+   - Compact widget geometry (opens at `620x760`, then resizes to the content of the active section) and custom light-bulb icon for the window, taskbar, tray and executable.
    - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About).
    - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
    - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one (with `--multi-instance` override for side-by-side diagnostics).
