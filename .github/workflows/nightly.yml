@@ -1,0 +1,32 @@
+name: Nightly flake check
+
+on:
+  schedule:
+    # 03:17 UTC: off-peak, and not on the hour, when GitHub's queue is congested.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repeated-tests:
+    name: pytest x5 (Python 3.12)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # `--count` comes from pytest-repeat and `--timeout` from pytest-timeout: the suite is
+      # expected to pass five times in a row, and no single test may hang for over two minutes.
+      - name: Run the whole suite five times
+        run: pytest -x --count=5 --timeout=120

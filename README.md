@@ -312,6 +312,8 @@ All tests should pass (see the CI badge at the top of this file for the live sta
 
 Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
+A nightly workflow (`.github/workflows/nightly.yml`) runs the whole suite five times in a row with `--count=5 --timeout=120`, to catch flaky tests that a single green run hides. Run it locally with `pytest -x --count=5 --timeout=120`.
+
 ---
 
 ## Packaging & Distribution

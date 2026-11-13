@@ -312,6 +312,8 @@ Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para
 
 El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 
+Un workflow nocturno (`.github/workflows/nightly.yml`) corre la suite completa cinco veces seguidas con `--count=5 --timeout=120`, para detectar tests inestables que una sola corrida en verde esconde. Se puede correr localmente con `pytest -x --count=5 --timeout=120`.
+
 ---
 
 ## Empaquetado y Distribución
