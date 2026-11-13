@@ -190,3 +190,19 @@ def test_bridge_without_autostart_reports_unavailable(tmp_path: Path, method: st
         assert result["ok"] is False
     finally:
         plain.shutdown()
+
+
+def test_module_entry_point_delegates_to_main_and_exits_with_its_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`python -m gestor_luces` corre `main()` y propaga su codigo de salida como SystemExit."""
+    import runpy
+
+    from gestor_luces import main as main_module
+
+    monkeypatch.setattr(main_module, "main", lambda: 3)
+
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_module("gestor_luces", run_name="__main__")
+
+    assert exit_info.value.code == 3
