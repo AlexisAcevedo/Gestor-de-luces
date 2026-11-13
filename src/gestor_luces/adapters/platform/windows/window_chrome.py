@@ -25,6 +25,10 @@ THEME_WINDOW_CHROME: dict[str, dict[str, Any]] = {
 }
 DARK_TITLEBAR_ENABLED = False
 
+#: Preferencia de esquinas de DWM (Windows 11+): atributo y valor de esquina redondeada.
+DWMWA_WINDOW_CORNER_PREFERENCE = 33
+DWMWCP_ROUND = 2
+
 
 def _resolve_native_hwnd(native_form: Any) -> int | None:
     """Extrae el HWND nativo de 64 bits sin truncar punteros mayores a 0x7FFFFFFF."""
@@ -98,4 +102,50 @@ def _set_windows_dark_titlebar_attribute(
         return True
     except Exception:
         _LOGGER.debug("Windows dark titlebar attribute skipped.", exc_info=True)
+        return False
+
+
+def _apply_corner_preference(
+    window: Any,
+    *,
+    preference: int = DWMWCP_ROUND,
+    platform: str = sys.platform,
+    dwmapi: Any = None,
+) -> bool:
+    """Pide a DWM esquinas redondeadas (`DWMWCP_ROUND`) para una ventana ya creada.
+
+    El handle debe existir antes de la llamada: en un menu contextual eso ocurre recien
+    cuando la ventana desplegable se muestra. Windows anteriores a 11 rechazan el
+    atributo y se devuelve `False`; la vista WinForms aplica ademas su propia region
+    redondeada recortada, que es la que garantiza las esquinas cuando DWM no redondea la
+    ventana. Nunca lanza.
+    """
+    if platform != "win32":
+        return False
+    try:
+        hwnd = _resolve_native_hwnd(window)
+        if hwnd is None:
+            return False
+        import ctypes
+        from ctypes import wintypes
+
+        target_dwmapi = ctypes.windll.dwmapi if dwmapi is None else dwmapi
+        dwm_fn = getattr(target_dwmapi, "DwmSetWindowAttribute", None)
+        if dwm_fn is None:
+            return False
+        _configure_fn_signature(
+            dwm_fn,
+            [wintypes.HWND, ctypes.c_int, ctypes.c_void_p, ctypes.c_int],
+            ctypes.c_int,
+        )
+        value = ctypes.c_int(preference)
+        result = dwm_fn(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            ctypes.byref(value),
+            ctypes.sizeof(ctypes.c_int),
+        )
+        return int(result or 0) == 0
+    except Exception:
+        _LOGGER.debug("DWM corner preference skipped.", exc_info=True)
         return False

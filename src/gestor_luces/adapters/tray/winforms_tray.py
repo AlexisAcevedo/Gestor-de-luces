@@ -11,9 +11,22 @@ Restriccion verificada del entorno (pythonnet 3.2.1 sobre .NET Framework 4.8): p
 no emite tipos derivados en esta configuracion, asi que las subclases de
 `ProfessionalColorTable`/`ToolStripRenderer` no reciben despacho virtual desde .NET y la
 paleta no se puede inyectar por una tabla de colores. Por eso el tema se aplica con
-colores por control (`BackColor`/`ForeColor`), `RenderMode = System` y un punto de color
-generado como `Image` para marcar el nivel activo: el glifo de check nativo tiene color
-fijo y desaparece sobre el tema oscuro.
+colores por control (`BackColor`/`ForeColor`) y el dibujo de cada fila se hace a mano en
+el evento `ToolStripItem.Paint`, que .NET emite despues del render del sistema.
+
+Acabado moderno (T-3.9): el render del sistema dibuja filas de ~20 px, un borde de 1 px
+en el color del tema de Windows y un resaltado plano, que el usuario reconocio como un
+menu de Windows 98. La vista ahora:
+- pide esquinas redondeadas a DWM (`DWMWA_WINDOW_CORNER_PREFERENCE`) y aplica ademas una
+  region redondeada recortada 1 px, que es el unico mecanismo disponible sin subclasificar
+  el renderer para quitar el borde del sistema (una region propia impide que DWM redondee
+  la ventana, asi que la region es la fuente efectiva de las esquinas);
+- sube el padding vertical de cada fila para llegar a ~28 px;
+- pinta fondo, hover, texto, marca de nivel activo y flecha de submenu con la paleta, y
+  los separadores con su propio color (`TrayPalette.separator`);
+- separa la firma del menu `(tuple(spec), theme)` de la firma del estado
+  `(menu signature, title, rgb)`, de modo que un cambio de tooltip o de tinte del icono
+  nunca reconstruye el `ContextMenuStrip`.
 
 `pythonnet` se importa dentro de `_load_winforms()` (nunca al importar el modulo) para que
 el paquete se pueda usar en Linux/CI sin CLR y para que la vista degradada a `pystray`
@@ -25,11 +38,13 @@ from __future__ import annotations
 import ctypes
 import io
 import logging
+import sys
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from gestor_luces.adapters.platform.windows.window_chrome import _apply_corner_preference
 from gestor_luces.adapters.tray.menu_model import TrayMenuEntry
 from gestor_luces.adapters.tray.tray_view import (
     ICON_NAME,
@@ -45,13 +60,31 @@ _LOGGER = logging.getLogger(__name__)
 #: `NotifyIcon.Text` admite 63 caracteres; un texto mas largo lanza una excepcion.
 NOTIFY_TEXT_LIMIT = 63
 _COINIT_APARTMENTTHREADED = 0x2
-#: Tamano por defecto de `ToolStrip.ImageScalingSize`, para el punto del nivel activo.
-CHECK_DOT_SIZE = 16
+
+#: Padding vertical de cada fila: la fuente de 9 pt mide ~20 px, asi que 4 por lado da
+#: filas de ~28 px (objetivo 26-28) sin depender del tamano de fuente del sistema.
+MENU_ITEM_PADDING_VERTICAL = 4
+#: Margen izquierdo del texto (8-10 px modernos) y del punto del nivel activo, en px.
+MENU_ITEM_TEXT_INSET = 10
+MENU_ITEM_CHECK_INSET = 6
+MENU_ITEM_CHECK_DOT = 6
+#: Distancia de la flecha de submenu al borde derecho, y grosor de su trazo.
+MENU_ITEM_ARROW_INSET = 11
+MENU_ITEM_ARROW_WIDTH = 1.3
+#: Margen horizontal de la linea separadora.
+MENU_SEPARATOR_INSET = 10
+#: Radio de esquina (px logicos) y recorte que elimina el borde de 1 px del renderer.
+MENU_CORNER_RADIUS = 8
+MENU_EDGE_INSET = 1
 
 DestroyIcon = Callable[[int], None]
 
 #: Estado deseado: modelo de menu, tooltip, color del icono y tema activo.
 State = tuple[list[TrayMenuEntry], str, tuple[int, int, int], str]
+#: Firma que obliga a reconstruir el `ContextMenuStrip`.
+MenuSignature = tuple[tuple[TrayMenuEntry, ...], str]
+#: Firma del estado completo, incluidos tooltip y tinte del icono.
+StateSignature = tuple[MenuSignature, str, tuple[int, int, int]]
 
 
 @dataclass(frozen=True)
@@ -62,6 +95,7 @@ class TrayPalette:
     text: str
     disabled_text: str
     selection: str
+    separator: str
 
 
 LIGHT_PALETTE = TrayPalette(
@@ -69,12 +103,14 @@ LIGHT_PALETTE = TrayPalette(
     text="#1C1C1F",
     disabled_text="#8A8A8E",
     selection="#E4DED6",
+    separator="#D9D1C6",
 )
 DARK_PALETTE = TrayPalette(
     background="#1B1B1F",
     text="#E6E6EA",
     disabled_text="#7A7A82",
     selection="#2A2A31",
+    separator="#3A3A42",
 )
 DEFAULT_PALETTE = LIGHT_PALETTE
 
@@ -95,6 +131,82 @@ def parse_hex_color(value: str) -> tuple[int, int, int]:
     if len(text) != 6:
         raise ValueError(f"Not a #RRGGBB color: {value!r}")
     return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
+
+
+@dataclass(frozen=True)
+class ItemPaintStyle:
+    """Colores con los que se dibuja una fila del menu.
+
+    `mark` es el punto del nivel de brillo activo en una fila marcable y el color de la
+    linea en un separador; `background` es el hover cuando la fila esta seleccionada.
+    """
+
+    background: str
+    text: str
+    mark: str
+
+
+def item_paint_style(
+    palette: TrayPalette,
+    *,
+    hovered: bool,
+    enabled: bool = True,
+) -> ItemPaintStyle:
+    """Colores de una fila: hover con `selection`, texto atenuado si esta deshabilitada."""
+    return ItemPaintStyle(
+        background=palette.selection if hovered else palette.background,
+        text=palette.text if enabled else palette.disabled_text,
+        mark=palette.text,
+    )
+
+
+def separator_paint_style(palette: TrayPalette) -> ItemPaintStyle:
+    """Colores de un separador: fondo del menu (sin banda) y linea propia de la paleta."""
+    return ItemPaintStyle(
+        background=palette.background,
+        text=palette.separator,
+        mark=palette.separator,
+    )
+
+
+def menu_signature(spec: Sequence[TrayMenuEntry], theme: str) -> MenuSignature:
+    """Firma del menu: todo lo que obliga a reconstruir el `ContextMenuStrip`."""
+    return (tuple(spec), str(theme or ""))
+
+
+def state_signature(
+    spec: Sequence[TrayMenuEntry],
+    title: str,
+    rgb: tuple[int, int, int],
+    theme: str,
+) -> StateSignature:
+    """Firma del estado completo; un cambio de tooltip o de tinte solo toca el icono."""
+    return (menu_signature(spec, theme), str(title), tuple(rgb))
+
+
+def menu_region_geometry(
+    width: int,
+    height: int,
+    *,
+    radius: int = MENU_CORNER_RADIUS,
+    inset: int = MENU_EDGE_INSET,
+    scale: float = 1.0,
+) -> tuple[int, int, int, int, int] | None:
+    """Rectangulo redondeado `(left, top, right, bottom, radius)` recortado por `inset`.
+
+    El recorte de 1 px deja fuera de la ventana el borde que dibuja el renderer del
+    sistema; `scale` convierte el radio logico al DPI de la ventana. Devuelve `None` si el
+    menu es demasiado chico para redondearlo, para que la vista no cree una region invalida.
+    """
+    if width <= 2 * inset + 2 or height <= 2 * inset + 2:
+        return None
+    left, top = int(inset), int(inset)
+    right, bottom = int(width) - int(inset), int(height) - int(inset)
+    candidate = max(1, int(round(int(radius) * max(float(scale), 0.1))))
+    limit = (min(right - left, bottom - top) - 2) // 2
+    if limit < 1:
+        return None
+    return (left, top, right, bottom, max(1, min(candidate, limit)))
 
 
 class _WinFormsApi:
@@ -142,29 +254,171 @@ def _color(value: str, api: _WinFormsApi) -> Any:
     return api.drawing.Color.FromArgb(*parse_hex_color(value))
 
 
-def _dot_image(palette: TrayPalette, api: _WinFormsApi) -> Any:
-    """Punto de color con el que se marca el nivel activo del grupo radio.
-
-    El glifo de check nativo se dibuja con un color fijo del sistema, invisible sobre el
-    fondo oscuro; una imagen propia si respeta la paleta.
-    """
-    size = CHECK_DOT_SIZE
-    bitmap = api.drawing.Bitmap(size, size)
-    graphics = api.drawing.Graphics.FromImage(bitmap)
-    brush = api.drawing.SolidBrush(_color(palette.text, api))
+def _item_draw_width(sender: Any) -> int:
+    """Ancho visible de la fila: el item puede sobresalir del menu por su propio padding."""
+    width = int(getattr(sender, "Width", 0) or 0)
     try:
-        try:
-            from System.Drawing.Drawing2D import SmoothingMode
+        owner = sender.Owner
+        owner_width = int(owner.Width) - int(sender.Bounds.X)
+    except Exception:
+        owner_width = width
+    if owner_width > 0:
+        width = min(width, owner_width)
+    return max(1, width)
 
-            graphics.SmoothingMode = SmoothingMode.AntiAlias
-        except Exception:
-            _LOGGER.debug("Anti-aliasing unavailable for the tray check dot.", exc_info=True)
-        inset = size // 4
-        graphics.FillEllipse(brush, inset, inset, size - 2 * inset, size - 2 * inset)
+
+def paint_menu_item(
+    graphics: Any,
+    *,
+    palette: TrayPalette,
+    api: _WinFormsApi,
+    text: str,
+    font: Any,
+    width: int,
+    height: int,
+    hovered: bool,
+    enabled: bool = True,
+    checked: bool = False,
+    has_children: bool = False,
+) -> ItemPaintStyle:
+    """Dibuja una fila completa (fondo, hover, texto, marca y flecha) con la paleta.
+
+    Reemplaza el dibujo del renderer del sistema, que pinta un resaltado plano y un glifo
+    de check con color fijo (invisible sobre el tema oscuro). Devuelve el estilo usado para
+    que las pruebas verifiquen colores sin comparar pixeles de una ventana real.
+    """
+    drawing = api.drawing
+    style = item_paint_style(palette, hovered=hovered, enabled=enabled)
+    background = drawing.SolidBrush(_color(style.background, api))
+    try:
+        graphics.FillRectangle(background, drawing.Rectangle(0, 0, width, height))
     finally:
-        brush.Dispose()
-        graphics.Dispose()
-    return bitmap
+        background.Dispose()
+    text_left = MENU_ITEM_TEXT_INSET
+    foreground = drawing.SolidBrush(_color(style.text, api))
+    try:
+        if checked:
+            dot = drawing.SolidBrush(_color(style.mark, api))
+            try:
+                graphics.FillEllipse(
+                    dot,
+                    MENU_ITEM_CHECK_INSET,
+                    (height - MENU_ITEM_CHECK_DOT) // 2,
+                    MENU_ITEM_CHECK_DOT,
+                    MENU_ITEM_CHECK_DOT,
+                )
+            finally:
+                dot.Dispose()
+            text_left = MENU_ITEM_TEXT_INSET + MENU_ITEM_CHECK_DOT + 2
+        right_inset = MENU_ITEM_ARROW_INSET + 7 if has_children else MENU_ITEM_TEXT_INSET
+        line_format = drawing.StringFormat()
+        try:
+            line_format.LineAlignment = drawing.StringAlignment.Center
+            line_format.FormatFlags = drawing.StringFormatFlags.NoWrap
+            graphics.DrawString(
+                text,
+                font,
+                foreground,
+                drawing.RectangleF(
+                    text_left,
+                    0,
+                    max(1, width - text_left - right_inset),
+                    height,
+                ),
+                line_format,
+            )
+        finally:
+            line_format.Dispose()
+    finally:
+        foreground.Dispose()
+    if has_children:
+        arrow = drawing.Pen(_color(style.text, api), MENU_ITEM_ARROW_WIDTH)
+        try:
+            center_x = width - MENU_ITEM_ARROW_INSET
+            center_y = height // 2
+            graphics.DrawLine(arrow, center_x - 2, center_y - 3, center_x + 1, center_y)
+            graphics.DrawLine(arrow, center_x + 1, center_y, center_x - 2, center_y + 3)
+        finally:
+            arrow.Dispose()
+    return style
+
+
+def paint_menu_separator(
+    graphics: Any,
+    *,
+    palette: TrayPalette,
+    api: _WinFormsApi,
+    width: int,
+    height: int,
+) -> ItemPaintStyle:
+    """Dibuja un separador centrado con el color propio de la paleta."""
+    drawing = api.drawing
+    style = separator_paint_style(palette)
+    background = drawing.SolidBrush(_color(style.background, api))
+    try:
+        graphics.FillRectangle(background, drawing.Rectangle(0, 0, width, height))
+    finally:
+        background.Dispose()
+    line = drawing.Pen(_color(style.mark, api), 1)
+    try:
+        middle = height // 2
+        graphics.DrawLine(
+            line,
+            MENU_SEPARATOR_INSET,
+            middle,
+            max(MENU_SEPARATOR_INSET + 1, width - MENU_SEPARATOR_INSET),
+            middle,
+        )
+    finally:
+        line.Dispose()
+    return style
+
+
+def _item_paint_handler(
+    palette: TrayPalette,
+    api: _WinFormsApi,
+    *,
+    has_children: bool,
+) -> Callable[..., None]:
+    """Handler de `ToolStripItem.Paint` de una fila del menu."""
+
+    def _on_paint(sender: Any, event_args: Any) -> None:
+        try:
+            paint_menu_item(
+                event_args.Graphics,
+                palette=palette,
+                api=api,
+                text=str(sender.Text),
+                font=sender.Font,
+                width=_item_draw_width(sender),
+                height=int(sender.Height),
+                hovered=bool(sender.Selected or sender.Pressed),
+                enabled=bool(sender.Enabled),
+                checked=bool(sender.Checked),
+                has_children=has_children,
+            )
+        except Exception:
+            _LOGGER.debug("Tray menu item paint failed.", exc_info=True)
+
+    return _on_paint
+
+
+def _separator_paint_handler(palette: TrayPalette, api: _WinFormsApi) -> Callable[..., None]:
+    """Handler de `ToolStripItem.Paint` de un separador."""
+
+    def _on_paint(sender: Any, event_args: Any) -> None:
+        try:
+            paint_menu_separator(
+                event_args.Graphics,
+                palette=palette,
+                api=api,
+                width=_item_draw_width(sender),
+                height=int(sender.Height),
+            )
+        except Exception:
+            _LOGGER.debug("Tray menu separator paint failed.", exc_info=True)
+
+    return _on_paint
 
 
 def _click_handler(dispatch: Dispatch, action_id: str, payload: Any) -> Callable[..., None]:
@@ -182,7 +436,6 @@ def _build_menu_items(
     dispatch: Dispatch,
     *,
     api: _WinFormsApi | None = None,
-    check_image: Any = None,
 ) -> list[Any]:
     """Traduce el modelo puro a items reales de WinForms con la paleta aplicada.
 
@@ -193,30 +446,16 @@ def _build_menu_items(
     resolved = api or _load_winforms()
     if resolved is None:
         raise RuntimeError("WinForms is not available in this environment")
-    image = check_image
-    if image is None and _needs_check_dot(spec):
-        image = _dot_image(palette, resolved)
     return [
         _build_menu_item(
             entry,
             palette,
             dispatch,
             resolved,
-            image,
             background=palette.background,
         )
         for entry in spec
     ]
-
-
-def _needs_check_dot(entries: Sequence[TrayMenuEntry]) -> bool:
-    """Indica si el modelo tiene algun item marcado que necesite el punto de color."""
-    for entry in entries:
-        if entry.checked:
-            return True
-        if entry.children and _needs_check_dot(entry.children):
-            return True
-    return False
 
 
 def _build_menu_item(
@@ -224,29 +463,37 @@ def _build_menu_item(
     palette: TrayPalette,
     dispatch: Dispatch,
     api: _WinFormsApi,
-    check_image: Any,
     *,
     background: str,
 ) -> Any:
     """Construye un item (hoja, padre de submenu o separador) con sus colores."""
     if entry.is_separator:
-        return api.forms.ToolStripSeparator()
+        separator = api.forms.ToolStripSeparator()
+        separator.Paint += _separator_paint_handler(palette, api)
+        return separator
     item = api.forms.ToolStripMenuItem(entry.label)
     item.BackColor = _color(background, api)
     item.ForeColor = _color(palette.text if entry.enabled else palette.disabled_text, api)
     item.Enabled = entry.enabled
     item.CheckOnClick = False
+    # Filas altas: el alto de fuente (~20 px) mas este padding da los ~28 px modernos.
+    item.Padding = api.forms.Padding(
+        0,
+        MENU_ITEM_PADDING_VERTICAL,
+        0,
+        MENU_ITEM_PADDING_VERTICAL,
+    )
     if entry.checked is not None:
         item.Checked = bool(entry.checked)
-        if entry.checked and check_image is not None:
-            item.Image = check_image
+    item.Paint += _item_paint_handler(palette, api, has_children=bool(entry.children))
     if entry.children:
         # Submenu real: WinForms lo despliega al pasar el cursor. No hay handler de clic en
         # el padre (un clic no debe abrir ni cerrar nada a mano).
         dropdown = item.DropDown
-        dropdown.BackColor = _color(palette.selection, api)
+        dropdown.BackColor = _color(palette.background, api)
         dropdown.ForeColor = _color(palette.text, api)
         dropdown.ShowCheckMargin = False
+        dropdown.ShowImageMargin = False
         for child in entry.children:
             dropdown.Items.Add(
                 _build_menu_item(
@@ -254,8 +501,7 @@ def _build_menu_item(
                     palette,
                     dispatch,
                     api,
-                    check_image,
-                    background=palette.selection,
+                    background=palette.background,
                 )
             )
         return item
@@ -298,10 +544,12 @@ def _build_icon_image(rgb: tuple[int, int, int], api: _WinFormsApi) -> tuple[Any
         stream.Dispose()
 
 
-def _signature(state: State) -> tuple[Any, ...]:
-    """Huella del estado aplicado, para descartar reaplicaciones identicas."""
-    spec, title, rgb, theme = state
-    return (tuple(spec), title, tuple(rgb), theme)
+def _dpi_scale(control: Any) -> float:
+    """Factor de escala del DPI de la ventana (1.0 si el runtime no lo expone)."""
+    try:
+        return float(control.DeviceDpi) / 96.0
+    except Exception:
+        return 1.0
 
 
 def create_winforms_view(
@@ -309,6 +557,8 @@ def create_winforms_view(
     *,
     destroy_icon: DestroyIcon | None = None,
     api: _WinFormsApi | None = None,
+    dwmapi: Any = None,
+    platform: str | None = None,
 ) -> TrayView | None:
     """Crea la vista WinForms, o `None` si pythonnet/WinForms no estan disponibles.
 
@@ -319,7 +569,13 @@ def create_winforms_view(
     if resolved is None:
         return None
     try:
-        return WinFormsTrayView(dispatch, api=resolved, destroy_icon=destroy_icon)
+        return WinFormsTrayView(
+            dispatch,
+            api=resolved,
+            destroy_icon=destroy_icon,
+            dwmapi=dwmapi,
+            platform=platform,
+        )
     except Exception:
         _LOGGER.exception("WinForms tray view could not be created; falling back to pystray.")
         return None
@@ -334,10 +590,14 @@ class WinFormsTrayView:
         *,
         api: _WinFormsApi,
         destroy_icon: DestroyIcon | None = None,
+        dwmapi: Any = None,
+        platform: str | None = None,
     ) -> None:
         self._dispatch = dispatch
         self._api = api
         self._destroy_icon = destroy_icon or _destroy_icon_handle
+        self._dwmapi = dwmapi
+        self._platform = platform if platform is not None else sys.platform
         self._lock = threading.Lock()
         self._form: Any = None
         self._notify: Any = None
@@ -345,11 +605,10 @@ class WinFormsTrayView:
         self._icon: Any = None
         self._icon_handle = 0
         self._icon_rgb: tuple[int, int, int] | None = None
-        self._dot_images: list[Any] = []
-        self._dot_theme: str | None = None
         self._desired: State = ([], "", (0, 0, 0), "")
-        self._applied: tuple[Any, ...] | None = None
-        self._deferred: tuple[Any, ...] | None = None
+        self._applied: StateSignature | None = None
+        self._applied_menu: MenuSignature | None = None
+        self._deferred_menu: MenuSignature | None = None
         self._stopped = False
 
     def run(self) -> None:
@@ -408,13 +667,13 @@ class WinFormsTrayView:
     ) -> None:
         """Aplica el estado desde cualquier hilo, marshando al hilo de la vista."""
         state: State = (list(spec), title, tuple(rgb), str(theme or ""))
-        signature = _signature(state)
+        signature = state_signature(state[0], state[1], state[2], state[3])
         with self._lock:
             self._desired = state
             if self._stopped:
                 return
             form = self._form
-            if signature == self._applied and self._deferred is None:
+            if signature == self._applied and self._deferred_menu is None:
                 return
         if form is None:
             # La vista todavia no arranco: `run` aplica el estado al crear el icono.
@@ -434,76 +693,151 @@ class WinFormsTrayView:
         return form
 
     def _apply_native(self, state: State) -> None:
-        """Aplica el estado en el hilo de la vista (nunca desde otro hilo)."""
+        """Aplica el estado en el hilo de la vista (nunca desde otro hilo).
+
+        Tooltip y tinte del icono se aplican siempre y sin diferir: un menu desplegado no
+        necesita reemplazo para eso. Solo la reconstruccion del `ContextMenuStrip` se
+        difiere mientras el menu esta visible, porque reemplazarlo debajo del usuario
+        dejaria items muertos (T-3.6).
+        """
         spec, title, rgb, theme = state
-        signature = _signature(state)
+        signature = state_signature(spec, title, rgb, theme)
+        menu_key = menu_signature(spec, theme)
         with self._lock:
-            if signature == self._applied and self._deferred is None:
+            if signature == self._applied and self._deferred_menu is None:
                 return
             notify, menu = self._notify, self._menu
+            rebuild = menu_key != self._applied_menu
+            displayed = bool(getattr(menu, "Visible", False)) if menu is not None else False
+            icon_changed = self._icon_rgb != tuple(rgb)
         if notify is None:
             return
-        if menu is not None and menu.Visible:
-            # Reemplazar el menu desplegado debajo del usuario dejaria items muertos: se
-            # reintenta en el proximo refresco, igual que la vista de pystray (T-3.6).
+        try:
+            if icon_changed:
+                icon = self._icon_for(rgb)
+                if icon is not None:
+                    notify.Icon = icon
+            notify.Text = title[:NOTIFY_TEXT_LIMIT]
+            if not notify.Visible:
+                notify.Visible = True
+        except Exception:
+            _LOGGER.exception("Failed to update the tray icon.")
+            return
+        if rebuild and displayed:
+            # Solo la reconstruccion se difiere: el icono y el tooltip ya quedaron al dia.
             with self._lock:
-                first_attempt = signature != self._deferred
-                self._deferred = signature
+                first_attempt = menu_key != self._deferred_menu
+                self._deferred_menu = menu_key
             if first_attempt:
                 log_applied_menu(spec, deferred=True)
             return
-        palette = resolve_palette(theme)
         try:
-            icon = self._icon_for(rgb)
-            if icon is not None:
-                notify.Icon = icon
-            notify.Text = title[:NOTIFY_TEXT_LIMIT]
-            new_menu = self._build_menu(spec, palette)
-            notify.ContextMenuStrip = new_menu
-            notify.Visible = True
+            new_menu = self._build_menu(spec, resolve_palette(theme)) if rebuild else menu
+            if rebuild:
+                notify.ContextMenuStrip = new_menu
         except Exception:
             _LOGGER.exception("Failed to apply the tray menu.")
             return
         with self._lock:
-            previous, self._menu = self._menu, new_menu
+            previous = self._menu
+            if rebuild:
+                self._menu = new_menu
+                self._applied_menu = menu_key
             self._applied = signature
-            self._deferred = None
-        if previous is not None:
-            _dispose_menu(previous)
-        log_applied_menu(spec)
+            self._deferred_menu = None
+        if rebuild:
+            if previous is not None:
+                _dispose_menu(previous)
+            log_applied_menu(spec)
 
     def _build_menu(self, spec: Sequence[TrayMenuEntry], palette: TrayPalette) -> Any:
         """Crea el `ContextMenuStrip` completo con la paleta del tema activo."""
         api = self._api
         menu = api.forms.ContextMenuStrip()
         # `System`: el renderer del sistema pinta el fondo del dropdown con `BackColor` (el
-        # renderer profesional pinta una banda negra en el margen de imagen y degradados
-        # claros en la seleccion, imposibles de recolorear sin subclasificar el renderer).
+        # renderer profesional pinta una banda en el margen de imagen y degradados claros en
+        # la seleccion, imposibles de recolorear sin subclasificar el renderer). Las filas,
+        # el hover y los separadores los dibuja esta vista en `ToolStripItem.Paint`.
         menu.RenderMode = api.forms.ToolStripRenderMode.System
         menu.BackColor = _color(palette.background, api)
         menu.ForeColor = _color(palette.text, api)
         menu.ShowCheckMargin = False
-        check_image = self._check_image(palette)
-        for item in _build_menu_items(
-            spec,
-            palette,
-            self._dispatch,
-            api=api,
-            check_image=check_image,
-        ):
+        menu.ShowImageMargin = False
+        for item in _build_menu_items(spec, palette, self._dispatch, api=api):
             menu.Items.Add(item)
+        self._attach_menu_chrome(menu)
         return menu
 
-    def _check_image(self, palette: TrayPalette) -> Any:
-        """Punto de color cacheado por paleta (lo comparten todos los menus del tema)."""
-        with self._lock:
-            if self._dot_theme == palette.background and self._dot_images:
-                return self._dot_images[-1]
-        image = _dot_image(palette, self._api)
-        with self._lock:
-            self._dot_theme = palette.background
-            self._dot_images.append(image)
-        return image
+    def _attach_menu_chrome(self, control: Any) -> None:
+        """Engancha el acabado de ventana a cada menu, incluidos los submenus."""
+        try:
+            control.Opened += self._on_menu_opened
+        except Exception:
+            _LOGGER.debug("Tray menu Opened hook failed.", exc_info=True)
+        for item in list(getattr(control, "Items", [])):
+            try:
+                has_children = int(getattr(item, "DropDownItems", None).Count) > 0
+            except Exception:
+                has_children = False
+            if not has_children:
+                continue
+            try:
+                dropdown = item.DropDown
+            except Exception:
+                _LOGGER.debug("Tray submenu unavailable for its chrome.", exc_info=True)
+                continue
+            self._attach_menu_chrome(dropdown)
+
+    def _on_menu_opened(self, sender: Any, event_args: Any) -> None:
+        """Aplica el acabado cuando la ventana del menu ya tiene handle."""
+        try:
+            self._apply_menu_chrome(sender)
+        except Exception:
+            _LOGGER.debug("Tray menu chrome failed.", exc_info=True)
+
+    def _apply_menu_chrome(self, control: Any) -> None:
+        """Esquinas modernas y sin borde del sistema; cada paso degrada por separado.
+
+        Se pide primero la preferencia de DWM. Como una region propia impide que DWM
+        redondee la ventana, la region recortada 1 px es la que garantiza esquinas
+        redondeadas (y elimina el borde de 1 px del renderer) en cualquier Windows; si la
+        region no se puede crear, el menu sigue funcionando con el borde del sistema.
+        """
+        _apply_corner_preference(control, platform=self._platform, dwmapi=self._dwmapi)
+        self._apply_menu_region(control)
+
+    def _apply_menu_region(self, control: Any) -> bool:
+        """Recorta la ventana del menu con un rectangulo redondeado 1 px mas chico."""
+        api = self._api
+        size = control.Size
+        geometry = menu_region_geometry(
+            int(size.Width),
+            int(size.Height),
+            scale=_dpi_scale(control),
+        )
+        if geometry is None:
+            return False
+        try:
+            from System.Drawing.Drawing2D import GraphicsPath
+        except Exception:
+            _LOGGER.debug("Rounded tray menu geometry unavailable.", exc_info=True)
+            return False
+        left, top, right, bottom, radius = geometry
+        path = GraphicsPath()
+        try:
+            diameter = radius * 2
+            path.AddArc(left, top, diameter, diameter, 180, 90)
+            path.AddArc(right - diameter, top, diameter, diameter, 270, 90)
+            path.AddArc(right - diameter, bottom - diameter, diameter, diameter, 0, 90)
+            path.AddArc(left, bottom - diameter, diameter, diameter, 90, 90)
+            path.CloseFigure()
+            control.Region = api.drawing.Region(path)
+        except Exception:
+            _LOGGER.debug("Rounded tray menu region failed.", exc_info=True)
+            return False
+        finally:
+            path.Dispose()
+        return True
 
     def _icon_for(self, rgb: tuple[int, int, int]) -> Any:
         """Icono cacheado por color: un refresco con el mismo tinte no asigna nada nuevo."""
@@ -548,15 +882,14 @@ class WinFormsTrayView:
             _LOGGER.exception("WinForms tray update failed.")
 
     def _dispose_native(self) -> None:
-        """Libera icono, menu, imagenes, `HICON` y la ventana en el hilo de la vista."""
+        """Libera icono, menu, `HICON` y la ventana en el hilo de la vista."""
         with self._lock:
             form, notify, menu = self._form, self._notify, self._menu
             icon, handle = self._icon, self._icon_handle
-            images = self._dot_images
             self._form = self._notify = self._menu = self._icon = None
             self._icon_handle = 0
             self._icon_rgb = None
-            self._dot_images = []
+            self._applied_menu = None
         if notify is not None:
             try:
                 notify.Visible = False
@@ -565,11 +898,6 @@ class WinFormsTrayView:
                 _LOGGER.debug("Tray icon disposal failed.", exc_info=True)
         if menu is not None:
             _dispose_menu(menu)
-        for image in images:
-            try:
-                image.Dispose()
-            except Exception:
-                _LOGGER.debug("Check dot disposal failed.", exc_info=True)
         if icon is not None:
             try:
                 icon.Dispose()
