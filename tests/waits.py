@@ -1,7 +1,8 @@
 """Esperas acotadas sobre condiciones observables, sin duraciones fijas.
 
-`PLAN.md` T-6.3: toda espera de la suite se decide por una condicion (estado del servicio,
-estado del bulbo simulado, hilo vivo) con un techo de tiempo. Un `sleep` de duracion fija
+Tarea T-6.3 del endurecimiento: toda espera de la suite se decide por una condicion
+(estado del servicio, estado del bulbo simulado, hilo vivo) con un techo de tiempo. Un
+`sleep` de duracion fija
 hace lento el verde y, peor, fragil el rojo: si la maquina corre lento, el test falla sin que
 haya un defecto, y si corre rapido nadie nota que la espera era innecesaria.
 

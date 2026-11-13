@@ -1,7 +1,7 @@
 """Publica el porcentaje de cobertura como endpoint JSON de shields.io.
 
-`PLAN.md` T-6.6: el numero de cobertura del README no se escribe a mano, porque un numero
-escrito a mano envejece en silencio. El CI mide, el gate por paquete
+Tarea T-6.6 del endurecimiento: el numero de cobertura del README no se escribe a mano,
+porque un numero escrito a mano envejece en silencio. El CI mide, el gate por paquete
 (`scripts/check_coverage.py`) decide si el numero es aceptable, y este script traduce el
 reporte de `pytest-cov` a la forma que shields.io sabe leer:
 

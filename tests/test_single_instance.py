@@ -1,6 +1,6 @@
 """Guarda de instancia unica: segunda instancia, liberacion del lock y proceso matado.
 
-`adapters/system/single_instance.py` no tenia tests (PLAN.md T-6.1). El contrato que se fija
+`adapters/system/single_instance.py` no tenia tests (T-6.1). El contrato que se fija
 aca es el real, no el idealizado:
 
 - la primera instancia crea el mutex con nombre y queda como primaria;

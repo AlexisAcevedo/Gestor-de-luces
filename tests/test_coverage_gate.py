@@ -1,4 +1,4 @@
-"""Gate de cobertura por paquete: agregacion, umbrales y veredicto (PLAN.md T-6.6).
+"""Gate de cobertura por paquete: agregacion, umbrales y veredicto (T-6.6).
 
 El script de CI no se prueba ejecutando pytest ni leyendo un reporte real: se prueba su
 logica pura (`package_coverages`, `find_violations`, `render_table`) con reportes sinteticos,

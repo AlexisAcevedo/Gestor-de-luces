@@ -1,4 +1,4 @@
-"""Badge dinamico de cobertura: redondeo, colores y codigos de salida (PLAN.md T-6.6).
+"""Badge dinamico de cobertura: redondeo, colores y codigos de salida (T-6.6).
 
 El script corre en CI despues del gate por paquete y su unica salida es un archivo que el
 README muestra; por eso sus dos reglas -el numero que se muestra y el color que lo

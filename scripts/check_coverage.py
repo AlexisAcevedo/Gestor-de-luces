@@ -1,7 +1,8 @@
 """Falla el job de CI cuando un paquete de `gestor_luces` baja de su umbral de cobertura.
 
-`PLAN.md` T-6.6: un porcentaje global se puede maquillar (subir el total agregando tests
-triviales en una capa y dejar otra sin probar), asi que los umbrales son **por paquete**:
+Tarea T-6.6 del endurecimiento: un porcentaje global se puede maquillar (subir el total
+agregando tests triviales en una capa y dejar otra sin probar), asi que los umbrales son
+**por paquete**:
 
 - `domain` 90: reglas puras, sin E/S, donde el costo de un test es nulo.
 - `application` 75: casos de uso con colaboradores inyectados.
