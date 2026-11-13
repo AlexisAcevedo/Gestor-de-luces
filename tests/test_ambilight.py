@@ -31,6 +31,7 @@ from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import Color
 from gestor_luces.ports.interfaces import ScreenSampler
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import wait_until_async
 
 
 @dataclass
@@ -186,8 +187,11 @@ async def test_ambilight_stream_and_manual_override_over_udp() -> None:
         assert status["monitor_index"] == 2
         assert status["color_mode"] == "vibrant"
 
-        # Dejamos correr varias iteraciones del bucle de muestreo a 25ms
-        await asyncio.sleep(0.12)
+        # El bucle de muestreo (25 ms por iteracion) publica frames: esperamos el segundo.
+        await wait_until_async(
+            lambda: service.get_ambilight_status()["frames_sent"] >= 2,
+            "the ambilight loop never published two frames",
+        )
 
         live_status = service.get_ambilight_status()
         assert live_status["active"] is True
@@ -248,7 +252,10 @@ async def test_webview_bridge_ambilight_lifecycle() -> None:
             assert started["ambilight"]["brightness"] == 70
             assert started["ambilight"]["min_brightness"] == 16
 
-            await asyncio.sleep(0.09)
+            await wait_until_async(
+                lambda: server.pilot_state["dimming"] == 70,
+                "the ambilight stream never reached the simulated bulb",
+            )
 
             polled = await asyncio.to_thread(bridge.get_ambilight_status)
             assert polled["ok"] is True
@@ -291,7 +298,10 @@ async def test_ambilight_auto_brightness_respects_min_brightness_floor() -> None
         )
         assert status["min_brightness"] == 18
 
-        await asyncio.sleep(0.08)
+        await wait_until_async(
+            lambda: server.pilot_state["dimming"] == 18,
+            "the ambilight floor of 18% was never applied",
+        )
         await service.stop_ambilight()
 
         # Aunque el sampler sugiera 10%, el piso configurado de 18% debe imponerse

@@ -8,14 +8,13 @@ getPilot y emita flujos continuos limitados por frecuencia sobre sockets UDP rea
 
 from __future__ import annotations
 
-import asyncio
-
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.rate_limiter import StreamRateLimiter
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.models import Bulb
 from gestor_luces.domain.value_objects import Color, LightMode
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import wait_until
 
 
 class InMemoryBulbRepository:
@@ -130,8 +129,11 @@ async def test_stream_color_frame_sends_udp_datagrams() -> None:
         sent = await service.stream_color_frame(Color(255, 128, 0), brightness=70)
         assert sent is True
 
-        # Damos una breve ventana al event loop para que el datagrama UDP local llegue
-        await asyncio.sleep(0.03)
+        # El datagrama UDP local llega cuando llega: se espera la condicion observable.
+        wait_until(
+            lambda: server.pilot_state.get("r") == 255,
+            "the simulated bulb never received the streamed color",
+        )
         assert server.pilot_state["r"] == 255
         assert server.pilot_state["g"] == 128
         assert server.pilot_state["b"] == 0

@@ -59,6 +59,7 @@ from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import POLL_SECONDS
 
 
 async def _wait_for(predicate: Callable[[], bool], timeout: float = 2.0) -> None:
@@ -71,7 +72,7 @@ async def _wait_for(predicate: Callable[[], bool], timeout: float = 2.0) -> None
     while time.monotonic() < deadline:
         if predicate():
             return
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(POLL_SECONDS)
     raise AssertionError("tray refresh did not apply the expected state in time")
 
 
@@ -501,7 +502,7 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             # 6. Un cambio originado en la UI dispara el listener y llega a la vista
             previous_applies = len(view.applies)
             await asyncio.to_thread(bridge.set_color, 80, 120, 250, 50)
-            await asyncio.sleep(0.12)
+            await _wait_for(lambda: len(view.applies) > previous_applies)
             assert len(view.applies) > previous_applies
             assert view.title == "WiZ Lighting - On 50%"
 
@@ -541,7 +542,7 @@ def test_refresh_is_the_only_thread_that_applies_native_state() -> None:
 
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and not harness.view.applies:
-            time.sleep(0.01)
+            time.sleep(POLL_SECONDS)
 
         assert harness.view.applies, "the refresh thread never applied the state"
         assert set(harness.view.applied_threads) == {REFRESH_THREAD_NAME}
@@ -612,7 +613,7 @@ class _PystrayHarness:
         # El icono se asigna a la vista justo antes de `run`, asi que esperar a que el bombeo
         # haya empezado garantiza que la vista ya lo tiene vigente.
         while time.monotonic() < deadline and not (self.icons and self.icons[0].run_called):
-            time.sleep(0.01)
+            time.sleep(POLL_SECONDS)
 
     @property
     def icon(self) -> FakeTrayIcon:

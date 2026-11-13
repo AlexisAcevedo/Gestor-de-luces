@@ -37,6 +37,11 @@ from gestor_luces.domain.value_objects import (
     normalize_theme,
 )
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import wait_for_async, wait_quiet_async, wait_until_async
+
+#: Ventana de observacion para la asercion negativa del temporizador cancelado: cubre varios
+#: ciclos de atenuacion (el timer atenua paso a paso) y se sondea, no se duerme.
+CANCELLED_TIMER_QUIET_WINDOW_SECONDS = 0.15
 
 
 def test_json_repositories_round_trip_and_corruption_resilience(tmp_path: Path) -> None:
@@ -205,10 +210,18 @@ async def test_sleep_timer_progressive_dimming_and_power_off(tmp_path: Path) -> 
         assert status["active"] is True
         assert status["remaining_seconds"] >= 1
 
-        # Esperamos a que complete la cuenta regresiva y los pasos de atenuacion
-        await asyncio.sleep(0.45)
-
-        final_status = service.get_sleep_timer_status()
+        # La condicion observable del final de la cuenta regresiva es el estado del timer.
+        final_status = await wait_for_async(
+            service.get_sleep_timer_status,
+            lambda status: status["active"] is False,
+            "the sleep timer never finished its countdown",
+        )
+        # El apagado final viaja como datagrama aparte: la condicion observable es el bulbo
+        # simulado, no el estado del timer.
+        await wait_until_async(
+            lambda: server.pilot_state["state"] is False,
+            "the finished sleep timer never turned the bulb off",
+        )
         assert final_status["active"] is False
         assert len(observed_dimming) >= 2
         assert observed_dimming[-1] == 10
@@ -230,7 +243,13 @@ async def test_sleep_timer_cancellation_keeps_bulb_on() -> None:
         assert cancelled["active"] is False
         assert cancelled["remaining_seconds"] == 0
 
-        await asyncio.sleep(0.15)
+        # Asercion negativa: durante la ventana el temporizador cancelado no debe apagar
+        # el foco. Se sondea la condicion en vez de dormir la ventana.
+        await wait_quiet_async(
+            lambda: server.pilot_state["state"] is True,
+            "the cancelled sleep timer turned the bulb off",
+            window=CANCELLED_TIMER_QUIET_WINDOW_SECONDS,
+        )
         assert server.pilot_state["state"] is True
 
 
