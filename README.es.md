@@ -174,6 +174,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
 ├── tests/                       # Suite de pruebas automatizadas
 │   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
+│   ├── js/                      # Pruebas unitarias del frontend (node --test, sin dependencias)
 │   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
 │   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
 │   ├── test_persistence_and_scenes.py # Pruebas de persistencia JSON y presets
@@ -312,6 +313,14 @@ pytest
 La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
 
 Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
+
+Los módulos del frontend bajo `ui/js` se prueban aparte con el runner integrado de Node, así que la capa JS **no agrega ninguna dependencia de npm ni lockfile**:
+
+```bash
+npm test
+```
+
+Corre `tests/js/store.test.js` (estado compartido de la app, preferencias persistidas y helpers fotométricos) y `tests/js/scenes.test.js` (grilla de escenas nativas, filtrado por categoría, presets personalizados y los comandos que envían al backend) con un **piso de 60 % de cobertura de líneas** verificado por `--test-coverage-lines`. El job `js tests` de `.github/workflows/ci.yml` corre el mismo comando en cada push y pull request.
 
 El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 

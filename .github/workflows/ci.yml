@@ -66,3 +66,21 @@ jobs:
           name: bandit-report-py${{ matrix.python-version }}
           path: bandit-report.json
           if-no-files-found: ignore
+
+  # Frontend modules (ui/js) are browser ES modules with no npm dependencies, so this job needs
+  # no install step: it runs the suite with Node's built-in test runner and fails under the
+  # 60 % line floor declared in package.json.
+  js-tests:
+    name: js tests
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run JS tests (node --test)
+        run: npm test

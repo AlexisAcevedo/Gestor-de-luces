@@ -174,6 +174,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
 ├── tests/                       # Automated test suite
 │   ├── simulators/              # In-memory WiZ UDP server simulator
+│   ├── js/                      # Frontend unit tests (node --test, zero dependencies)
 │   ├── test_domain.py           # Domain validation tests
 │   ├── test_rate_limiter.py     # Pacing and interval tests
 │   ├── test_persistence_and_scenes.py # JSON storage and preset tests
@@ -312,6 +313,14 @@ pytest
 Coverage is gated **per package**, not as one global percentage: `domain` at least 90 %, `application` at least 75 % and `adapters` at least 55 % (`scripts/check_coverage.py`, run by CI). The percentage in the coverage badge is published by `.github/workflows/coverage-badge.yml` on every push to `main`, so it is never edited by hand. Measure it locally with `pytest --cov=gestor_luces --cov-report=term-missing` and check the gate with `python scripts/check_coverage.py coverage.json`.
 
 All tests should pass (see the CI badge at the top of this file for the live status).
+
+The frontend modules under `ui/js` are tested separately with Node's built-in test runner, so the JS layer adds **no npm dependency and no lockfile**:
+
+```bash
+npm test
+```
+
+This runs `tests/js/store.test.js` (shared app state, persisted preferences, photometric helpers) and `tests/js/scenes.test.js` (built-in scene grid, category filtering, custom presets and their backend commands) under a **60 % line-coverage floor** enforced by `--test-coverage-lines`. The `js tests` job of `.github/workflows/ci.yml` runs the same command on every push and pull request.
 
 Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
