@@ -177,3 +177,90 @@ jobs:
         working-directory: dist
         timeout-minutes: 3
         run: ./GestorDeLuces/GestorDeLuces.exe --smoke-test
+
+  # A draft release is the only thing this job can create until its last step, so a failure at any
+  # point leaves nothing public. Under dry_run every step here still runs except the one that makes
+  # the release visible, which is what rehearses the whole path without publishing anything.
+  publish:
+    name: publish
+    needs: [guard, verify]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.guard.outputs.tag }}
+      VERSION: ${{ needs.guard.outputs.version }}
+      DRY_RUN: ${{ needs.guard.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # A re-run of the same tag finds its own draft: creating it again would fail for no reason.
+      - name: Create the draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --json isDraft >/dev/null 2>&1; then
+            echo "Draft $TAG already exists (re-run of this workflow); reusing it."
+          else
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" \
+              --title "v$VERSION" --notes-file "docs/releases/$VERSION.md"
+          fi
+
+      # --clobber keeps this idempotent: without it a re-run would fail on every existing asset.
+      - name: Upload the assets to the draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            "dist/GestorDeLuces-Setup-$VERSION.exe" \
+            "dist/GestorDeLuces-portable-$VERSION.zip" \
+            "dist/SHA256SUMS.txt" \
+            --clobber
+
+      # The digests GitHub computed are the proof that the bytes it stored are the bytes that were
+      # built: local SHA-256 of each asset must equal the reported digest, and the published
+      # checksum file must describe those same assets.
+      - name: Re-verify the published digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json assets --jq '.assets' > "$RUNNER_TEMP/assets.json"
+
+          count=$(jq 'length' "$RUNNER_TEMP/assets.json")
+          if [ "$count" -ne 3 ]; then
+            echo "::error::the release holds $count assets, expected 3"
+            jq -r '.[].name' "$RUNNER_TEMP/assets.json"
+            exit 1
+          fi
+
+          for name in "GestorDeLuces-Setup-$VERSION.exe" "GestorDeLuces-portable-$VERSION.zip" "SHA256SUMS.txt"; do
+            remote=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .digest' "$RUNNER_TEMP/assets.json")
+            local_digest="sha256:$(sha256sum "dist/$name" | cut -d' ' -f1)"
+            if [ "$remote" != "$local_digest" ]; then
+              echo "::error::$name was published as $remote but the build produced $local_digest"
+              exit 1
+            fi
+            echo "$name: $remote" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          ( cd dist && sha256sum -c SHA256SUMS.txt )
+
+      - name: Publish the release
+        if: env.DRY_RUN != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --draft=false --latest
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Discard the rehearsal draft
+        if: env.DRY_RUN == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete "$TAG" --yes
+          echo "Rehearsal only: $TAG was verified and discarded, nothing was published." >> "$GITHUB_STEP_SUMMARY"
