@@ -355,3 +355,16 @@ clave en ambos lugares.
 
 ### Empaquetado
 `scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`. El archivo de sumas se escribe con LF y sin BOM a propósito: `Set-Content -Encoding UTF8` agrega BOM y CRLF, y en Linux/macOS `sha256sum -c` entonces lee el retorno de carro como parte del nombre del archivo y toda línea falla con `FAILED open or read`.
+
+### Pipeline de release (`release.yml`)
+
+El CI corre el mismo script, así que ninguna release se arma a mano y el camino local no puede divergir del publicado. Cuatro jobs, cada uno lo bastante barato como para fallar temprano:
+
+| Job | Runner | Qué decide |
+|---|---|---|
+| `guard` | `ubuntu-latest` | Resuelve la versión una sola vez —del tag en un push `v*`, de un input obligatorio en `workflow_dispatch`, porque en una corrida manual `GITHUB_REF_NAME` es la rama— y falla cuando no coincide con `pyproject.toml` o cuando falta `docs/releases/<versión>.md`. |
+| `build` | `windows-latest` | Instala el extra `dev` (PyInstaller viene ahí) más Inno Setup desde Chocolatey, corre `scripts/build.ps1` sin argumento de versión y sube `dist/`. |
+| `verify` | `windows-latest` | Compara el conjunto de artefactos contra los tres nombres esperados, corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre el build congelado. Cuenta solo archivos, porque `dist/` también tiene el directorio de la app. |
+| `publish` | `ubuntu-latest` | Crea una release en borrador (reusa la que dejó un re-run), sube con `--clobber`, re-verifica el digest que informa GitHub de cada asset contra el SHA-256 local y recién entonces publica. Un grupo `concurrency` por tag evita que dos corridas del mismo tag intercalen la publicación. |
+
+Una corrida con `dry_run` ejecuta todos los pasos hasta la publicación y después borra su borrador descartable: así se ensaya el pipeline sin publicar nada. El workflow no necesita ningún secreto más allá del `GITHUB_TOKEN` por defecto (`permissions: contents: write`); los binarios siguen sin firmar hasta que exista un certificado y `SIGN_CERT_SHA1`.
