@@ -84,3 +84,40 @@ jobs:
             echo "dry_run=$dry_run"
           } >> "$GITHUB_OUTPUT"
           echo "version=$version tag=$tag dry_run=$dry_run" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build
+    needs: guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+
+      # PyInstaller ships in the `dev` extra, so this one install is the whole build toolchain.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # build.ps1 probes Program Files (x86), Program Files and %LOCALAPPDATA%; the Chocolatey
+      # package installs into the first one, so the installer is always built on the runner.
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      # No version argument: the script reads pyproject.toml, which `guard` already proved equals
+      # the tag, so the artifact names cannot drift from the release they belong to.
+      - name: Build the portable zip and the installer
+        shell: pwsh
+        run: ./scripts/build.ps1 -Python python
+
+      - name: Upload dist/ for the verification and publish jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
