@@ -43,13 +43,18 @@ jobs:
       - name: Resolve and validate the version
         id: resolve
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ inputs.version }}"
-            dry_run="${{ inputs.dry_run }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"
+            dry_run="$INPUT_DRY_RUN"
           else
-            version="${GITHUB_REF_NAME}"
+            version="$REF_NAME"
             dry_run="false"
           fi
           version="${version#v}"
@@ -139,9 +144,11 @@ jobs:
       - name: Check the artifact set
         shell: bash
         working-directory: dist
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
         run: |
           set -euo pipefail
-          version='${{ needs.guard.outputs.version }}'
+          version="$VERSION"
           expected=("GestorDeLuces-Setup-$version.exe" "GestorDeLuces-portable-$version.zip" "SHA256SUMS.txt")
 
           [ -d GestorDeLuces ] || { echo "::error::the one-folder app directory is missing"; ls -la; exit 1; }
