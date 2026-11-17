@@ -45,6 +45,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
      WinForms `NotifyIcon` pintado con el tema activo (con respaldo `pystray` si WinForms no
      puede cargar).
    - Menú de presets rápidos, alternancia de encendido general y minimización elegante a la bandeja al cerrar la ventana.
+   - El item de encendido/apagado actúa sobre el estado real del foco: relee los focos objetivo antes de invertir, y la etiqueta, el tooltip y el color del icono se refrescan desde los focos en cada sondeo, así que una luz cambiada desde la llave de pared o la app del teléfono no invierte el próximo clic.
+   - Ocultarse en la bandeja no deja residuo en alt+tab (la ventana del bombeo de la bandeja es una ventana de herramienta) y salir desde el menú cierra limpio.
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
 
 6. Temporizador de Apagado Progresivo (Sleep Timer):
@@ -55,8 +57,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Cambio de tema en tiempo de ejecución entre **Architectural Stone** (tema claro predeterminado inspirado en botoneras de hardware Braun/Lutron) y **Atmospheric Dark** (cristal esmerilado y halo fotométrico dinámico en espacio `oklab`), persistido en `settings.json` con sincronización automática de la barra de título de Windows DWM.
 
 8. Integración con el Escritorio de Windows:
-   - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable.
-   - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de).
+   - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable. La app lleva además identidad propia en la barra de tareas (`AppUserModelID`), así que el botón muestra ese icono y se ancla como aplicación en vez de como el intérprete de Python, incluso corriendo desde el fuente.
+   - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de). Acerca de informa el nombre visible, la versión, la licencia (MIT), el autor y el repositorio.
    - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
    - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).
    - Se distribuye como instalador por usuario o como ZIP portable (ver [Empaquetado y Distribución](#empaquetado-y-distribución)).
