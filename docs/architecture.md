@@ -83,7 +83,7 @@ The core principle behind this project is **strict isolation of business invaria
       - `tray_icon`: `TrayController` owns the menu model, handlers, executor and the single refresh thread; it never imports a GUI toolkit.
       - `tray_view`: `TrayView` protocol (`run`/`stop`/`apply`) plus the shared model-to-action mapping and icon rendering.
       - `winforms_tray`: Primary view entry point. `create_winforms_view` and `WinFormsTrayView` compose the pieces below and keep the apply policy (icon/tooltip always, menu rebuild deferred while the menu is visible); it re-exports the module surface importers used before the split.
-      - `winforms_host`: the STA host. Lazy pythonnet/WinForms resolution, `CoInitializeEx`, the hidden 0×0 `Form`, `Application.Run(form)` and `Control.Invoke` marshalling. No other module imports .NET on its own.
+      - `winforms_host`: the STA host. Lazy pythonnet/WinForms resolution, `CoInitializeEx`, the hidden 0×0 `Form` — marked `WS_EX_TOOLWINDOW` on its freshly created handle, so a window that is visible, transparent and minimised never shows up as an alt+tab entry —, `Application.Run(form)` and `Control.Invoke` marshalling. No other module imports .NET on its own.
       - `winforms_icon`: `NotifyIcon` plus a per-color `HICON` cache that destroys replaced handles, and the 63-character tooltip limit.
       - `winforms_menu`: builds the `ContextMenuStrip` and its submenus from the pure `TrayMenuEntry` model, owns the menu/state signatures, and attaches the window finish to every menu surface.
       - `winforms_paint`: theme palettes, hex parsing, and every drawing operation (row painter, hover, check dot, submenu chevron, separators, DPI-scaled rounded-region geometry and the rounded `Region` cut).

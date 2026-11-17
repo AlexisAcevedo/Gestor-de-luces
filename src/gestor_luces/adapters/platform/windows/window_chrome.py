@@ -46,6 +46,11 @@ DARK_TITLEBAR_ENABLED = False
 DWMWA_WINDOW_CORNER_PREFERENCE = 33
 DWMWCP_ROUND = 2
 
+#: Estilo extendido de ventana y su indice: una ventana visible con `WS_EX_TOOLWINDOW`
+#: queda fuera del conmutador alt+tab y de la barra de tareas.
+GWL_EXSTYLE = -20
+WS_EX_TOOLWINDOW = 0x00000080
+
 
 def _resolve_native_hwnd(native_form: Any) -> int | None:
     """Extrae el HWND nativo de 64 bits sin truncar punteros mayores a 0x7FFFFFFF."""
@@ -83,6 +88,56 @@ def _configure_fn_signature(fn: Any, argtypes: list[Any], restype: Any) -> None:
         # Un puntero de ctypes solo rechaza la firma con `TypeError`; un doble de prueba
         # que expone los atributos pero no los acepta, con `AttributeError`.
         _LOGGER.debug("Win32 function signature setup skipped.", exc_info=True)
+
+
+def apply_tool_window_style(
+    window: Any,
+    *,
+    platform: str = sys.platform,
+    user32: Any = None,
+) -> bool:
+    """Marca una ventana ya creada como ventana de herramienta (`WS_EX_TOOLWINDOW`).
+
+    Es la unica forma fiable de sacar una ventana del conmutador alt+tab: `ShowInTaskbar
+    = False` de WinForms quita el boton de la barra de tareas pero deja la ventana
+    listada como candidata. El estilo debe existir con la ventana todavia oculta, porque
+    el conmutador lo evalua al mostrarla; por eso se aplica sobre el handle recien creado
+    y antes del bombeo de mensajes. Devuelve `True` solo si el estilo quedo aplicado, y
+    nunca lanza: sin Win32, sin handle o sin las funciones necesarias informa `False`.
+    """
+    if platform != "win32":
+        return False
+    try:
+        hwnd = _resolve_native_hwnd(window)
+        if hwnd is None:
+            return False
+        import ctypes
+        from ctypes import wintypes
+
+        target_user32 = ctypes.windll.user32 if user32 is None else user32
+        # `*WindowLongPtrW` existe en user32 de 64 bits; en uno de 32 bits el equivalente es
+        # `*WindowLongW`. Se prefiere el de punteros para no truncar el estilo extendido.
+        get_long = getattr(target_user32, "GetWindowLongPtrW", None)
+        set_long = getattr(target_user32, "SetWindowLongPtrW", None)
+        if get_long is None or set_long is None:
+            get_long = getattr(target_user32, "GetWindowLongW", None)
+            set_long = getattr(target_user32, "SetWindowLongW", None)
+        if get_long is None or set_long is None:
+            return False
+        _configure_fn_signature(get_long, [wintypes.HWND, ctypes.c_int], ctypes.c_void_p)
+        _configure_fn_signature(
+            set_long,
+            [wintypes.HWND, ctypes.c_int, ctypes.c_void_p],
+            ctypes.c_void_p,
+        )
+        current = int(get_long(hwnd, GWL_EXSTYLE) or 0) & 0xFFFFFFFF
+        if current & WS_EX_TOOLWINDOW:
+            return True
+        set_long(hwnd, GWL_EXSTYLE, current | WS_EX_TOOLWINDOW)
+        return bool(int(get_long(hwnd, GWL_EXSTYLE) or 0) & WS_EX_TOOLWINDOW)
+    except NATIVE_CALL_ERRORS:
+        _LOGGER.debug("Windows tool window style skipped.", exc_info=True)
+        return False
 
 
 def _set_windows_dark_titlebar_attribute(

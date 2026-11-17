@@ -19,7 +19,10 @@ import pytest
 from gestor_luces.adapters.platform.windows.window_chrome import (
     DWMWA_WINDOW_CORNER_PREFERENCE,
     DWMWCP_ROUND,
+    GWL_EXSTYLE,
+    WS_EX_TOOLWINDOW,
     _apply_corner_preference,
+    apply_tool_window_style,
 )
 from gestor_luces.adapters.tray import TrayMenuEntry, TrayPreset, build_tray_menu_spec
 from gestor_luces.adapters.tray.menu_model import (
@@ -29,7 +32,12 @@ from gestor_luces.adapters.tray.menu_model import (
     ACTION_SET_BRIGHTNESS,
     ACTION_TURN_OFF,
 )
-from gestor_luces.adapters.tray.tray_view import WINDOW_TOGGLE_ACTION, resolve_entry_action
+from gestor_luces.adapters.tray.tray_view import (
+    ICON_NAME,
+    WINDOW_TOGGLE_ACTION,
+    resolve_entry_action,
+)
+from gestor_luces.adapters.tray.winforms_host import create_host_form
 from gestor_luces.adapters.tray.winforms_tray import (
     DARK_PALETTE,
     DEFAULT_PALETTE,
@@ -802,3 +810,96 @@ def test_paint_menu_separator_uses_the_separator_color() -> None:
         )
         assert graphics.ops[1][0] == "line"
         assert graphics.ops[1][1] == parse_hex_color(palette.separator)
+
+
+# --- Ventana del bombeo: fuera del conmutador alt+tab (S2) -----------------------------
+
+
+class _FakeUser32:
+    """Doble de `user32` que registra el estilo extendido aplicado al handle."""
+
+    def __init__(self, ex_style: int = 0x00090000) -> None:
+        self.ex_style = ex_style
+        self.writes: list[tuple[int, int]] = []
+
+    def GetWindowLongW(self, hwnd: int, index: int) -> int:
+        return self.ex_style
+
+    def SetWindowLongW(self, hwnd: int, index: int, value: int) -> int:
+        self.ex_style = int(value)
+        self.writes.append((int(index), int(value)))
+        return 0
+
+
+class _FakeHostFormObject:
+    """Formulario minimo que registra, en orden, cada propiedad aplicada."""
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "applied", [])
+        object.__setattr__(self, "Handle", _FakeHandle(0x1234))
+        self.ShowInTaskbar = True
+        self.Opacity = 1
+        self.WindowState = "Normal"
+        self.Size = None
+        self.Text = ""
+        self.FormBorderStyle = None
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name != "applied":
+            self.applied.append((name, value))
+        object.__setattr__(self, name, value)
+
+
+def _host_api() -> Any:
+    """Doble del contenedor de modulos .NET con el formulario del bombeo."""
+    form = _FakeHostFormObject()
+
+    class _Forms:
+        FormBorderStyle = types.SimpleNamespace(**{"None": 0})
+        FormWindowState = types.SimpleNamespace(Minimized=1)
+
+        @staticmethod
+        def Form() -> _FakeHostFormObject:
+            return form
+
+    class _Drawing:
+        @staticmethod
+        def Size(width: int, height: int) -> tuple[int, int]:
+            return (width, height)
+
+    return types.SimpleNamespace(forms=_Forms, drawing=_Drawing, form=form)
+
+
+def test_host_form_is_a_tool_window_so_alt_tab_has_no_residue() -> None:
+    """La ventana del bombeo se marca como herramienta: alt+tab no la lista (S2)."""
+    user32 = _FakeUser32()
+
+    create_host_form(_host_api(), user32=user32, platform="win32")
+
+    assert GWL_EXSTYLE == -20
+    assert WS_EX_TOOLWINDOW == 0x80
+    assert user32.writes == [(GWL_EXSTYLE, 0x00090000 | WS_EX_TOOLWINDOW)]
+    assert user32.ex_style & WS_EX_TOOLWINDOW
+
+    # Un handle que ya lleva el estilo no se vuelve a escribir.
+    create_host_form(_host_api(), user32=user32, platform="win32")
+    assert len(user32.writes) == 1
+
+
+def test_host_form_degrades_without_win32_or_style_support() -> None:
+    """Sin Win32, sin `user32` o sin handle la ventana se crea igual, sin excepcion."""
+    form = create_host_form(_host_api(), platform="linux")
+    assert form.Text == ICON_NAME
+    assert apply_tool_window_style(object(), platform="win32", user32=_FakeUser32()) is False
+
+
+def test_host_form_keeps_a_zero_restored_size() -> None:
+    """El tamaño restaurado queda en 0x0: minimizar antes de dimensionar lo ignoraba."""
+    api = _host_api()
+    api.form.applied.clear()
+
+    create_host_form(api, user32=_FakeUser32(), platform="win32")
+
+    applied = [name for name, _value in api.form.applied]
+    assert applied.index("Size") < applied.index("WindowState")
+    assert api.form.Size == (0, 0)
