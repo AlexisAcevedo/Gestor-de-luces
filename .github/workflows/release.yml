@@ -1,0 +1,86 @@
+name: Release
+
+# Builds and publishes the Windows artifacts from CI so no release is assembled by hand.
+# The version is resolved once, in `guard`, and every later job consumes its output: the tag
+# name and `pyproject.toml` must agree before anything expensive starts.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the leading v (must match pyproject.toml)'
+        type: string
+        required: true
+      dry_run:
+        description: 'Rehearse: build, verify and upload to a draft release, but never publish it'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+# One release per tag at a time: two runs of the same tag must never interleave their publish
+# steps, and a queued run must not be cancelled halfway through uploading assets.
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      dry_run: ${{ steps.resolve.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A manual run has no tag: GITHUB_REF_NAME is the branch, so the version has to come from
+      # the input. A tag run gets it from the tag and is never a dry run.
+      - name: Resolve and validate the version
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            dry_run="${{ inputs.dry_run }}"
+          else
+            version="${GITHUB_REF_NAME}"
+            dry_run="false"
+          fi
+          version="${version#v}"
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$version' is not a version such as 0.4.2"
+            exit 1
+          fi
+
+          declared=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+          if [ "$version" != "$declared" ]; then
+            echo "::error::version $version does not match pyproject.toml ($declared)"
+            exit 1
+          fi
+
+          # Release notes live in the repository, so the same tag always yields the same notes.
+          if [ ! -f "docs/releases/$version.md" ]; then
+            echo "::error::missing docs/releases/$version.md (release notes are committed, not generated)"
+            exit 1
+          fi
+
+          if [ "$dry_run" = "true" ]; then
+            tag="v${version}-dryrun-${GITHUB_RUN_NUMBER}"
+            echo "Rehearsal: the draft is $tag and it will be discarded at the end."
+          else
+            tag="v${version}"
+          fi
+
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+          echo "version=$version tag=$tag dry_run=$dry_run" >> "$GITHUB_STEP_SUMMARY"
