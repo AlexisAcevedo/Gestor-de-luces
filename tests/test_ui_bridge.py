@@ -103,6 +103,25 @@ async def test_webview_bridge_full_lifecycle_over_udp() -> None:
             bulb_two_dict = next(b for b in refreshed["bulbs"] if b["ip"] == ep_two)
             assert bulb_two_dict["state"]["is_on"] is False
             assert bulb_two_dict["state"]["brightness"] == 20
+
+            # 8. La bandeja invierte el estado real, no la direccion cacheada.
+            # El foco 1 se apaga por fuera (llave de pared o app WiZ) sin que la app lo sepa,
+            # asi que el cache sigue diciendo "encendido": con esa direccion el item de la
+            # bandeja habria apagado. `toggle_power` relee primero y enciende.
+            server_one.pilot_state["state"] = False
+            stale = await asyncio.to_thread(bridge.get_tray_snapshot)
+            assert stale["is_on"] is True
+
+            toggled = await asyncio.to_thread(bridge.toggle_power)
+            assert toggled["ok"] is True
+            assert server_one.pilot_state["state"] is True
+            assert server_two.pilot_state["state"] is True
+
+            # El segundo toggle ya parte del estado real encendido y apaga.
+            turned_off = await asyncio.to_thread(bridge.toggle_power)
+            assert turned_off["ok"] is True
+            assert server_one.pilot_state["state"] is False
+            assert server_two.pilot_state["state"] is False
         finally:
             bridge.shutdown()
 
@@ -175,3 +194,30 @@ async def test_webview_bridge_theme_and_fit_window_height(tmp_path) -> None:
         assert fit_calls == [640]
     finally:
         bridge.shutdown()
+
+
+async def test_tray_state_refresh_never_notifies_the_ui() -> None:
+    """El sondeo de la bandeja lee el estado real sin avisar a la vista (S3)."""
+    async with FakeWizBulbServer(mac="a8bb50998812") as server:
+        controller = WizUdpController(probe_candidates=[server.endpoint])
+        service = LightControlService(controller=controller)
+        bridge = WebviewBridge(service=service)
+        notifications: list[int] = []
+        bridge.set_state_change_listener(lambda: notifications.append(1))
+
+        try:
+            initial = await asyncio.to_thread(bridge.get_initial_state)
+            assert initial["ok"] is True
+            notifications.clear()
+
+            # El sondeo de la bandeja no es un cambio de estado: no notifica.
+            tray_refresh = await asyncio.to_thread(bridge.refresh_tray_states)
+            assert tray_refresh["ok"] is True
+            assert notifications == []
+
+            # El refresco que pide la vista si tiene que avisar.
+            refresh = await asyncio.to_thread(bridge.refresh_states)
+            assert refresh["ok"] is True
+            assert notifications
+        finally:
+            bridge.shutdown()

@@ -30,7 +30,7 @@ from gestor_luces.adapters.tray.menu_model import (
     ACTION_CANCEL_SLEEP_TIMER,
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
-    ACTION_TURN_OFF,
+    ACTION_TOGGLE_POWER,
 )
 from gestor_luces.adapters.tray.tray_view import (
     ICON_NAME,
@@ -288,7 +288,7 @@ def test_leaf_clicks_dispatch_their_action_and_payload() -> None:
         _dispose(items)
 
     assert dispatched == [
-        (ACTION_TURN_OFF, None),
+        (ACTION_TOGGLE_POWER, None),
         (ACTION_QUIT, None),
         (ACTION_CANCEL_SLEEP_TIMER, None),
         (ACTION_SET_BRIGHTNESS, 25),
@@ -903,3 +903,13 @@ def test_host_form_keeps_a_zero_restored_size() -> None:
     applied = [name for name, _value in api.form.applied]
     assert applied.index("Size") < applied.index("WindowState")
     assert api.form.Size == (0, 0)
+
+
+def test_host_form_starts_even_without_a_readable_handle() -> None:
+    """Sin handle legible el bombeo arranca igual, solo queda el residuo en alt+tab (S2)."""
+    api = _host_api()
+    api.forms.Form = lambda: types.SimpleNamespace()
+
+    created = create_host_form(api, user32=_FakeUser32(), platform="win32")
+
+    assert created is not None

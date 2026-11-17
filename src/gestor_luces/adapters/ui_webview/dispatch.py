@@ -34,6 +34,10 @@ JS_API_EXCLUDED: frozenset[str] = frozenset(
         "set_fit_window_callback",
         "set_state_change_listener",
         "shutdown",
+        # Solo la bandeja: refresca el estado real sin notificar a la vista.
+        "refresh_tray_states",
+        # Solo la bandeja: invierte el estado real sin pasar por la vista web.
+        "toggle_power",
     }
 )
 

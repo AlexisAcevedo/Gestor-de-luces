@@ -213,6 +213,13 @@ class WinFormsTrayView:
         signature = state_signature(spec, title, rgb, theme)
         menu_key = menu_signature(spec, theme)
         with self._lock:
+            if self._stopped:
+                # Una aplicacion que llego tarde (o que cae en el camino inline cuando el
+                # bombeo ya cerro) no puede reconstruir ni disponer el menu mientras
+                # `_dispose_native` libera los mismos objetos desde el hilo de la vista: dos
+                # hilos tocando `ToolStrip.Items` es la excepcion "coleccion modificada" del
+                # CLR. El estado deseado ya quedo guardado en `apply`.
+                return
             if signature == self._applied and self._deferred_menu is None:
                 return
             notify, menu = self._notify, self._menu
