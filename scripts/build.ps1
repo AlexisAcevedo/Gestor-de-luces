@@ -54,7 +54,10 @@ if ($SkipInstaller) {
     $hash = (Get-FileHash -Path $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $($item.Name)"
   }
-  Set-Content -Path $sumsFile -Value $lines -Encoding UTF8
+  # LF sin BOM: `Set-Content -Encoding UTF8` escribe BOM + CRLF, y en Linux/macOS
+  # `sha256sum -c` toma el CR como parte del nombre ("FAILED open or read").
+  [System.IO.File]::WriteAllText($sumsFile, (($lines -join "`n") + "`n"),
+    (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "Wrote $sumsFile"
   return
 }
@@ -96,5 +99,8 @@ $lines = foreach ($item in $artifacts) {
   $hash = (Get-FileHash -Path $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
   "$hash  $($item.Name)"
 }
-Set-Content -Path $sumsFile -Value $lines -Encoding UTF8
+# LF sin BOM: `Set-Content -Encoding UTF8` escribe BOM + CRLF, y en Linux/macOS
+# `sha256sum -c` toma el CR como parte del nombre ("FAILED open or read").
+[System.IO.File]::WriteAllText($sumsFile, (($lines -join "`n") + "`n"),
+  (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "Wrote $sumsFile"
