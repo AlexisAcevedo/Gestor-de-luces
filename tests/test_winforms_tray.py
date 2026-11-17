@@ -17,9 +17,20 @@ from typing import Any
 import pytest
 
 from gestor_luces.adapters.platform.windows.window_chrome import (
+    APP_USER_MODEL_ID,
     DWMWA_WINDOW_CORNER_PREFERENCE,
     DWMWCP_ROUND,
+    GWL_EXSTYLE,
+    SM_CXICON,
+    SM_CYICON,
+    WIN_ICON_BIG,
+    WIN_ICON_SMALL,
+    WM_SETICON,
+    WS_EX_TOOLWINDOW,
     _apply_corner_preference,
+    apply_app_user_model_id,
+    apply_tool_window_style,
+    apply_window_icon,
 )
 from gestor_luces.adapters.tray import TrayMenuEntry, TrayPreset, build_tray_menu_spec
 from gestor_luces.adapters.tray.menu_model import (
@@ -27,9 +38,14 @@ from gestor_luces.adapters.tray.menu_model import (
     ACTION_CANCEL_SLEEP_TIMER,
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
-    ACTION_TURN_OFF,
+    ACTION_TOGGLE_POWER,
 )
-from gestor_luces.adapters.tray.tray_view import WINDOW_TOGGLE_ACTION, resolve_entry_action
+from gestor_luces.adapters.tray.tray_view import (
+    ICON_NAME,
+    WINDOW_TOGGLE_ACTION,
+    resolve_entry_action,
+)
+from gestor_luces.adapters.tray.winforms_host import create_host_form
 from gestor_luces.adapters.tray.winforms_tray import (
     DARK_PALETTE,
     DEFAULT_PALETTE,
@@ -280,7 +296,7 @@ def test_leaf_clicks_dispatch_their_action_and_payload() -> None:
         _dispose(items)
 
     assert dispatched == [
-        (ACTION_TURN_OFF, None),
+        (ACTION_TOGGLE_POWER, None),
         (ACTION_QUIT, None),
         (ACTION_CANCEL_SLEEP_TIMER, None),
         (ACTION_SET_BRIGHTNESS, 25),
@@ -802,3 +818,194 @@ def test_paint_menu_separator_uses_the_separator_color() -> None:
         )
         assert graphics.ops[1][0] == "line"
         assert graphics.ops[1][1] == parse_hex_color(palette.separator)
+
+
+# --- Ventana del bombeo: fuera del conmutador alt+tab (S2) -----------------------------
+
+
+class _FakeUser32:
+    """Doble de `user32` que registra el estilo extendido aplicado al handle."""
+
+    def __init__(self, ex_style: int = 0x00090000) -> None:
+        self.ex_style = ex_style
+        self.writes: list[tuple[int, int]] = []
+
+    def GetWindowLongW(self, hwnd: int, index: int) -> int:
+        return self.ex_style
+
+    def SetWindowLongW(self, hwnd: int, index: int, value: int) -> int:
+        self.ex_style = int(value)
+        self.writes.append((int(index), int(value)))
+        return 0
+
+
+class _FakeHostFormObject:
+    """Formulario minimo que registra, en orden, cada propiedad aplicada."""
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "applied", [])
+        object.__setattr__(self, "Handle", _FakeHandle(0x1234))
+        self.ShowInTaskbar = True
+        self.Opacity = 1
+        self.WindowState = "Normal"
+        self.Size = None
+        self.Text = ""
+        self.FormBorderStyle = None
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name != "applied":
+            self.applied.append((name, value))
+        object.__setattr__(self, name, value)
+
+
+def _host_api() -> Any:
+    """Doble del contenedor de modulos .NET con el formulario del bombeo."""
+    form = _FakeHostFormObject()
+
+    class _Forms:
+        FormBorderStyle = types.SimpleNamespace(**{"None": 0})
+        FormWindowState = types.SimpleNamespace(Minimized=1)
+
+        @staticmethod
+        def Form() -> _FakeHostFormObject:
+            return form
+
+    class _Drawing:
+        @staticmethod
+        def Size(width: int, height: int) -> tuple[int, int]:
+            return (width, height)
+
+    return types.SimpleNamespace(forms=_Forms, drawing=_Drawing, form=form)
+
+
+def test_host_form_is_a_tool_window_so_alt_tab_has_no_residue() -> None:
+    """La ventana del bombeo se marca como herramienta: alt+tab no la lista (S2)."""
+    user32 = _FakeUser32()
+
+    create_host_form(_host_api(), user32=user32, platform="win32")
+
+    assert GWL_EXSTYLE == -20
+    assert WS_EX_TOOLWINDOW == 0x80
+    assert user32.writes == [(GWL_EXSTYLE, 0x00090000 | WS_EX_TOOLWINDOW)]
+    assert user32.ex_style & WS_EX_TOOLWINDOW
+
+    # Un handle que ya lleva el estilo no se vuelve a escribir.
+    create_host_form(_host_api(), user32=user32, platform="win32")
+    assert len(user32.writes) == 1
+
+
+def test_host_form_degrades_without_win32_or_style_support() -> None:
+    """Sin Win32, sin `user32` o sin handle la ventana se crea igual, sin excepcion."""
+    form = create_host_form(_host_api(), platform="linux")
+    assert form.Text == ICON_NAME
+    assert apply_tool_window_style(object(), platform="win32", user32=_FakeUser32()) is False
+
+
+def test_host_form_keeps_a_zero_restored_size() -> None:
+    """El tamaño restaurado queda en 0x0: minimizar antes de dimensionar lo ignoraba."""
+    api = _host_api()
+    api.form.applied.clear()
+
+    create_host_form(api, user32=_FakeUser32(), platform="win32")
+
+    applied = [name for name, _value in api.form.applied]
+    assert applied.index("Size") < applied.index("WindowState")
+    assert api.form.Size == (0, 0)
+
+
+def test_host_form_starts_even_without_a_readable_handle() -> None:
+    """Sin handle legible el bombeo arranca igual, solo queda el residuo en alt+tab (S2)."""
+    api = _host_api()
+    api.forms.Form = lambda: types.SimpleNamespace()
+
+    created = create_host_form(api, user32=_FakeUser32(), platform="win32")
+
+    assert created is not None
+
+
+# --- Identidad e icono de la ventana en la barra de tareas -----------------------------
+
+
+class _FakeShell32:
+    """Doble de `shell32` que registra el AppUserModelID del proceso."""
+
+    def __init__(self) -> None:
+        self.app_id: str | None = None
+        self.fail = False
+
+    def SetCurrentProcessExplicitAppUserModelID(self, app_id: str) -> int:
+        if self.fail:
+            raise OSError("shell32 unavailable")
+        self.app_id = app_id
+        return 0
+
+
+class _FakeIconUser32:
+    """Doble de `user32` para `LoadImageW`/`SendMessageW`/`GetSystemMetrics`."""
+
+    def __init__(self) -> None:
+        self.loaded: list[tuple[str, int, int]] = []
+        self.messages: list[tuple[int, int, int]] = []
+        self.destroyed: list[int] = []
+        self.next_handle = 0x400
+
+    def GetSystemMetrics(self, index: int) -> int:
+        return 32 if index in (SM_CXICON, SM_CYICON) else 16
+
+    def LoadImageW(self, instance: Any, path: str, kind: int, cx: int, cy: int, flags: int) -> int:
+        self.loaded.append((path, cx, cy))
+        self.next_handle += 1
+        return self.next_handle
+
+    def SendMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
+        self.messages.append((message, wparam, lparam))
+        return 0  # el icono anterior suele ser 0: no es una senal de exito
+
+    def DestroyIcon(self, handle: int) -> int:
+        self.destroyed.append(handle)
+        return 1
+
+
+def test_app_user_model_id_gives_the_app_its_own_taskbar_identity() -> None:
+    """Sin AppUserModelID la barra agrupa la ventana bajo python.exe y usa su icono."""
+    shell32 = _FakeShell32()
+
+    assert apply_app_user_model_id(APP_USER_MODEL_ID, platform="win32", shell32=shell32) is True
+    assert shell32.app_id == APP_USER_MODEL_ID
+    assert "." in APP_USER_MODEL_ID and " " not in APP_USER_MODEL_ID
+
+    # Fuera de Windows, o con un shell32 que falla, no hay excepcion ni efecto.
+    linux = _FakeShell32()
+    assert apply_app_user_model_id(APP_USER_MODEL_ID, platform="linux", shell32=linux) is False
+    assert linux.app_id is None
+    broken = _FakeShell32()
+    broken.fail = True
+    assert apply_app_user_model_id(APP_USER_MODEL_ID, platform="win32", shell32=broken) is False
+
+
+def test_window_icon_sets_both_icon_sizes_from_the_shipped_ico(tmp_path: Any) -> None:
+    """La ventana recibe el .ico de la app en tamano grande y chico (barra y alt+tab)."""
+    icon = tmp_path / "app.ico"
+    icon.write_bytes(b"\x00\x00\x01\x00")
+    user32 = _FakeIconUser32()
+
+    assert apply_window_icon(_FakeControl(0x1234), icon, platform="win32", user32=user32) is True
+    assert user32.loaded == [(str(icon), 32, 32), (str(icon), 16, 16)]
+    assert user32.messages == [
+        (WM_SETICON, WIN_ICON_BIG, 0x401),
+        (WM_SETICON, WIN_ICON_SMALL, 0x402),
+    ]
+    assert user32.destroyed == []
+
+
+def test_window_icon_degrades_without_a_file_window_or_win32(tmp_path: Any) -> None:
+    """Sin .ico, sin handle o fuera de Windows no hay llamada nativa ni excepcion."""
+    missing = tmp_path / "nope.ico"
+    user32 = _FakeIconUser32()
+
+    window = _FakeControl(0x1234)
+    assert apply_window_icon(window, missing, platform="win32", user32=user32) is False
+    assert apply_window_icon(window, missing, platform="linux", user32=user32) is False
+    assert apply_window_icon(object(), missing, platform="win32", user32=user32) is False
+    assert user32.loaded == []
+    assert user32.messages == []

@@ -29,6 +29,7 @@ from gestor_luces.adapters.tray.menu_model import (
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
     ACTION_SHOW_WINDOW,
+    ACTION_TOGGLE_POWER,
     ACTION_TURN_OFF,
     ACTION_TURN_ON,
     TrayMenuEntry,
@@ -79,6 +80,10 @@ class TrayActions(Protocol):
     """Subconjunto sincrono y seguro entre hilos del `WebviewBridge` que usa la bandeja."""
 
     def set_power(self, is_on: bool) -> dict[str, Any]: ...
+
+    def toggle_power(self) -> dict[str, Any]: ...
+
+    def refresh_tray_states(self) -> dict[str, Any]: ...
 
     def set_brightness(self, brightness: int) -> dict[str, Any]: ...
 
@@ -146,6 +151,7 @@ class TrayController:
             "toggle_window": lambda _payload: self._toggle_window_visibility(),
             ACTION_TURN_ON: lambda _payload: self._call_bridge(self._actions.set_power, True),
             ACTION_TURN_OFF: lambda _payload: self._call_bridge(self._actions.set_power, False),
+            ACTION_TOGGLE_POWER: lambda _payload: self._call_bridge(self._actions.toggle_power),
             ACTION_SET_BRIGHTNESS: lambda payload: self._call_bridge(
                 self._actions.set_brightness, int(payload)
             ),
@@ -323,15 +329,43 @@ class TrayController:
 
         El sondeo cubre cambios que no pasan por la UI ni por la bandeja, como el apagado
         automatico del temporizador; la vista descarta un estado identico al vigente, pero
-        el sondeo tambien es lo que reintenta un rebuild que quedo pendiente.
+        el sondeo tambien es lo que reintenta un rebuild que quedo pendiente. Solo el ciclo
+        periodico refresca el cache desde la red (`_sync_live_states`).
         """
         timeout = self._poll_interval if self._poll_interval > 0 else None
         while not self._stopped.is_set():
-            self._refresh_requested.wait(timeout=timeout)
+            requested = self._refresh_requested.wait(timeout=timeout)
             if self._stopped.is_set():
                 break
             self._refresh_requested.clear()
+            if not requested:
+                self._sync_live_states()
             self.refresh()
+
+    def _sync_live_states(self) -> None:
+        """Pide al puente el estado real (getPilot) antes de reconstruir el menu.
+
+        El menu, el tooltip y el color del icono se arman con el ultimo estado cacheado, y
+        ese cache solo lo refresca la vista web, que deja de sondear al ocultarse: con la app
+        en la bandeja el item "Encender/Apagar" quedaba armado con una direccion vieja. Se
+        llama solo en el ciclo periodico, nunca en un refresco pedido por una accion: ahi el
+        cache acaba de quedar actualizado por el comando y una lectura en vuelo resucitaria
+        el estado anterior. Es best-effort: un fallo de red conserva el estado anterior y el
+        proximo ciclo reintenta, porque la bandeja no puede quedarse sin icono por un foco
+        inalcanzable.
+        """
+        try:
+            response = self._actions.refresh_tray_states()
+        # FRONTERA (refresco de la bandeja): es el mismo hilo que reconstruye el menu, asi que
+        # un fallo del puente (bucle apagado, servicio levantando, UDP sin respuesta) no puede
+        # propagarse; el estado cacheado sigue siendo valido hasta el proximo ciclo.
+        except Exception:
+            _LOGGER.debug(
+                "Live bulb state refresh failed; keeping the cached tray state.", exc_info=True
+            )
+            return
+        if isinstance(response, dict) and not response.get("ok", True):
+            _LOGGER.debug("Live bulb state refresh rejected: %s", response.get("error"))
 
     def _toggle_window_visibility(self) -> None:
         """Conmuta entre mostrar y ocultar la ventana con base en el estado real."""

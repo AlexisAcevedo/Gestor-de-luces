@@ -21,6 +21,7 @@ from gestor_luces.adapters.platform.windows import (
     _set_windows_dark_titlebar_attribute,
     _sync_native_menu,
     _to_webview_menus,
+    apply_window_icon,
     show_message_box,
 )
 from gestor_luces.adapters.storage.json_repositories import resolve_default_data_dir
@@ -33,6 +34,7 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_TOGGLE_AUTOSTART,
     ACTION_TOGGLE_WINDOW,
     APP_DISPLAY_NAME,
+    APP_LICENSE,
     AppMenu,
     build_about_text,
     build_app_menu,
@@ -410,9 +412,9 @@ class DesktopApplication:
         )
 
     def show_about(self) -> None:
-        """Muestra el cuadro nativo 'Acerca de' con la version y la licencia."""
+        """Muestra el cuadro nativo 'Acerca de' con los metadatos del paquete."""
         language = str(self._bridge.get_tray_snapshot().get("language") or "en")
-        text = build_about_text(language, resolve_app_version())
+        text = build_about_text(language, resolve_app_version(), APP_LICENSE)
         show_message_box(text, APP_DISPLAY_NAME)
 
     def toggle_autostart(self) -> None:
@@ -449,6 +451,9 @@ class DesktopApplication:
     def on_window_shown(self) -> None:
         """Sincroniza el cromado nativo y el menu cuando la ventana vuelve a mostrarse."""
         self.sync_theme_titlebar()
+        # La barra de tareas y alt+tab piden el icono a la ventana: se fija en cada muestra
+        # (es idempotente) para no depender del orden interno de pywebview.
+        apply_window_icon(self._window, self._icon_path)
         if self.is_window_visible:
             _activate_window_foreground(self._window)
         self.request_menu_sync()

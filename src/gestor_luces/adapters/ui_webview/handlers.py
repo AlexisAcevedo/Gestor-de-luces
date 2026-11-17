@@ -89,6 +89,30 @@ class BridgeHandlers:
             )
         )
 
+    def toggle_power(self) -> dict[str, Any]:
+        """Invierte el encendido real de los focos objetivo (uso exclusivo de la bandeja).
+
+        No usa la direccion con la que el menu de la bandeja fue construido: mientras la app
+        vive en la bandeja el estado cacheado puede estar desactualizado, y el item
+        "Encender/Apagar" ofreceria el sentido contrario. Primero se lee el estado real
+        (getPilot) de los focos objetivo y recien despues se aplica el inverso. Un foco que
+        no responde no cuenta como encendido: si ninguno consta como encendido se enciende,
+        que es la accion que no apaga nada por error.
+        """
+
+        async def _toggle() -> None:
+            target_ips = self._service.get_target_ips()
+            if not target_ips:
+                return
+            await self._service.refresh_states(ips=target_ips)
+            lit = any(
+                bulb is not None and bulb.is_online and bulb.state.is_on
+                for bulb in (self._service.get_bulb(ip) for ip in target_ips)
+            )
+            await self._service.set_power(is_on=not lit)
+
+        return self._call(_toggle)
+
     def set_brightness(self, brightness: int, ips: list[str] | None = None) -> dict[str, Any]:
         """Ajusta el nivel de brillo (10-100%) de los focos objetivo."""
         return self._call(

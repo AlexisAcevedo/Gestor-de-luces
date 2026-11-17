@@ -17,6 +17,14 @@ ACTION_SHOW_ABOUT = "show_about"
 
 APP_DISPLAY_NAME = "WiZ Architectural Lighting Console"
 
+#: Metadatos que el cuadro "Acerca de" informa. Es la unica fuente del paquete para estos
+#: datos: `pyproject.toml` los declara para el empaquetado y aqui se repiten porque un
+#: build congelado (PyInstaller) no lleva `pyproject.toml` ni metadatos de `importlib`, y el
+#: dialogo no puede depender de la suerte del entorno para mostrar la licencia o el autor.
+APP_LICENSE = "MIT"
+APP_AUTHOR = "AlexisAcevedo"
+APP_REPOSITORY = "https://github.com/AlexisAcevedo/Gestor-de-luces"
+
 _STRINGS: dict[str, dict[str, str]] = {
     "en": {
         "file": "File",
@@ -30,7 +38,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "about_title": "About",
         "about_version": "Version",
         "about_license": "License",
-        "about_license_unspecified": "Not specified",
+        "about_author": "Author",
+        "about_repository": "Repository",
     },
     "es": {
         "file": "Archivo",
@@ -44,7 +53,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "about_title": "Acerca de",
         "about_version": "Versión",
         "about_license": "Licencia",
-        "about_license_unspecified": "No especificada",
+        "about_author": "Autor",
+        "about_repository": "Repositorio",
     },
 }
 
@@ -108,10 +118,26 @@ def build_app_menu(
     ]
 
 
-def build_about_text(language: str, version: str, license_name: str | None = None) -> str:
-    """Compose the About dialog body."""
+def build_about_text(
+    language: str,
+    version: str,
+    license_name: str | None = None,
+    *,
+    author: str = APP_AUTHOR,
+    repository: str = APP_REPOSITORY,
+) -> str:
+    """Compone el cuerpo del cuadro "Acerca de" con los metadatos reales del paquete.
+
+    Ningun campo queda vacio: un `license_name` vacio cae a la licencia declarada del
+    proyecto en vez de mostrar un marcador de posicion.
+    """
     s = resolve_menu_strings(language)
-    license_text = license_name or s["about_license_unspecified"]
-    return (
-        f"{APP_DISPLAY_NAME}\n{s['about_version']}: {version}\n{s['about_license']}: {license_text}"
+    return "\n".join(
+        (
+            APP_DISPLAY_NAME,
+            f"{s['about_version']}: {version}",
+            f"{s['about_license']}: {license_name or APP_LICENSE}",
+            f"{s['about_author']}: {author}",
+            f"{s['about_repository']}: {repository}",
+        )
     )

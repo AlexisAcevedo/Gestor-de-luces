@@ -20,6 +20,10 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_SHOW_SHORTCUTS,
     ACTION_TOGGLE_AUTOSTART,
     ACTION_TOGGLE_WINDOW,
+    APP_AUTHOR,
+    APP_DISPLAY_NAME,
+    APP_LICENSE,
+    APP_REPOSITORY,
     build_about_text,
     build_app_menu,
 )
@@ -112,10 +116,23 @@ def test_app_menu_labels_follow_language_and_state() -> None:
     assert fallback[0].title == "File"
 
 
-def test_about_text_contains_version_and_license() -> None:
-    text = build_about_text("en", "1.2.3", "MIT")
-    assert "1.2.3" in text and "MIT" in text
-    assert "Versión" in build_about_text("es", "1.2.3")
+def test_about_text_reports_every_project_field() -> None:
+    """El cuadro "Acerca de" informa nombre, version, licencia, autor y repositorio."""
+    text = build_about_text("en", "1.2.3")
+    assert APP_DISPLAY_NAME in text
+    assert "Version: 1.2.3" in text
+    assert f"License: {APP_LICENSE}" in text
+    assert f"Author: {APP_AUTHOR}" in text
+    assert f"Repository: {APP_REPOSITORY}" in text
+
+    spanish = build_about_text("es", "1.2.3")
+    assert "Versión: 1.2.3" in spanish
+    assert f"Licencia: {APP_LICENSE}" in spanish
+    assert f"Autor: {APP_AUTHOR}" in spanish
+    assert f"Repositorio: {APP_REPOSITORY}" in spanish
+
+    # Un nombre de licencia vacio nunca deja el campo en blanco.
+    assert f"License: {APP_LICENSE}" in build_about_text("en", "1.2.3", "")
 
 
 def test_build_autostart_command_always_minimized() -> None:

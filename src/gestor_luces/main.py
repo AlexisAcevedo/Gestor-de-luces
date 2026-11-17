@@ -30,6 +30,7 @@ from gestor_luces.adapters.platform.windows import (
     _set_windows_dark_titlebar_attribute,
     _sync_native_menu,
     _to_webview_menus,
+    apply_app_user_model_id,
     show_message_box,
 )
 from gestor_luces.adapters.storage.json_repositories import (
@@ -286,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         guard=guard,
         autostart=autostart,
     )
+    apply_app_user_model_id()
     app.create_window()
     win_width, win_height = app.window_size
     _LOGGER.info("Opening UI window (%sx%s) -> %s", win_width, win_height, index_path)

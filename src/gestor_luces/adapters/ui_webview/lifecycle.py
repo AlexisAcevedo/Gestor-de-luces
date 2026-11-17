@@ -63,6 +63,27 @@ class BridgeLifecycle:
             return self._build_response(ok=False, error=str(exc))
         return self._success_response()
 
+    def refresh_tray_states(self) -> dict[str, Any]:
+        """Refresca el estado real de los focos para la bandeja, sin notificar a la vista.
+
+        Es el mismo `getPilot` que el sondeo de la bandeja necesita para armar su menu, pero
+        sin sellar el sobre de exito: `_success_response` avisa a la UI y a la barra de
+        titulo, y un sondeo no cambio nada que la vista deba reflejar. Notificarlo cada
+        pocos segundos multiplica los refrescos del menu nativo justo cuando el cierre de la
+        aplicacion esta desmontando la ventana.
+        """
+
+        async def _refresh() -> None:
+            all_ips = [bulb.ip for bulb in self._service.list_bulbs()]
+            if all_ips:
+                await self._service.refresh_states(ips=all_ips)
+
+        try:
+            self._run_async(_await_action(_refresh), timeout=6.0)
+        except _SERVICE_CALL_ERRORS as exc:
+            return self._build_response(ok=False, error=str(exc))
+        return {"ok": True}
+
     def _poll(self) -> dict[str, Any]:
         """Devuelve el sobre de solo lectura sin notificar a la bandeja."""
         try:

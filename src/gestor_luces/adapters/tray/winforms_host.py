@@ -16,10 +16,14 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import sys
 from collections.abc import Callable
 from typing import Any
 
-from gestor_luces.adapters.platform.windows.window_chrome import NATIVE_CALL_ERRORS
+from gestor_luces.adapters.platform.windows.window_chrome import (
+    NATIVE_CALL_ERRORS,
+    apply_tool_window_style,
+)
 from gestor_luces.adapters.tray.tray_view import ICON_NAME, Dispatch, TrayView
 
 _LOGGER = logging.getLogger(__name__)
@@ -140,16 +144,45 @@ def _co_initialize_apartment() -> None:
         _LOGGER.debug("STA initialization failed; continuing.", exc_info=True)
 
 
-def create_host_form(api: _WinFormsApi) -> Any:
-    """Ventana invisible (0x0, sin borde) que solo existe para hospedar el bombeo."""
+def create_host_form(
+    api: _WinFormsApi,
+    *,
+    user32: Any = None,
+    platform: str = sys.platform,
+) -> Any:
+    """Ventana invisible (0x0, sin borde) que solo existe para hospedar el bombeo.
+
+    El formulario se crea ya como ventana de herramienta (`_keep_out_of_switcher`) antes de
+    que el bombeo lo muestre: sin ese estilo extendido, una ventana visible -aunque sea
+    transparente, minimizada y de 0x0- queda como residuo en el conmutador alt+tab.
+    El tamaño se aplica antes de minimizar; al reves, WinForms conserva el tamaño
+    restaurado por defecto y la ventana oculta deja de ser 0x0.
+    """
     form = api.forms.Form()
     form.ShowInTaskbar = False
     form.FormBorderStyle = getattr(api.forms.FormBorderStyle, "None")
     form.Opacity = 0
-    form.WindowState = api.forms.FormWindowState.Minimized
     form.Size = api.drawing.Size(0, 0)
+    form.WindowState = api.forms.FormWindowState.Minimized
     form.Text = ICON_NAME
+    _keep_out_of_switcher(form, user32=user32, platform=platform)
     return form
+
+
+def _keep_out_of_switcher(form: Any, *, user32: Any, platform: str) -> None:
+    """Crea el handle del formulario y lo marca como ventana de herramienta.
+
+    Leer `Handle` fuerza la creacion del handle sin mostrar la ventana, que es el unico
+    momento en que el estilo extendido surte efecto sobre el conmutador. Un fallo del CLR
+    o de Win32 no puede impedir que exista el bombeo: se registra y la bandeja arranca
+    igual (con el residuo en alt+tab, que es preferible a quedarse sin icono).
+    """
+    try:
+        _ = form.Handle
+    except NATIVE_CALL_ERRORS:
+        _LOGGER.debug("The tray host window handle could not be created early.", exc_info=True)
+    if not apply_tool_window_style(form, platform=platform, user32=user32):
+        _LOGGER.debug("The tray host window could not be excluded from alt+tab.")
 
 
 def run_message_loop(api: _WinFormsApi, form: Any) -> None:

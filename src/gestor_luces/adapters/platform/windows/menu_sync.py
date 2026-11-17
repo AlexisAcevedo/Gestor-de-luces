@@ -61,8 +61,11 @@ def _sync_native_menu(window: Any, spec: list[AppMenu]) -> None:
             getattr(native_form, "IsHandleCreated", True)
         ):
             return
+        # Materializado a proposito: `Controls` es una coleccion de .NET y el `next` sobre un
+        # iterador vivo ve la coleccion cambiar bajo sus pies cuando la ventana se esta
+        # cerrando en el mismo hilo (`InvalidOperationException: Coleccion modificada`).
         strip = next(
-            (c for c in native_form.Controls if c.GetType().Name == "MenuStrip"),
+            (c for c in list(native_form.Controls) if c.GetType().Name == "MenuStrip"),
             None,
         )
         if strip is None:

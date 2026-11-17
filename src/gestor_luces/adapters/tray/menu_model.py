@@ -15,6 +15,8 @@ ACTION_SHOW_WINDOW = "show_window"
 ACTION_HIDE_WINDOW = "hide_window"
 ACTION_TURN_ON = "turn_on"
 ACTION_TURN_OFF = "turn_off"
+#: Accion sin direccion: el estado real se resuelve al hacer clic, no al construir el menu.
+ACTION_TOGGLE_POWER = "toggle_power"
 ACTION_SET_BRIGHTNESS = "set_brightness"
 ACTION_APPLY_PRESET = "apply_preset"
 ACTION_CANCEL_SLEEP_TIMER = "cancel_sleep_timer"
@@ -119,10 +121,13 @@ def build_tray_menu_spec(
     strings = _resolve_tray_strings(language)
     # Power goes first: quick light control is the tray's primary purpose. The window
     # toggle stays the default item (left click) so a hidden window can always be reopened.
+    # The power entry despacha siempre `toggle_power`: la etiqueta describe el ultimo estado
+    # conocido, pero la direccion se decide al hacer clic contra el foco, porque este menu
+    # puede llevar horas armado mientras la app vive en la bandeja.
     entries: list[TrayMenuEntry] = [
         TrayMenuEntry(
             label=strings["turn_off"] if is_on else strings["turn_on"],
-            action_id=ACTION_TURN_OFF if is_on else ACTION_TURN_ON,
+            action_id=ACTION_TOGGLE_POWER,
         ),
         TrayMenuEntry(
             label=strings["hide_window"] if window_visible else strings["show_window"],

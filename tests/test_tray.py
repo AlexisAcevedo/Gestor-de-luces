@@ -40,6 +40,7 @@ from gestor_luces.adapters.tray.menu_model import (
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
     ACTION_SHOW_WINDOW,
+    ACTION_TOGGLE_POWER,
     ACTION_TURN_OFF,
     ACTION_TURN_ON,
     FALLBACK_PRESET_LIMIT,
@@ -198,7 +199,7 @@ def test_build_tray_menu_spec_reflects_visibility_power_and_sleep_timer() -> Non
     assert spec_hidden_off[1].is_default is True
 
     power_entry = _find_entry_by_label(spec_hidden_off, "Turn on")
-    assert power_entry.action_id == ACTION_TURN_ON
+    assert power_entry.action_id == ACTION_TOGGLE_POWER
 
     brightness_menu = _find_entry_by_label(spec_hidden_off, "Brightness")
     checked_levels = [c.payload for c in brightness_menu.children if c.checked]
@@ -220,7 +221,7 @@ def test_build_tray_menu_spec_reflects_visibility_power_and_sleep_timer() -> Non
     )
     assert spec_visible_on[1].label == "Hide window"
     assert spec_visible_on[1].action_id == ACTION_HIDE_WINDOW
-    assert _find_entry_by_label(spec_visible_on, "Turn off").action_id == ACTION_TURN_OFF
+    assert _find_entry_by_label(spec_visible_on, "Turn off").action_id == ACTION_TOGGLE_POWER
     assert _find_entry_by_label(spec_visible_on, "Cancel sleep timer").action_id == (
         ACTION_CANCEL_SLEEP_TIMER
     )
@@ -304,9 +305,25 @@ class FakeTrayActions:
         self.brightness_calls: list[int] = []
         self.preset_calls: list[str] = []
         self.cancel_calls = 0
+        self.toggle_calls = 0
+        self.refresh_calls = 0
+        self.events: list[str] = []
+        self.fail_refresh = False
 
     def set_power(self, is_on: bool) -> dict[str, Any]:
         self.power_calls.append(is_on)
+        return {"ok": True}
+
+    def toggle_power(self) -> dict[str, Any]:
+        self.toggle_calls += 1
+        self.events.append("toggle_power")
+        return {"ok": True}
+
+    def refresh_tray_states(self) -> dict[str, Any]:
+        self.refresh_calls += 1
+        self.events.append("refresh_states")
+        if self.fail_refresh:
+            raise TimeoutError("no reply from the bulbs")
         return {"ok": True}
 
     def set_brightness(self, brightness: int) -> dict[str, Any]:
@@ -322,6 +339,7 @@ class FakeTrayActions:
         return {"ok": True}
 
     def get_tray_snapshot(self) -> dict[str, Any]:
+        self.events.append(f"snapshot:{bool(self.snapshot.get('is_on'))}")
         return dict(self.snapshot)
 
 
@@ -510,7 +528,13 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             await asyncio.to_thread(bridge.set_theme, "atmospheric-dark")
             await _wait_for(lambda: view.theme == "atmospheric-dark")
 
-            # 8. Accion Quit
+            # 8. Encender/apagar desde la bandeja parte del estado real del foco: tras el
+            # paso 6 el foco esta encendido, asi que el toggle apaga.
+            await asyncio.to_thread(tray.dispatch, ACTION_TOGGLE_POWER)
+            await _wait_for(lambda: server.pilot_state["state"] is False)
+            await _wait_for(lambda: view.title == "WiZ Lighting - Off")
+
+            # 9. Accion Quit
             await asyncio.to_thread(tray.dispatch, ACTION_QUIT)
             assert quit_count == 1
         finally:
@@ -687,7 +711,7 @@ def test_pystray_menu_items_dispatch_every_leaf_action() -> None:
         _find_menu_item(menu, label)(object())
 
     assert harness.dispatched == [
-        (ACTION_TURN_ON, None),
+        (ACTION_TOGGLE_POWER, None),
         (WINDOW_TOGGLE_ACTION, None),
         (ACTION_SET_BRIGHTNESS, 25),
         (ACTION_APPLY_PRESET, "p1"),
@@ -739,3 +763,46 @@ def test_icon_factory_owns_the_popup_menu_on_windows() -> None:
     # `_message_handlers` se arma en __init__ con metodos ligados al objeto, asi que la
     # subclase se usa de verdad para WM_NOTIFY.
     assert icon_class.__dict__["_on_notify"] is not None
+
+
+# --- El encendido/apagado de la bandeja sigue el estado real (S3) -----------------------
+
+
+def test_power_entry_dispatches_a_state_free_toggle() -> None:
+    """El item Encender/Apagar invierte el estado real, no una direccion cacheada (S3)."""
+    with _TrayHarness() as harness:
+        harness.tray.dispatch(ACTION_TOGGLE_POWER)
+
+    assert harness.actions.toggle_calls == 1
+    assert harness.actions.power_calls == []
+
+
+async def test_periodic_poll_reads_live_states_before_rebuilding_the_menu() -> None:
+    """El ciclo periodico pide el estado real antes de armar el menu (S3)."""
+    with _TrayHarness(poll_interval=0.05) as harness:
+        harness.actions.events.clear()
+        await _wait_for(lambda: len(harness.actions.events) >= 2)
+
+    assert harness.actions.events[:2] == ["refresh_states", "snapshot:False"]
+
+
+async def test_requested_refresh_keeps_the_cache_instead_of_rereading_the_bulbs() -> None:
+    """Un refresco pedido por una accion no relee: el cache del comando es mas nuevo (S3)."""
+    with _TrayHarness() as harness:
+        harness.actions.events.clear()
+        harness.tray.request_refresh()
+        await _wait_for(lambda: harness.actions.events == ["snapshot:False"])
+
+    assert harness.actions.refresh_calls == 0
+
+
+async def test_periodic_poll_keeps_its_cadence_when_the_live_sync_fails() -> None:
+    """Un fallo de la lectura real no detiene el sondeo de la bandeja (S3)."""
+    with _TrayHarness(poll_interval=0.05) as harness:
+        harness.actions.fail_refresh = True
+        harness.actions.events.clear()
+        await _wait_for(
+            lambda: sum(1 for event in harness.actions.events if event.startswith("snapshot:")) >= 2
+        )
+
+    assert harness.actions.refresh_calls >= 2
