@@ -21,12 +21,6 @@ on:
 permissions:
   contents: write
 
-# One release per tag at a time: two runs of the same tag must never interleave their publish
-# steps, and a queued run must not be cancelled halfway through uploading assets.
-concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-  cancel-in-progress: false
-
 jobs:
   guard:
     name: guard
@@ -192,6 +186,12 @@ jobs:
     name: publish
     needs: [guard, verify]
     runs-on: ubuntu-latest
+    # The release identity is the tag this job publishes, not the ref that started the workflow:
+    # keying on `github.ref_name` gives a tag push and a manual dispatch two different groups for
+    # the same release, and their upload and un-draft steps can then interleave.
+    concurrency:
+      group: release-${{ needs.guard.outputs.tag }}
+      cancel-in-progress: false
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.guard.outputs.tag }}
@@ -205,17 +205,28 @@ jobs:
           name: dist
           path: dist
 
-      # A re-run of the same tag finds its own draft: creating it again would fail for no reason.
+      # A re-run of the same tag finds its own draft and reuses it. A release that is already
+      # public is refused instead: --clobber would replace published assets before the digest
+      # check could say anything about them.
       - name: Create the draft release
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$TAG" --json isDraft >/dev/null 2>&1; then
-            echo "Draft $TAG already exists (re-run of this workflow); reusing it."
-          else
-            gh release create "$TAG" --draft --target "$GITHUB_SHA" \
-              --title "v$VERSION" --notes-file "docs/releases/$VERSION.md"
-          fi
+          state=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "missing")
+          case "$state" in
+            true)
+              echo "Draft $TAG already exists (re-run of this workflow); reusing it."
+              ;;
+            false)
+              echo "::error::release $TAG is already published; refusing to overwrite its assets."
+              echo "Delete it deliberately (gh release delete $TAG --cleanup-tag) if you really want to re-cut it."
+              exit 1
+              ;;
+            *)
+              gh release create "$TAG" --draft --target "$GITHUB_SHA" \
+                --title "$TAG" --notes-file "docs/releases/$VERSION.md"
+              ;;
+          esac
 
       # --clobber keeps this idempotent: without it a re-run would fail on every existing asset.
       - name: Upload the assets to the draft
@@ -264,10 +275,12 @@ jobs:
           gh release edit "$TAG" --draft=false --latest
           echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
 
+      # Always runs on a rehearsal, successful or not: a dry run must not leave a draft release
+      # behind, and --cleanup-tag keeps its throwaway tag from polluting the v* tag space.
       - name: Discard the rehearsal draft
-        if: env.DRY_RUN == 'true'
+        if: always() && env.DRY_RUN == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          gh release delete "$TAG" --yes
+          gh release delete "$TAG" --yes --cleanup-tag || echo "No draft to discard."
           echo "Rehearsal only: $TAG was verified and discarded, nothing was published." >> "$GITHUB_STEP_SUMMARY"
