@@ -44,6 +44,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`
      menu painted with the active theme (with a `pystray` fallback when WinForms cannot load).
    - Quick presets menu, master power toggle, and graceful minimize-to-tray on window close.
+   - The on/off item acts on the bulb's real state: it re-reads the target bulbs before flipping, and the label, tooltip and icon colour are refreshed from the bulbs on every poll, so a light switched from the wall or the phone app does not invert the next click.
+   - Hiding to the tray leaves nothing behind in alt+tab (the tray message-pump window is a tool window) and quitting from the menu exits cleanly.
    - Deadlock-free WinForms and PyWebView synchronization.
 
 6. Progressive Sleep Timer:
@@ -54,8 +56,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Runtime theme switching between **Architectural Stone** (default Light theme inspired by Braun/Lutron hardware keypads) and **Atmospheric Dark** (frosted glass and dynamic `oklab` photometric halo), persisted in `settings.json` with automatic Windows DWM titlebar synchronization.
 
 8. Windows Desktop Integration:
-   - Compact widget geometry (opens at `620x760`, then resizes to the content of the active section) and custom light-bulb icon for the window, taskbar, tray and executable.
-   - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About).
+   - Compact widget geometry (opens at `620x760`, then resizes to the content of the active section) and custom light-bulb icon for the window, taskbar, tray and executable. The app also carries its own taskbar identity (`AppUserModelID`), so the button shows that icon and pins as an application instead of as the Python interpreter, even when it runs from source.
+   - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About). About reports the display name, the version, the licence (MIT), the author and the repository.
    - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
    - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one (with `--multi-instance` override for side-by-side diagnostics).
    - Distributed as a per-user installer or a portable ZIP (see [Packaging & Distribution](#packaging--distribution)).
