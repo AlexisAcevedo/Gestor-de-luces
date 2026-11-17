@@ -21,6 +21,7 @@ from gestor_luces.adapters.platform.windows import (
     _set_windows_dark_titlebar_attribute,
     _sync_native_menu,
     _to_webview_menus,
+    apply_window_icon,
     show_message_box,
 )
 from gestor_luces.adapters.storage.json_repositories import resolve_default_data_dir
@@ -450,6 +451,9 @@ class DesktopApplication:
     def on_window_shown(self) -> None:
         """Sincroniza el cromado nativo y el menu cuando la ventana vuelve a mostrarse."""
         self.sync_theme_titlebar()
+        # La barra de tareas y alt+tab piden el icono a la ventana: se fija en cada muestra
+        # (es idempotente) para no depender del orden interno de pywebview.
+        apply_window_icon(self._window, self._icon_path)
         if self.is_window_visible:
             _activate_window_foreground(self._window)
         self.request_menu_sync()

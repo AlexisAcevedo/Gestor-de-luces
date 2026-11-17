@@ -20,11 +20,14 @@ from gestor_luces.adapters.platform.windows.menu_sync import (
 )
 from gestor_luces.adapters.platform.windows.message import show_message_box
 from gestor_luces.adapters.platform.windows.window_chrome import (
+    APP_USER_MODEL_ID,
     DARK_TITLEBAR_ENABLED,
     THEME_WINDOW_CHROME,
     _configure_fn_signature,
     _resolve_native_hwnd,
     _set_windows_dark_titlebar_attribute,
+    apply_app_user_model_id,
+    apply_window_icon,
 )
 from gestor_luces.adapters.platform.windows.window_geometry import (
     WINDOW_DEFAULT_SIZE,
@@ -38,6 +41,7 @@ from gestor_luces.adapters.platform.windows.window_geometry import (
 )
 
 __all__ = [
+    "APP_USER_MODEL_ID",
     "DARK_TITLEBAR_ENABLED",
     "GUI_INMENUMODE",
     "GUI_POPUPMENUMODE",
@@ -58,5 +62,7 @@ __all__ = [
     "_set_windows_dark_titlebar_attribute",
     "_sync_native_menu",
     "_to_webview_menus",
+    "apply_app_user_model_id",
+    "apply_window_icon",
     "show_message_box",
 ]

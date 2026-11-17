@@ -17,12 +17,20 @@ from typing import Any
 import pytest
 
 from gestor_luces.adapters.platform.windows.window_chrome import (
+    APP_USER_MODEL_ID,
     DWMWA_WINDOW_CORNER_PREFERENCE,
     DWMWCP_ROUND,
     GWL_EXSTYLE,
+    SM_CXICON,
+    SM_CYICON,
+    WIN_ICON_BIG,
+    WIN_ICON_SMALL,
+    WM_SETICON,
     WS_EX_TOOLWINDOW,
     _apply_corner_preference,
+    apply_app_user_model_id,
     apply_tool_window_style,
+    apply_window_icon,
 )
 from gestor_luces.adapters.tray import TrayMenuEntry, TrayPreset, build_tray_menu_spec
 from gestor_luces.adapters.tray.menu_model import (
@@ -913,3 +921,91 @@ def test_host_form_starts_even_without_a_readable_handle() -> None:
     created = create_host_form(api, user32=_FakeUser32(), platform="win32")
 
     assert created is not None
+
+
+# --- Identidad e icono de la ventana en la barra de tareas -----------------------------
+
+
+class _FakeShell32:
+    """Doble de `shell32` que registra el AppUserModelID del proceso."""
+
+    def __init__(self) -> None:
+        self.app_id: str | None = None
+        self.fail = False
+
+    def SetCurrentProcessExplicitAppUserModelID(self, app_id: str) -> int:
+        if self.fail:
+            raise OSError("shell32 unavailable")
+        self.app_id = app_id
+        return 0
+
+
+class _FakeIconUser32:
+    """Doble de `user32` para `LoadImageW`/`SendMessageW`/`GetSystemMetrics`."""
+
+    def __init__(self) -> None:
+        self.loaded: list[tuple[str, int, int]] = []
+        self.messages: list[tuple[int, int, int]] = []
+        self.destroyed: list[int] = []
+        self.next_handle = 0x400
+
+    def GetSystemMetrics(self, index: int) -> int:
+        return 32 if index in (SM_CXICON, SM_CYICON) else 16
+
+    def LoadImageW(self, instance: Any, path: str, kind: int, cx: int, cy: int, flags: int) -> int:
+        self.loaded.append((path, cx, cy))
+        self.next_handle += 1
+        return self.next_handle
+
+    def SendMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
+        self.messages.append((message, wparam, lparam))
+        return 0  # el icono anterior suele ser 0: no es una senal de exito
+
+    def DestroyIcon(self, handle: int) -> int:
+        self.destroyed.append(handle)
+        return 1
+
+
+def test_app_user_model_id_gives_the_app_its_own_taskbar_identity() -> None:
+    """Sin AppUserModelID la barra agrupa la ventana bajo python.exe y usa su icono."""
+    shell32 = _FakeShell32()
+
+    assert apply_app_user_model_id(APP_USER_MODEL_ID, platform="win32", shell32=shell32) is True
+    assert shell32.app_id == APP_USER_MODEL_ID
+    assert "." in APP_USER_MODEL_ID and " " not in APP_USER_MODEL_ID
+
+    # Fuera de Windows, o con un shell32 que falla, no hay excepcion ni efecto.
+    linux = _FakeShell32()
+    assert apply_app_user_model_id(APP_USER_MODEL_ID, platform="linux", shell32=linux) is False
+    assert linux.app_id is None
+    broken = _FakeShell32()
+    broken.fail = True
+    assert apply_app_user_model_id(APP_USER_MODEL_ID, platform="win32", shell32=broken) is False
+
+
+def test_window_icon_sets_both_icon_sizes_from_the_shipped_ico(tmp_path: Any) -> None:
+    """La ventana recibe el .ico de la app en tamano grande y chico (barra y alt+tab)."""
+    icon = tmp_path / "app.ico"
+    icon.write_bytes(b"\x00\x00\x01\x00")
+    user32 = _FakeIconUser32()
+
+    assert apply_window_icon(_FakeControl(0x1234), icon, platform="win32", user32=user32) is True
+    assert user32.loaded == [(str(icon), 32, 32), (str(icon), 16, 16)]
+    assert user32.messages == [
+        (WM_SETICON, WIN_ICON_BIG, 0x401),
+        (WM_SETICON, WIN_ICON_SMALL, 0x402),
+    ]
+    assert user32.destroyed == []
+
+
+def test_window_icon_degrades_without_a_file_window_or_win32(tmp_path: Any) -> None:
+    """Sin .ico, sin handle o fuera de Windows no hay llamada nativa ni excepcion."""
+    missing = tmp_path / "nope.ico"
+    user32 = _FakeIconUser32()
+
+    window = _FakeControl(0x1234)
+    assert apply_window_icon(window, missing, platform="win32", user32=user32) is False
+    assert apply_window_icon(window, missing, platform="linux", user32=user32) is False
+    assert apply_window_icon(object(), missing, platform="win32", user32=user32) is False
+    assert user32.loaded == []
+    assert user32.messages == []
