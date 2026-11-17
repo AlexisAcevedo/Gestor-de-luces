@@ -361,6 +361,16 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 
 Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
 
+### Publicar una release
+
+Las releases las compila y publica el CI; los comandos de arriba son para compilaciones locales. El procedimiento es:
+
+1. Subir la versión en `pyproject.toml` (`chore(release): bump version to X.Y.Z`).
+2. Escribir `docs/releases/X.Y.Z.md` con las notas de esa release ([convención](docs/releases/README.md)).
+3. Mergear, y después taggear el commit mergeado y pushear el tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+`.github/workflows/release.yml` hace el resto. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
+
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
 - Salvo que se compile con `SIGN_CERT_SHA1`, los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Verificá la descarga contra `SHA256SUMS.txt`.

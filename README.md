@@ -360,6 +360,16 @@ Use `-SkipInstaller` to build only the app folder and the portable ZIP.
 
 Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
 
+### Releasing
+
+Releases are built and published by CI; the commands above are for local builds. The procedure is:
+
+1. Bump the version in `pyproject.toml` (`chore(release): bump version to X.Y.Z`).
+2. Write `docs/releases/X.Y.Z.md` with the notes for that release ([convention](docs/releases/README.md)).
+3. Merge, then tag the merged commit and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+`.github/workflows/release.yml` does the rest. `guard` fails in seconds when the tag disagrees with `pyproject.toml` or when the notes file is missing; `build` produces the installer and the portable ZIP on a Windows runner; `verify` runs `sha256sum -c SHA256SUMS.txt` and `GestorDeLuces.exe --smoke-test` against the exact bytes that will ship; `publish` uploads to a **draft** release, compares the digests GitHub reports with the built files, and only then makes the release public. To rehearse, run the workflow manually with `dry_run` enabled: it repeats every step except the final publication and discards the draft.
+
 Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.
 - Unless built with `SIGN_CERT_SHA1`, executables are unsigned, so Windows SmartScreen shows "Windows protected your PC": choose **More info** then **Run anyway**. Verify the download against `SHA256SUMS.txt`.

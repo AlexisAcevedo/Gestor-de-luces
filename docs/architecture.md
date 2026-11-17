@@ -352,3 +352,16 @@ in the domain that owns it; never mirror the same key in both places.
 
 ### Packaging
 `scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`. The checksum file is written with LF and no BOM on purpose: `Set-Content -Encoding UTF8` adds a BOM and CRLF, and on Linux/macOS `sha256sum -c` then reads the carriage return as part of the file name and every line fails with `FAILED open or read`.
+
+### Release Pipeline (`release.yml`)
+
+The same script is what CI runs, so a release is never assembled by hand and the local build path cannot drift from the published one. Four jobs, each one cheap enough to fail early:
+
+| Job | Runner | What it decides |
+|---|---|---|
+| `guard` | `ubuntu-latest` | Resolves the version once — from the tag on a `v*` push, from a mandatory input on `workflow_dispatch`, because on a manual run `GITHUB_REF_NAME` is the branch — and fails when it does not match `pyproject.toml` or when `docs/releases/<version>.md` is missing. |
+| `build` | `windows-latest` | Installs the `dev` extra (PyInstaller ships in it) plus Inno Setup from Chocolatey, runs `scripts/build.ps1` with no version argument, uploads `dist/`. |
+| `verify` | `windows-latest` | Compares the artifact set against the three expected names, runs `sha256sum -c SHA256SUMS.txt` and `GestorDeLuces.exe --smoke-test` on the frozen build. Counts files only, because `dist/` also holds the one-folder app directory. |
+| `publish` | `ubuntu-latest` | Creates a draft release (reusing one left by a re-run), uploads with `--clobber`, re-verifies each asset's GitHub digest against the local SHA-256, and only then un-drafts. A `concurrency` group keyed by tag keeps two runs of the same tag from interleaving their publish steps. |
+
+A `dry_run` run executes every step up to the un-draft and then deletes its throwaway draft, which is how the pipeline is rehearsed without publishing anything. The workflow needs no secret beyond the default `GITHUB_TOKEN` (`permissions: contents: write`); binaries stay unsigned until a certificate and `SIGN_CERT_SHA1` exist.

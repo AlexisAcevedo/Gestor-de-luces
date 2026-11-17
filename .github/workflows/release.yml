@@ -1,0 +1,286 @@
+name: Release
+
+# Builds and publishes the Windows artifacts from CI so no release is assembled by hand.
+# The version is resolved once, in `guard`, and every later job consumes its output: the tag
+# name and `pyproject.toml` must agree before anything expensive starts.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the leading v (must match pyproject.toml)'
+        type: string
+        required: true
+      dry_run:
+        description: 'Rehearse: build, verify and upload to a draft release, but never publish it'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      dry_run: ${{ steps.resolve.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A manual run has no tag: GITHUB_REF_NAME is the branch, so the version has to come from
+      # the input. A tag run gets it from the tag and is never a dry run.
+      - name: Resolve and validate the version
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"
+            dry_run="$INPUT_DRY_RUN"
+          else
+            version="$REF_NAME"
+            dry_run="false"
+          fi
+          version="${version#v}"
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$version' is not a version such as 0.4.2"
+            exit 1
+          fi
+
+          declared=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+          if [ "$version" != "$declared" ]; then
+            echo "::error::version $version does not match pyproject.toml ($declared)"
+            exit 1
+          fi
+
+          # Release notes live in the repository, so the same tag always yields the same notes.
+          if [ ! -f "docs/releases/$version.md" ]; then
+            echo "::error::missing docs/releases/$version.md (release notes are committed, not generated)"
+            exit 1
+          fi
+
+          if [ "$dry_run" = "true" ]; then
+            tag="v${version}-dryrun-${GITHUB_RUN_NUMBER}"
+            echo "Rehearsal: the draft is $tag and it will be discarded at the end."
+          else
+            tag="v${version}"
+          fi
+
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+          echo "version=$version tag=$tag dry_run=$dry_run" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build
+    needs: guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+
+      # PyInstaller ships in the `dev` extra, so this one install is the whole build toolchain.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # build.ps1 probes Program Files (x86), Program Files and %LOCALAPPDATA%; the Chocolatey
+      # package installs into the first one, so the installer is always built on the runner.
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      # No version argument: the script reads pyproject.toml, which `guard` already proved equals
+      # the tag, so the artifact names cannot drift from the release they belong to.
+      - name: Build the portable zip and the installer
+        shell: pwsh
+        run: ./scripts/build.ps1 -Python python
+
+      - name: Upload dist/ for the verification and publish jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Everything here runs against the exact bytes that are about to be published, and runs before
+  # any job that can reach the network: a broken build never becomes a release.
+  verify:
+    name: verify
+    needs: [guard, build]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # dist/ holds the one-folder app directory plus the three published files, so the set is
+      # compared by name and counted by files only: counting directory entries would be off by one.
+      - name: Check the artifact set
+        shell: bash
+        working-directory: dist
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          version="$VERSION"
+          expected=("GestorDeLuces-Setup-$version.exe" "GestorDeLuces-portable-$version.zip" "SHA256SUMS.txt")
+
+          [ -d GestorDeLuces ] || { echo "::error::the one-folder app directory is missing"; ls -la; exit 1; }
+          for name in "${expected[@]}"; do
+            [ -f "$name" ] || { echo "::error::missing artifact $name"; ls -la; exit 1; }
+          done
+
+          shopt -s nullglob
+          files=()
+          for candidate in *; do [ -f "$candidate" ] && files+=("$candidate"); done
+          if [ "${#files[@]}" -ne 3 ]; then
+            echo "::error::expected exactly 3 files in dist/, found ${#files[@]}: ${files[*]}"
+            exit 1
+          fi
+
+          printf '%s\n' "${files[@]}" | sort > "$RUNNER_TEMP/found.txt"
+          printf '%s\n' "${expected[@]}" | sort > "$RUNNER_TEMP/expected.txt"
+          diff -u "$RUNNER_TEMP/expected.txt" "$RUNNER_TEMP/found.txt" || {
+            echo "::error::dist/ holds files nobody asked to publish"
+            exit 1
+          }
+          echo "### artifacts: ${files[*]}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the checksums
+        shell: bash
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS.txt
+
+      # The frozen build is what users run, so it is what gets exercised: the smoke test exits 0
+      # only when the packaged UI entry and the tray menu specification are present.
+      - name: Smoke-test the frozen build
+        shell: bash
+        working-directory: dist
+        timeout-minutes: 3
+        run: ./GestorDeLuces/GestorDeLuces.exe --smoke-test
+
+  # A draft release is the only thing this job can create until its last step, so a failure at any
+  # point leaves nothing public. Under dry_run every step here still runs except the one that makes
+  # the release visible, which is what rehearses the whole path without publishing anything.
+  publish:
+    name: publish
+    needs: [guard, verify]
+    runs-on: ubuntu-latest
+    # The release identity is the tag this job publishes, not the ref that started the workflow:
+    # keying on `github.ref_name` gives a tag push and a manual dispatch two different groups for
+    # the same release, and their upload and un-draft steps can then interleave.
+    concurrency:
+      group: release-${{ needs.guard.outputs.tag }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.guard.outputs.tag }}
+      VERSION: ${{ needs.guard.outputs.version }}
+      DRY_RUN: ${{ needs.guard.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # A re-run of the same tag finds its own draft and reuses it. A release that is already
+      # public is refused instead: --clobber would replace published assets before the digest
+      # check could say anything about them.
+      - name: Create the draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "missing")
+          case "$state" in
+            true)
+              echo "Draft $TAG already exists (re-run of this workflow); reusing it."
+              ;;
+            false)
+              echo "::error::release $TAG is already published; refusing to overwrite its assets."
+              echo "Delete it deliberately (gh release delete $TAG --cleanup-tag) if you really want to re-cut it."
+              exit 1
+              ;;
+            *)
+              gh release create "$TAG" --draft --target "$GITHUB_SHA" \
+                --title "$TAG" --notes-file "docs/releases/$VERSION.md"
+              ;;
+          esac
+
+      # --clobber keeps this idempotent: without it a re-run would fail on every existing asset.
+      - name: Upload the assets to the draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            "dist/GestorDeLuces-Setup-$VERSION.exe" \
+            "dist/GestorDeLuces-portable-$VERSION.zip" \
+            "dist/SHA256SUMS.txt" \
+            --clobber
+
+      # The digests GitHub computed are the proof that the bytes it stored are the bytes that were
+      # built: local SHA-256 of each asset must equal the reported digest, and the published
+      # checksum file must describe those same assets.
+      - name: Re-verify the published digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json assets --jq '.assets' > "$RUNNER_TEMP/assets.json"
+
+          count=$(jq 'length' "$RUNNER_TEMP/assets.json")
+          if [ "$count" -ne 3 ]; then
+            echo "::error::the release holds $count assets, expected 3"
+            jq -r '.[].name' "$RUNNER_TEMP/assets.json"
+            exit 1
+          fi
+
+          for name in "GestorDeLuces-Setup-$VERSION.exe" "GestorDeLuces-portable-$VERSION.zip" "SHA256SUMS.txt"; do
+            remote=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .digest' "$RUNNER_TEMP/assets.json")
+            local_digest="sha256:$(sha256sum "dist/$name" | cut -d' ' -f1)"
+            if [ "$remote" != "$local_digest" ]; then
+              echo "::error::$name was published as $remote but the build produced $local_digest"
+              exit 1
+            fi
+            echo "$name: $remote" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          ( cd dist && sha256sum -c SHA256SUMS.txt )
+
+      - name: Publish the release
+        if: env.DRY_RUN != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --draft=false --latest
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      # Always runs on a rehearsal, successful or not: a dry run must not leave a draft release
+      # behind, and --cleanup-tag keeps its throwaway tag from polluting the v* tag space.
+      - name: Discard the rehearsal draft
+        if: always() && env.DRY_RUN == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete "$TAG" --yes --cleanup-tag || echo "No draft to discard."
+          echo "Rehearsal only: $TAG was verified and discarded, nothing was published." >> "$GITHUB_STEP_SUMMARY"
