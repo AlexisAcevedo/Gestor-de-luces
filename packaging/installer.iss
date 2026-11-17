@@ -1,11 +1,15 @@
-; Inno Setup script. Build with:  iscc /DAppVersion=0.3.1 packaging\installer.iss
+; Inno Setup script. Build with:  iscc /DAppVersion=<version> packaging\installer.iss
+; (scripts\build.ps1 passes the version taken from pyproject.toml).
 ; Expects the PyInstaller one-folder output in dist\GestorDeLuces (see scripts\build.ps1).
 
 #ifndef AppVersion
-  #define AppVersion "0.3.1"
+  #define AppVersion "0.0.0"
 #endif
 
-#define AppName "WiZ Lighting Console"
+; One product name across the whole shell: the exe metadata
+; (packaging/gestor_luces.spec), the About dialog (app_menu.APP_DISPLAY_NAME), the
+; Apps & features entry and the Start Menu group all read the same string.
+#define AppName "WiZ Architectural Lighting Console"
 #define AppExe "GestorDeLuces.exe"
 
 [Setup]
