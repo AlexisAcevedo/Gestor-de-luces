@@ -121,3 +121,59 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+
+  # Everything here runs against the exact bytes that are about to be published, and runs before
+  # any job that can reach the network: a broken build never becomes a release.
+  verify:
+    name: verify
+    needs: [guard, build]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # dist/ holds the one-folder app directory plus the three published files, so the set is
+      # compared by name and counted by files only: counting directory entries would be off by one.
+      - name: Check the artifact set
+        shell: bash
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          version='${{ needs.guard.outputs.version }}'
+          expected=("GestorDeLuces-Setup-$version.exe" "GestorDeLuces-portable-$version.zip" "SHA256SUMS.txt")
+
+          [ -d GestorDeLuces ] || { echo "::error::the one-folder app directory is missing"; ls -la; exit 1; }
+          for name in "${expected[@]}"; do
+            [ -f "$name" ] || { echo "::error::missing artifact $name"; ls -la; exit 1; }
+          done
+
+          shopt -s nullglob
+          files=()
+          for candidate in *; do [ -f "$candidate" ] && files+=("$candidate"); done
+          if [ "${#files[@]}" -ne 3 ]; then
+            echo "::error::expected exactly 3 files in dist/, found ${#files[@]}: ${files[*]}"
+            exit 1
+          fi
+
+          printf '%s\n' "${files[@]}" | sort > "$RUNNER_TEMP/found.txt"
+          printf '%s\n' "${expected[@]}" | sort > "$RUNNER_TEMP/expected.txt"
+          diff -u "$RUNNER_TEMP/expected.txt" "$RUNNER_TEMP/found.txt" || {
+            echo "::error::dist/ holds files nobody asked to publish"
+            exit 1
+          }
+          echo "### artifacts: ${files[*]}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the checksums
+        shell: bash
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS.txt
+
+      # The frozen build is what users run, so it is what gets exercised: the smoke test exits 0
+      # only when the packaged UI entry and the tray menu specification are present.
+      - name: Smoke-test the frozen build
+        shell: bash
+        working-directory: dist
+        timeout-minutes: 3
+        run: ./GestorDeLuces/GestorDeLuces.exe --smoke-test
