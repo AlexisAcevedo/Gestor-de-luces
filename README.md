@@ -337,7 +337,7 @@ This runs `tests/js/store.test.js` (shared app state, persisted preferences, pho
 
 Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
-A nightly workflow (`.github/workflows/nightly.yml`) runs the whole suite five times in a row with `--count=5 --timeout=120`, to catch flaky tests that a single green run hides. Run it locally with `pytest -x --count=5 --timeout=120`.
+A nightly workflow (`.github/workflows/nightly.yml`) runs the whole suite five times in a row, each pass in a fresh process, to catch flaky tests that a single green run hides. Separate processes matter: in-process repetition (`--count`) carries threads, sockets and cached state from one pass to the next, so a failure there is not reproducible under `ci.yml`. Run it locally with `for pass in 1 2 3 4 5; do pytest -x --timeout=120 || exit 1; done`.
 
 ---
 

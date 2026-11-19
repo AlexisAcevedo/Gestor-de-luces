@@ -26,7 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      # `--count` comes from pytest-repeat and `--timeout` from pytest-timeout: the suite is
-      # expected to pass five times in a row, and no single test may hang for over two minutes.
+      # One pass per process. `--count` (pytest-repeat) repeated every test inside the same
+      # process, so a nightly failure mixed a real defect with the state left behind by the
+      # previous passes (bridge threads, UDP sockets, native samplers). Five fresh processes
+      # make a nightly failure mean exactly what a `ci.yml` failure means, which is the only
+      # actionable thing for whoever reads the notification.
+      # `--timeout` comes from pytest-timeout: no single test may hang for over two minutes.
       - name: Run the whole suite five times
-        run: pytest -x --count=5 --timeout=120
+        shell: bash
+        run: |
+          for pass in 1 2 3 4 5; do
+            echo "::group::Pass $pass of 5"
+            pytest -x --timeout=120 || exit $?
+            echo "::endgroup::"
+          done
