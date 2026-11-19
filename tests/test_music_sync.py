@@ -418,7 +418,7 @@ async def test_webview_bridge_music_sync_lifecycle() -> None:
 
         try:
             init_env = await asyncio.to_thread(bridge.get_initial_state)
-            assert init_env["ok"] is True
+            assert init_env["ok"] is True, init_env.get("error")
             assert len(init_env["audio_devices"]) == 1
             assert init_env["music_sync"]["active"] is False
 

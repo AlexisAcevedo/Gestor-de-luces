@@ -338,7 +338,7 @@ Corre `tests/js/store.test.js` (estado compartido de la app, preferencias persis
 
 El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 
-Un workflow nocturno (`.github/workflows/nightly.yml`) corre la suite completa cinco veces seguidas con `--count=5 --timeout=120`, para detectar tests inestables que una sola corrida en verde esconde. Se puede correr localmente con `pytest -x --count=5 --timeout=120`.
+Un workflow nocturno (`.github/workflows/nightly.yml`) corre la suite completa cinco veces seguidas, cada pasada en un proceso nuevo, para detectar tests inestables que una sola corrida en verde esconde. Que los procesos sean separados importa: la repeticion dentro del mismo proceso (`--count`) arrastra hilos, sockets y estado cacheado de una pasada a la siguiente, asi que un fallo ahi no se reproduce bajo `ci.yml`. Se puede correr localmente con `for pass in 1 2 3 4 5; do pytest -x --timeout=120 || exit 1; done`.
 
 ---
 

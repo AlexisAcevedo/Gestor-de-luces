@@ -27,6 +27,11 @@ _LOGGER = logging.getLogger(__name__)
 
 ASYNC_LOOP_THREAD_NAME = "GestorLucesAsyncLoop"
 
+#: Cuanto espera el puente a que el hilo del bucle entre en `run_forever`. El hilo arranca en
+#: el constructor y puede tardar en ser planificado en una maquina cargada, pero un bucle que
+#: no corre en cinco segundos ya no va a correr: no tiene sentido esperar mas por llamado.
+_LOOP_START_TIMEOUT = 5.0
+
 # Errores que un caso de uso puede lanzar al invocarse desde JavaScript y que la vista ya
 # sabe presentar como `{ok: False, error}`. Cualquier otra excepcion propaga: un fallo
 # inesperado no debe disfrazarse de error de validacion del puente.
@@ -103,12 +108,20 @@ class BridgeLifecycle:
             daemon=True,
         )
         self._thread.start()
-        self._ready.wait(timeout=5.0)
+        # Se espera la bandera que marca el propio bucle, no la que el hilo podria marcar
+        # antes de entrar en `run_forever`: esperar a que el bucle corra es distinto de esperar
+        # a que el hilo exista. Si no llega a marcarse, el primer llamado lo informa como error
+        # del servicio (`{ok: False, error}`), que es mejor que romper el arranque del puente.
+        self._ready.wait(timeout=_LOOP_START_TIMEOUT)
 
     def _run_loop(self) -> None:
         """Ejecuta de forma continua el bucle de eventos asincrono en su propio hilo."""
         asyncio.set_event_loop(self._loop)
-        self._ready.set()
+        # La bandera se marca desde dentro del bucle: `call_soon` corre recien cuando
+        # `run_forever` ya esta iterando, asi que "listo" significa "corriendo" y no "a punto
+        # de correr". Marcarla antes dejaba una ventana en la que un llamado desde PyWebView
+        # veia `is_running()` en False y recibia "Background asyncio event loop is not running".
+        self._loop.call_soon(self._ready.set)
         self._loop.run_forever()
 
         pending = asyncio.all_tasks(self._loop)
@@ -118,9 +131,17 @@ class BridgeLifecycle:
             self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
         self._loop.close()
 
+    def _wait_until_running(self) -> bool:
+        """Espera a que el bucle corra; False si el puente esta cerrado o nunca arranco."""
+        if self._loop.is_running():
+            return True
+        if self._closed or not self._ready.wait(timeout=_LOOP_START_TIMEOUT):
+            return False
+        return self._loop.is_running()
+
     def _run_async(self, coro: Coroutine[Any, Any, Any], timeout: float | None = None) -> Any:
         """Ejecuta una corrutina de forma segura desde cualquier hilo sincrono de PyWebView."""
-        if self._closed or not self._loop.is_running():
+        if self._closed or not self._wait_until_running():
             coro.close()
             raise RuntimeError("Background asyncio event loop is not running.")
         effective_timeout = timeout if timeout is not None else self._default_timeout
