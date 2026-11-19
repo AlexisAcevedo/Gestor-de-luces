@@ -9,6 +9,7 @@ estado actualizado de los focos y las 36 escenas nativas de WiZ.
 from __future__ import annotations
 
 import asyncio
+import time
 
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
@@ -219,5 +220,36 @@ async def test_tray_state_refresh_never_notifies_the_ui() -> None:
             refresh = await asyncio.to_thread(bridge.refresh_states)
             assert refresh["ok"] is True
             assert notifications
+        finally:
+            bridge.shutdown()
+
+
+async def test_bridge_call_survives_a_loop_thread_that_starts_late(monkeypatch) -> None:
+    """Un hilo del bucle desalojado antes de entrar en `run_forever` no rompe el primer llamado.
+
+    El puente arranca su bucle en un hilo demonio. En un runner de CI de dos nucleos, con los
+    hilos de los tests previos todavia compitiendo, ese hilo puede quedar desalojado justo
+    antes de entrar en `run_forever`: el bucle existe pero no corre. Si el puente se declara
+    listo antes de que el bucle corra, el primer llamado desde PyWebView responde
+    `{ok: False}` con "Background asyncio event loop is not running" aunque nada este roto.
+    """
+    real_run_forever = asyncio.BaseEventLoop.run_forever
+
+    def slow_run_forever(self: asyncio.BaseEventLoop, *args: object, **kwargs: object) -> None:
+        # Simula el desalojo del hilo del bucle con el bucle todavia sin correr.
+        time.sleep(0.2)
+        real_run_forever(self, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio.BaseEventLoop, "run_forever", slow_run_forever)
+
+    async with FakeWizBulbServer(mac="a8bb50aa00bb") as server:
+        controller = WizUdpController(probe_candidates=[server.endpoint])
+        service = LightControlService(controller=controller)
+        bridge = WebviewBridge(service=service)
+
+        try:
+            initial = await asyncio.to_thread(bridge.get_initial_state)
+            assert initial["ok"] is True, initial.get("error")
+            assert len(initial["bulbs"]) == 1
         finally:
             bridge.shutdown()
