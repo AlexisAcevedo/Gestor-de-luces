@@ -258,17 +258,38 @@
     pointer-events: none;
   }
 
-  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture {
-    background: radial-gradient(circle at 40% 35%, #EAE6DE 0%, var(--beam-standby) 100%);
-    border-color: var(--surface-2);
+  html[data-theme="architectural-stone"] .console-shell[data-power="on"] .photometric-aperture {
+    background: radial-gradient(
+      circle at 36% 32%,
+      #FFFFFF 0%,
+      color-mix(in oklab, var(--beam-color) 78%, #FFFFFF) 44%,
+      var(--beam-color) 80%,
+      color-mix(in oklab, var(--beam-color) 75%, #C88A32) 100%
+    );
+    border: 1.5px solid color-mix(in oklab, var(--beam-color) 60%, #9E6B24);
     box-shadow:
-      inset 0 2px 4px rgba(20, 18, 15, 0.18),
-      inset 0 0 0 1px rgba(20, 18, 15, 0.08),
+      inset 0 1px 3px rgba(255, 255, 255, 0.95),
+      inset 0 -2px 5px color-mix(in oklab, var(--beam-color) 45%, rgba(120, 85, 30, 0.22)),
+      0 0 0 2px color-mix(in oklab, var(--beam-color) 42%, rgba(217, 131, 30, 0.24)),
+      0 0 var(--aperture-glow-radius, 18px) color-mix(in oklab, var(--beam-color) var(--aperture-glow-alpha, 65%), rgba(245, 158, 11, 0.45));
+  }
+
+  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture {
+    background: radial-gradient(
+      circle at 34% 30%,
+      #4B515C 0%,
+      var(--aperture-off-bg) 56%,
+      #15181F 100%
+    );
+    border: 1.5px solid #2B2926;
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.55),
+      inset 0 1px 1px rgba(255, 255, 255, 0.16),
       0 1px 0 #FFFFFF;
   }
 
   html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture::after {
-    border-color: rgba(20, 18, 15, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
   }
 
   /* Indicador LED fisico estilo Braun en la pildora de estado */
