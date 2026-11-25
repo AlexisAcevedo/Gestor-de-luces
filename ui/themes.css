@@ -258,17 +258,38 @@
     pointer-events: none;
   }
 
-  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture {
-    background: radial-gradient(circle at 40% 35%, #EAE6DE 0%, var(--beam-standby) 100%);
-    border-color: var(--surface-2);
+  html[data-theme="architectural-stone"] .console-shell[data-power="on"] .photometric-aperture {
+    background: radial-gradient(
+      circle at 36% 32%,
+      #FFFFFF 0%,
+      color-mix(in oklab, var(--beam-color) 78%, #FFFFFF) 44%,
+      var(--beam-color) 80%,
+      color-mix(in oklab, var(--beam-color) 75%, #C88A32) 100%
+    );
+    border: 1.5px solid color-mix(in oklab, var(--beam-color) 60%, #9E6B24);
     box-shadow:
-      inset 0 2px 4px rgba(20, 18, 15, 0.18),
-      inset 0 0 0 1px rgba(20, 18, 15, 0.08),
+      inset 0 1px 3px rgba(255, 255, 255, 0.95),
+      inset 0 -2px 5px color-mix(in oklab, var(--beam-color) 45%, rgba(120, 85, 30, 0.22)),
+      0 0 0 2px color-mix(in oklab, var(--beam-color) 42%, rgba(217, 131, 30, 0.24)),
+      0 0 var(--aperture-glow-radius, 18px) color-mix(in oklab, var(--beam-color) var(--aperture-glow-alpha, 65%), rgba(245, 158, 11, 0.45));
+  }
+
+  html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture {
+    background: radial-gradient(
+      circle at 34% 30%,
+      #4B515C 0%,
+      var(--aperture-off-bg) 56%,
+      #15181F 100%
+    );
+    border: 1.5px solid #2B2926;
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.55),
+      inset 0 1px 1px rgba(255, 255, 255, 0.16),
       0 1px 0 #FFFFFF;
   }
 
   html[data-theme="architectural-stone"] .console-shell[data-power="off"] .photometric-aperture::after {
-    border-color: rgba(20, 18, 15, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
   }
 
   /* Indicador LED fisico estilo Braun en la pildora de estado */
@@ -391,19 +412,59 @@
     transform: translateY(1px);
   }
 
+  html[data-theme="architectural-stone"] .btn-power,
+  html[data-theme="architectural-stone"] #master-power-btn {
+    background: linear-gradient(180deg, #F0ECE4 0%, #E4DFD6 100%);
+    color: #4A4640;
+    border: 1px solid rgba(20, 18, 15, 0.24);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      0 1px 2px rgba(20, 18, 15, 0.08);
+  }
+
+  html[data-theme="architectural-stone"] .btn-power .icon,
+  html[data-theme="architectural-stone"] #master-power-btn .icon {
+    color: var(--ink-2);
+  }
+
+  html[data-theme="architectural-stone"] .btn-power:hover,
+  html[data-theme="architectural-stone"] #master-power-btn:hover {
+    background: linear-gradient(180deg, #EAE5DC 0%, #DDD7CC 100%);
+    color: var(--ink-1);
+  }
+
   html[data-theme="architectural-stone"] .btn-power[aria-pressed="true"],
   html[data-theme="architectural-stone"] #master-power-btn[aria-pressed="true"] {
-    background: var(--power-btn-bg);
-    color: var(--power-btn-ink);
+    background: linear-gradient(180deg, #C44312 0%, #B33A0D 100%);
+    color: #FFFFFF;
+    border: 1px solid #962E08;
     box-shadow:
-      0 2px 6px rgba(20, 18, 15, 0.24),
-      0 0 0 1px #181715,
-      inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      0 3px 10px -2px rgba(196, 67, 18, 0.45),
+      0 1px 2px rgba(20, 18, 15, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24);
   }
 
   html[data-theme="architectural-stone"] .btn-power[aria-pressed="true"] .icon,
   html[data-theme="architectural-stone"] #master-power-btn[aria-pressed="true"] .icon {
-    color: var(--braun-signal);
+    color: #FFFFFF;
+  }
+
+  html[data-theme="architectural-stone"] .btn-power[aria-pressed="true"]:hover,
+  html[data-theme="architectural-stone"] #master-power-btn[aria-pressed="true"]:hover {
+    background: linear-gradient(180deg, #B83B0B 0%, #9F3109 100%);
+    box-shadow:
+      0 4px 12px -2px rgba(184, 59, 11, 0.52),
+      0 2px 4px rgba(20, 18, 15, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  }
+
+  html[data-theme="architectural-stone"] .btn-fixture-power[aria-pressed="true"] {
+    background: linear-gradient(180deg, #C44312 0%, #B33A0D 100%);
+    color: #FFFFFF;
+    border: 1px solid #962E08;
+    box-shadow:
+      0 2px 8px -2px rgba(196, 67, 18, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
 
   /* ------------------------------------------------------------------------

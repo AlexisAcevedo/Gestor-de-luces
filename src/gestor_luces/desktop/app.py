@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -33,13 +34,14 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_SHOW_SHORTCUTS,
     ACTION_TOGGLE_AUTOSTART,
     ACTION_TOGGLE_WINDOW,
-    APP_DISPLAY_NAME,
     APP_LICENSE,
     AppMenu,
     build_about_text,
+    build_about_title,
     build_app_menu,
 )
 from gestor_luces.adapters.ui_webview.bridge import JsApi, WebviewBridge
+from gestor_luces.adapters.ui_webview.http_server import NoCacheBottleServer
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import DEFAULT_THEME, normalize_theme
 from gestor_luces.ports.autostart import AutostartManager
@@ -53,10 +55,16 @@ HIDE_ON_CLOSE_THREAD_NAME = "GestorLucesHideOnClose"
 HIDE_ON_MINIMIZE_THREAD_NAME = "GestorLucesHideOnMinimize"
 
 
-def _build_initial_ui_url(index_path: Path, theme: str) -> str:
-    """Construye la URL inicial de la vista web con el tema persistido en el fragmento."""
+def _build_initial_ui_url(
+    index_path: Path,
+    theme: str,
+    *,
+    cache_bust: str | None = None,
+) -> str:
+    """Construye la URL inicial de la vista web con query anti-cache y fragmento de tema."""
     normalized = normalize_theme(theme)
-    return f"{index_path}#theme={normalized}"
+    query = f"?v={cache_bust}" if cache_bust else ""
+    return f"{index_path}{query}#theme={normalized}"
 
 
 def create_tray_view(dispatch: Dispatch) -> TrayView | None:
@@ -162,7 +170,11 @@ class DesktopApplication:
         initial_chrome = THEME_WINDOW_CHROME.get(initial_theme, THEME_WINDOW_CHROME[DEFAULT_THEME])
         self._window = webview.create_window(
             title=WINDOW_TITLE,
-            url=_build_initial_ui_url(self._index_path, initial_theme),
+            url=_build_initial_ui_url(
+                self._index_path,
+                initial_theme,
+                cache_bust=uuid.uuid4().hex[:8],
+            ),
             js_api=JsApi(self._bridge, fit_window=self.fit_window),
             width=win_width,
             height=win_height,
@@ -207,6 +219,7 @@ class DesktopApplication:
             self._initial_menu = self.current_menu_spec()
             webview.start(
                 http_server=True,
+                server=NoCacheBottleServer,
                 debug=self._debug,
                 private_mode=False,
                 storage_path=str(webview_storage),
@@ -421,7 +434,7 @@ class DesktopApplication:
         """Muestra el cuadro nativo 'Acerca de' con los metadatos del paquete."""
         language = str(self._bridge.get_tray_snapshot().get("language") or "en")
         text = build_about_text(language, resolve_app_version(), APP_LICENSE)
-        show_message_box(text, APP_DISPLAY_NAME)
+        show_message_box(text, build_about_title(language))
 
     def toggle_autostart(self) -> None:
         """Alterna el inicio con Windows y sincroniza el menu nativo."""

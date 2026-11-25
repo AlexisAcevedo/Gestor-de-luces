@@ -213,9 +213,12 @@ def test_ui_i18n_assets_and_builtin_scene_names_preserved() -> None:
     assert 'data-theme="architectural-stone"' in index_html
     assert 'id="theme-btn-stone"' in index_html
     assert 'id="theme-btn-dark"' in index_html
+    assert '<span data-i18n="theme.stoneShort">Light</span>' in index_html
     assert '"theme.switcherAria"' in i18n_js
-    assert '"theme.stoneShort"' in i18n_js
-    assert '"theme.darkShort"' in i18n_js
+    assert '"theme.stoneShort": "Light"' in i18n_js
+    assert '"theme.darkShort": "Dark"' in i18n_js
+    assert '"theme.stoneShort": "Claro"' in i18n_js
+    assert '"theme.darkShort": "Oscuro"' in i18n_js
 
     assert "window.I18N" in i18n_js
     assert '"rail.scanBtn": "Scan network"' in i18n_js

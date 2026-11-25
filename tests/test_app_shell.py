@@ -22,9 +22,11 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_TOGGLE_WINDOW,
     APP_AUTHOR,
     APP_DISPLAY_NAME,
+    APP_DISPLAY_NAME_ES,
     APP_LICENSE,
     APP_REPOSITORY,
     build_about_text,
+    build_about_title,
     build_app_menu,
 )
 from gestor_luces.main import parse_args, resolve_icon_path, resolve_png_icon_path
@@ -118,6 +120,10 @@ def test_app_menu_labels_follow_language_and_state() -> None:
 
 def test_about_text_reports_every_project_field() -> None:
     """El cuadro "Acerca de" informa nombre, version, licencia, autor y repositorio."""
+    assert build_about_title("en") == "About"
+    assert build_about_title("es") == "Acerca de"
+    assert build_about_title("fr") == "About"
+
     text = build_about_text("en", "1.2.3")
     assert APP_DISPLAY_NAME in text
     assert "Version: 1.2.3" in text
@@ -126,6 +132,7 @@ def test_about_text_reports_every_project_field() -> None:
     assert f"Repository: {APP_REPOSITORY}" in text
 
     spanish = build_about_text("es", "1.2.3")
+    assert APP_DISPLAY_NAME_ES in spanish
     assert "Versión: 1.2.3" in spanish
     assert f"Licencia: {APP_LICENSE}" in spanish
     assert f"Autor: {APP_AUTHOR}" in spanish
@@ -133,6 +140,50 @@ def test_about_text_reports_every_project_field() -> None:
 
     # Un nombre de licencia vacio nunca deja el campo en blanco.
     assert f"License: {APP_LICENSE}" in build_about_text("en", "1.2.3", "")
+
+
+def test_desktop_application_show_about_localizes_title_and_body(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`show_about()` cambia titulo y cuerpo segun el idioma actual del puente."""
+    from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
+    from gestor_luces.adapters.wiz.udp_controller import WizUdpController
+    from gestor_luces.application.service import LightControlService
+    from gestor_luces.desktop import app as desktop_app
+    from gestor_luces.desktop.app import DesktopApplication
+
+    shown: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        desktop_app,
+        "show_message_box",
+        lambda text, title: shown.append((text, title)),
+    )
+
+    service = LightControlService(controller=WizUdpController(probe_candidates=[]))
+    bridge = WebviewBridge(service=service)
+    app = DesktopApplication(
+        service=service,
+        bridge=bridge,
+        index_path=tmp_path / "index.html",
+        icon_path=tmp_path / "app.ico",
+        ui_dir=tmp_path,
+    )
+    try:
+        app.show_about()
+        bridge.set_language("es")
+        app.show_about()
+    finally:
+        bridge.shutdown()
+
+    assert len(shown) == 2
+    en_text, en_title = shown[0]
+    es_text, es_title = shown[1]
+    assert en_title == "About"
+    assert APP_DISPLAY_NAME in en_text
+    assert "Version:" in en_text
+    assert es_title == "Acerca de"
+    assert APP_DISPLAY_NAME_ES in es_text
+    assert "Versión:" in es_text
 
 
 def test_build_autostart_command_always_minimized() -> None:
