@@ -296,14 +296,14 @@ El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegist
 
 ### Motor Multitema y Geometría Dinámica de Widget
 - **Arquitectura de Tokens CSS de 3 Niveles**: `ui/themes.css` define tokens primitivos, semánticos y de componente tanto para `"architectural-stone"` (tema claro predeterminado en piedra mineral cálida) como para `"atmospheric-dark"` (tema oscuro en cristal esmerilado con halo fotométrico `oklab`), consumidos por las reglas estructurales de `ui/styles.css`.
-- **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `main.py` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`) y delega la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) a `adapters/platform/windows/window_chrome.py` (`_set_windows_dark_titlebar_attribute`), tanto en el arranque como al cambiar el tema en tiempo de ejecución.
+- **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `DesktopApplication.create_window()` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`), añade `#theme=<theme>` a la URL inicial de la ventana y delega la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) a `adapters/platform/windows/window_chrome.py` (`_set_windows_dark_titlebar_attribute`), tanto en el arranque como al cambiar el tema en tiempo de ejecución. Antes de cargar `themes.css`, `ui/js/theme-boot.js` se ejecuta de forma síncrona en `<head>` (manteniendo intacta la CSP estricta `script-src 'self' file:`) para aplicar `data-theme` y `<meta name="color-scheme">` desde `#theme=` o `localStorage` antes del primer pintado, evitando el destello en tema claro (FOUC) al iniciar.
 - **Autoajuste Dinámico de Altura según Contenido**: `adapters/platform/windows/window_geometry.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`native_form.Invoke`) y acotadas al área de trabajo del monitor activo a través de `WebviewBridge.fit_window_height`.
 
 ### Servido del Frontend (HTTP por loopback + Módulos ES) · veredicto D4: A (2026-11-08)
 El frontend se sirve por HTTP en loopback para poder partir `ui/app.js` en módulos ES
-reales (Chromium bloquea `type="module"` sobre `file://`). `main.py` pasa la ruta de
-archivo plana `str(index_path)` como URL de la ventana y arranca
-`webview.start(http_server=True)`.
+reales (Chromium bloquea `type="module"` sobre `file://`). `DesktopApplication.create_window()` pasa la ruta de
+archivo plana con el fragmento de tema (`f"{index_path}#theme={theme}"`) como URL de la ventana y arranca
+`webview.start(http_server=True)` (`BottleServer` descarta `#...` al resolver la raíz estática y `Window._resolve_url` conserva el fragmento en la URL de loopback).
 
 El spike D4-A (T-2.0) verificó lo siguiente, con evidencia:
 - **Superficie solo-loopback**: el servidor Bottle integrado de pywebview enlaza

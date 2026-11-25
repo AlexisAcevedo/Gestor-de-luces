@@ -41,7 +41,7 @@ from gestor_luces.adapters.ui_webview.app_menu import (
 )
 from gestor_luces.adapters.ui_webview.bridge import JsApi, WebviewBridge
 from gestor_luces.application.service import LightControlService
-from gestor_luces.domain.value_objects import DEFAULT_THEME
+from gestor_luces.domain.value_objects import DEFAULT_THEME, normalize_theme
 from gestor_luces.ports.autostart import AutostartManager
 from gestor_luces.resources import resolve_app_version
 
@@ -51,6 +51,12 @@ WINDOW_TITLE = "WiZ Architectural Lighting Console"
 MENU_SYNC_THREAD_NAME = "GestorLucesMenuSync"
 HIDE_ON_CLOSE_THREAD_NAME = "GestorLucesHideOnClose"
 HIDE_ON_MINIMIZE_THREAD_NAME = "GestorLucesHideOnMinimize"
+
+
+def _build_initial_ui_url(index_path: Path, theme: str) -> str:
+    """Construye la URL inicial de la vista web con el tema persistido en el fragmento."""
+    normalized = normalize_theme(theme)
+    return f"{index_path}#theme={normalized}"
 
 
 def create_tray_view(dispatch: Dispatch) -> TrayView | None:
@@ -152,11 +158,11 @@ class DesktopApplication:
 
         self._bridge.set_fit_window_callback(self.fit_window)
 
-        initial_theme = self._service.get_theme()
+        initial_theme = normalize_theme(self._service.get_theme())
         initial_chrome = THEME_WINDOW_CHROME.get(initial_theme, THEME_WINDOW_CHROME[DEFAULT_THEME])
         self._window = webview.create_window(
             title=WINDOW_TITLE,
-            url=str(self._index_path),
+            url=_build_initial_ui_url(self._index_path, initial_theme),
             js_api=JsApi(self._bridge, fit_window=self.fit_window),
             width=win_width,
             height=win_height,
