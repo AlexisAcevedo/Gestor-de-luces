@@ -33,10 +33,10 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_SHOW_SHORTCUTS,
     ACTION_TOGGLE_AUTOSTART,
     ACTION_TOGGLE_WINDOW,
-    APP_DISPLAY_NAME,
     APP_LICENSE,
     AppMenu,
     build_about_text,
+    build_about_title,
     build_app_menu,
 )
 from gestor_luces.adapters.ui_webview.bridge import JsApi, WebviewBridge
@@ -421,7 +421,7 @@ class DesktopApplication:
         """Muestra el cuadro nativo 'Acerca de' con los metadatos del paquete."""
         language = str(self._bridge.get_tray_snapshot().get("language") or "en")
         text = build_about_text(language, resolve_app_version(), APP_LICENSE)
-        show_message_box(text, APP_DISPLAY_NAME)
+        show_message_box(text, build_about_title(language))
 
     def toggle_autostart(self) -> None:
         """Alterna el inicio con Windows y sincroniza el menu nativo."""

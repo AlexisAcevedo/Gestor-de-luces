@@ -16,6 +16,7 @@ ACTION_SHOW_SHORTCUTS = "show_shortcuts"
 ACTION_SHOW_ABOUT = "show_about"
 
 APP_DISPLAY_NAME = "WiZ Architectural Lighting Console"
+APP_DISPLAY_NAME_ES = "Consola de Iluminación Arquitectónica WiZ"
 
 #: Metadatos que el cuadro "Acerca de" informa. Es la unica fuente del paquete para estos
 #: datos: `pyproject.toml` los declara para el empaquetado y aqui se repiten porque un
@@ -27,6 +28,7 @@ APP_REPOSITORY = "https://github.com/AlexisAcevedo/Gestor-de-luces"
 
 _STRINGS: dict[str, dict[str, str]] = {
     "en": {
+        "app_name": APP_DISPLAY_NAME,
         "file": "File",
         "show_window": "Show window",
         "hide_window": "Hide window",
@@ -42,6 +44,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "about_repository": "Repository",
     },
     "es": {
+        "app_name": APP_DISPLAY_NAME_ES,
         "file": "Archivo",
         "show_window": "Mostrar ventana",
         "hide_window": "Ocultar ventana",
@@ -118,6 +121,11 @@ def build_app_menu(
     ]
 
 
+def build_about_title(language: str) -> str:
+    """Devuelve el titulo localizado del cuadro 'Acerca de' ('About' o 'Acerca de')."""
+    return resolve_menu_strings(language)["about_title"]
+
+
 def build_about_text(
     language: str,
     version: str,
@@ -134,7 +142,7 @@ def build_about_text(
     s = resolve_menu_strings(language)
     return "\n".join(
         (
-            APP_DISPLAY_NAME,
+            s["app_name"],
             f"{s['about_version']}: {version}",
             f"{s['about_license']}: {license_name or APP_LICENSE}",
             f"{s['about_author']}: {author}",
