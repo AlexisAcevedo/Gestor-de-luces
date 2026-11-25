@@ -20,6 +20,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+DECLARED_VERSION = (
+    (ROOT / "pyproject.toml").read_text(encoding="utf-8").split('version = "')[1].split('"')[0]
+)
 BASH = shutil.which("bash")
 needs_bash = pytest.mark.skipif(BASH is None, reason="bash is required to execute a workflow step")
 
@@ -180,15 +183,29 @@ def test_s4_a_published_release_is_never_clobbered(
 @pytest.mark.parametrize(
     ("event", "ref", "version", "dry_run", "code", "expected"),
     [
-        ("push", "v0.4.1", "", "", 0, "tag=v0.4.1 dry_run=false"),
-        ("workflow_dispatch", "feat/x", "0.4.1", "true", 0, "tag=v0.4.1-dryrun-7"),
-        ("workflow_dispatch", "main", "v0.4.1", "false", 0, "tag=v0.4.1 dry_run=false"),
-        # the old rehearsal tag: rejected because pyproject.toml says 0.4.1
+        ("push", f"v{DECLARED_VERSION}", "", "", 0, f"tag=v{DECLARED_VERSION} dry_run=false"),
+        (
+            "workflow_dispatch",
+            "feat/x",
+            DECLARED_VERSION,
+            "true",
+            0,
+            f"tag=v{DECLARED_VERSION}-dryrun-7",
+        ),
+        (
+            "workflow_dispatch",
+            "main",
+            f"v{DECLARED_VERSION}",
+            "false",
+            0,
+            f"tag=v{DECLARED_VERSION} dry_run=false",
+        ),
+        # a mismatched rehearsal tag: rejected because pyproject.toml declares another version
         ("push", "v0.0.0-draft", "", "", 1, "does not match pyproject.toml"),
         # a manual run must never fall back to the branch name
         ("workflow_dispatch", "feat/x", "", "true", 1, "is not a version"),
-        ("push", "v0.4.1; id", "", "", 1, "is not a version"),
-        ("push", "v0.4.2", "", "", 1, "does not match pyproject.toml"),
+        ("push", f"v{DECLARED_VERSION}; id", "", "", 1, "is not a version"),
+        ("push", "v9.9.9", "", "", 1, "does not match pyproject.toml"),
     ],
 )
 def test_s5_the_guard_refuses_an_inconsistent_version(
@@ -244,6 +261,7 @@ def test_s6_notes_live_in_the_repository_and_are_required() -> None:
     assert "docs/releases/$version.md" in WORKFLOW
     assert "--generate-notes" not in WORKFLOW
     assert (ROOT / "docs" / "releases" / "0.4.1.md").is_file()
+    assert (ROOT / "docs" / "releases" / f"{DECLARED_VERSION}.md").is_file()
     assert (ROOT / "docs" / "releases" / "README.md").is_file()
 
 
