@@ -78,12 +78,33 @@ function syncLanguageUi(lang) {
   }
 }
 
+function readHashTheme() {
+  try {
+    const hash = String(window.location.hash || "");
+    if (!hash || hash === "#") return null;
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const candidate = params.get("theme");
+    if (typeof candidate !== "string") return null;
+    const cleaned = candidate.trim().toLowerCase();
+    return ALLOWED_THEMES.has(cleaned) ? cleaned : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
 function syncThemeUi(theme, { persist = true } = {}) {
   const normalized = normalizeTheme(theme);
   const prevTheme = appState.theme;
   const prevDomTheme = document.documentElement.dataset.theme;
   appState.theme = normalized;
   document.documentElement.dataset.theme = normalized;
+  const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
+  if (colorSchemeMeta) {
+    colorSchemeMeta.setAttribute(
+      "content",
+      normalized === "atmospheric-dark" ? "dark" : "light"
+    );
+  }
   const consoleShell = document.getElementById("console-shell");
   if (consoleShell) {
     consoleShell.dataset.look = normalized;
@@ -240,11 +261,15 @@ function restoreUiPrefs() {
   );
   if (known) activateTab(savedTab, false);
 
-  if (typeof prefs.theme === "string" && ALLOWED_THEMES.has(prefs.theme)) {
-    syncThemeUi(prefs.theme, { persist: false });
-  } else {
-    syncThemeUi(DEFAULT_THEME, { persist: false });
-  }
+  const prefTheme =
+    typeof prefs.theme === "string" && ALLOWED_THEMES.has(prefs.theme.trim().toLowerCase())
+      ? prefs.theme.trim().toLowerCase()
+      : null;
+  const domTheme = ALLOWED_THEMES.has(document.documentElement.dataset.theme)
+    ? document.documentElement.dataset.theme
+    : null;
+  const initialTheme = readHashTheme() || prefTheme || domTheme || DEFAULT_THEME;
+  syncThemeUi(initialTheme, { persist: false });
 }
 
 async function handleSetTheme(theme) {
@@ -330,6 +355,7 @@ setupResizeThrottle();
 
 /* Inicializacion principal al cargar el DOM */
 document.addEventListener("DOMContentLoaded", async () => {
+  syncThemeUi(normalizeTheme(document.documentElement.dataset.theme), { persist: false });
   loadSceneCatalog();
   syncLanguageUi("en");
   drawColorWheel();

@@ -208,6 +208,7 @@ def _ui_asset_paths(ui_dir: Path) -> dict[str, Path]:
         "themes": ui_dir / "themes.css",
         "styles": ui_dir / "styles.css",
         "i18n": ui_dir / "i18n.js",
+        "theme_boot": ui_dir / "js" / "theme-boot.js",
         "script": ui_dir / "js" / "app.js",
         "scenes": ui_dir / "scenes.json",
     }
