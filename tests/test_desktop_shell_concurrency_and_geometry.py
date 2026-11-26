@@ -65,6 +65,7 @@ class _FakeWindow:
         self.show_calls = 0
         self.hide_calls = 0
         self.destroy_calls = 0
+        self.exposed: list[Callable[..., Any]] = []
         self.native = SimpleNamespace(
             IsDisposed=False,
             Disposing=False,
@@ -82,6 +83,9 @@ class _FakeWindow:
 
     def evaluate_js(self, _script: str) -> None:
         return None
+
+    def expose(self, *functions: Callable[..., Any]) -> None:
+        self.exposed.extend(functions)
 
     def destroy(self) -> None:
         self.destroy_calls += 1
