@@ -37,9 +37,17 @@ PrivilegesRequiredOverridesAllowed=dialog
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
+[CustomMessages]
+english.AutostartTask=Start with Windows (minimized to the tray)
+english.StartupGroup=Startup:
+english.WebView2Missing=The Microsoft Edge WebView2 Runtime was not detected. The application needs it to show its window.%nInstall it from https://developer.microsoft.com/microsoft-edge/webview2/ after setup.%n%nContinue with the installation?
+spanish.AutostartTask=Iniciar con Windows (minimizado en la bandeja)
+spanish.StartupGroup=Inicio:
+spanish.WebView2Missing=No se detecto Microsoft Edge WebView2 Runtime. La aplicacion lo necesita para mostrar su ventana.%nInstalalo desde https://developer.microsoft.com/microsoft-edge/webview2/ despues de finalizar.%n%nDeseas continuar con la instalacion?
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart"; Description: "Start with Windows (minimized to the tray)"; GroupDescription: "Startup:"; Flags: unchecked
+Name: "autostart"; Description: "{cm:AutostartTask}"; GroupDescription: "{cm:StartupGroup}"; Flags: unchecked
 
 [Files]
 Source: "..\dist\GestorDeLuces\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -52,9 +60,11 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 [Registry]
 ; Same key and value name as the in-app "Start with Windows" toggle (WindowsRegistryAutostart).
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GestorDeLuces"; ValueData: """{app}\{#AppExe}"" --minimized"; Flags: uninsdeletevalue; Tasks: autostart
+; Ensure uninstall removes the autostart entry even if the user enabled it from inside the app.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "GestorDeLuces"; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 function IsWebView2Installed(): Boolean;
@@ -73,9 +83,7 @@ begin
   Result := True;
   if not IsWebView2Installed() then
   begin
-    if MsgBox('The Microsoft Edge WebView2 Runtime was not detected. The application needs it to show its window.' + #13#10 +
-              'Install it from https://developer.microsoft.com/microsoft-edge/webview2/ after setup.' + #13#10#13#10 +
-              'Continue with the installation?', mbConfirmation, MB_YESNO) = IDNO then
+    if MsgBox(CustomMessage('WebView2Missing'), mbConfirmation, MB_YESNO) = IDNO then
       Result := False;
   end;
 end;

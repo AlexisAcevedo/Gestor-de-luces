@@ -42,7 +42,7 @@ def package_key(path: str) -> str:
     normalized = path.replace("\\", "/")
     if _SOURCE_MARKER not in normalized:
         return TOP_LEVEL_KEY
-    relative = normalized.split(_SOURCE_MARKER, 1)[1]
+    relative = normalized.rsplit(_SOURCE_MARKER, 1)[1]
     parts = relative.split("/")
     return parts[0] if len(parts) > 1 else TOP_LEVEL_KEY
 
@@ -105,7 +105,14 @@ def main(argv: list[str]) -> int:
     if not report_path.is_file():
         print(f"coverage report not found: {report_path}", file=sys.stderr)
         return 2
-    report = json.loads(report_path.read_text(encoding="utf-8"))
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"invalid coverage report {report_path}: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(report, dict):
+        print(f"coverage report must be a JSON object: {report_path}", file=sys.stderr)
+        return 2
     files = report.get("files", {})
     if not isinstance(files, dict) or not files:
         print(f"coverage report has no files: {report_path}", file=sys.stderr)

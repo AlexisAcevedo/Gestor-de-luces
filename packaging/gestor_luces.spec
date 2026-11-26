@@ -11,9 +11,14 @@ pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 VERSION = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE).group(1)
 VERSION_TUPLE = tuple((int(p) for p in (VERSION.split(".") + ["0", "0", "0"])[:3])) + (0,)
 
+asset_datas = [
+    (str(path), str(Path("assets") / path.relative_to(ROOT / "assets").parent))
+    for path in sorted((ROOT / "assets").rglob("*"))
+    if path.is_file() and path.suffix != ".py"
+]
 datas = [
     (str(ROOT / "ui"), "ui"),
-    (str(ROOT / "assets"), "assets"),
+    *asset_datas,
 ]
 binaries = []
 hiddenimports = collect_submodules("gestor_luces") + collect_submodules("webview.platforms")
