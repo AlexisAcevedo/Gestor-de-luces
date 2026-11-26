@@ -520,7 +520,11 @@ async def test_tray_controller_dispatches_all_actions_against_bridge_and_udp(
             # 6. Un cambio originado en la UI dispara el listener y llega a la vista
             previous_applies = len(view.applies)
             await asyncio.to_thread(bridge.set_color, 80, 120, 250, 50)
-            await _wait_for(lambda: len(view.applies) > previous_applies)
+            await _wait_for(
+                lambda: (
+                    len(view.applies) > previous_applies and view.title == "WiZ Lighting - On 50%"
+                )
+            )
             assert len(view.applies) > previous_applies
             assert view.title == "WiZ Lighting - On 50%"
 
