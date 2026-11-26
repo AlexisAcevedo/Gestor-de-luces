@@ -360,5 +360,9 @@ class LightControlService:
         return self._music.get_music_sync_status()
 
     def close_audio_sampler(self) -> None:
-        """Libera de forma segura los recursos de los muestreadores y del controlador UDP."""
+        """Detiene Music Sync y cierra de forma segura el muestreador de audio."""
         self._ctx.close_audio_sampler()
+
+    def close_all_resources(self) -> None:
+        """Detiene los flujos activos y libera audio, pantalla y controlador UDP."""
+        self._ctx.close_all_resources()

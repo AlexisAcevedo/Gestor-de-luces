@@ -6,7 +6,7 @@ from typing import Any
 
 from gestor_luces.application.bulb_control_service import BulbControlService
 from gestor_luces.application.service_context import ServiceContext
-from gestor_luces.application.sleep_timer import AwaitableStatusDict
+from gestor_luces.application.sleep_timer import AwaitableStatusDict, require_finite_float
 
 
 class TimerService:
@@ -22,7 +22,7 @@ class TimerService:
         ips: list[str] | None = None,
     ) -> AwaitableStatusDict:
         """Programa el apagado automatico con atenuacion progresiva tras `minutes` minutos."""
-        parsed_minutes = float(minutes)
+        parsed_minutes = require_finite_float(minutes, "minutes")
         if parsed_minutes <= 0 or parsed_minutes > 240:
             raise ValueError("Sleep timer minutes must be greater than 0 and at most 240.")
 

@@ -245,12 +245,10 @@ class BridgeLifecycle:
 
                     async def _cancel() -> None:
                         self._service.stop_ambilight()
-                        self._service.stop_music_sync(close_sampler=True)
+                        self._service.stop_music_sync(close_sampler=False)
                         self._service.cancel_sleep_timer()
 
                     self._run_async(_cancel(), timeout=1.5)
-                else:
-                    self._service.close_audio_sampler()
             # FRONTERA: `shutdown` corre en el cierre de la app y es idempotente; cancelar
             # los flujos cruza al muestreador nativo de audio. Una excepcion aqui dejaria
             # el bucle y el hilo sin liberar, que es peor que no haber cancelado nada.
@@ -263,6 +261,7 @@ class BridgeLifecycle:
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if self._thread.is_alive():
                 self._thread.join(timeout=2.0)
+            self._service.close_all_resources()
 
     # --- Temporizador de apagado programado -----------------------------------------
 

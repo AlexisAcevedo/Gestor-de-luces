@@ -224,6 +224,6 @@ class LightControlServicePort(Protocol):
         """Devuelve el estado actual y telemetria espectral de la sincronizacion musical."""
         ...
 
-    def close_audio_sampler(self) -> None:
-        """Libera de forma segura los recursos de los muestreadores de audio."""
+    def close_all_resources(self) -> None:
+        """Detiene los flujos activos y libera de forma segura audio, pantalla y UDP."""
         ...

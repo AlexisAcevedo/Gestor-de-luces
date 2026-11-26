@@ -12,9 +12,16 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
+import threading
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 
-from gestor_luces.application.sleep_timer import AwaitableStatusDict
+from gestor_luces.application.sleep_timer import (
+    AwaitableStatusDict,
+    require_finite_float,
+    require_int_value,
+    sanitize_brightness,
+)
 from gestor_luces.domain.value_objects import Brightness, Color
 from gestor_luces.ports.repositories import ScreenSampler
 
@@ -30,13 +37,21 @@ class AmbilightStreamManager:
         self,
         sampler: ScreenSampler | None = None,
         interval_seconds: float = 0.10,
+        max_error_backoff: float = 5.0,
     ) -> None:
-        if interval_seconds <= 0:
+        parsed_interval = require_finite_float(interval_seconds, "interval_seconds")
+        if parsed_interval <= 0:
             raise ValueError("Ambilight sampling interval must be greater than zero.")
+        parsed_backoff = require_finite_float(max_error_backoff, "max_error_backoff")
+        if parsed_backoff < parsed_interval:
+            raise ValueError("max_error_backoff must be >= interval_seconds.")
         self._sampler: ScreenSampler | None = sampler
-        self._interval_seconds: float = float(interval_seconds)
+        self._interval_seconds: float = parsed_interval
+        self._max_error_backoff: float = parsed_backoff
         self._task: asyncio.Task[None] | None = None
         self._active: bool = False
+        self._generation: int = 0
+        self._sample_lock = threading.Lock()
         self._monitor_index: int = 1
         self._color_mode: str = "vibrant"
         self._auto_brightness: bool = True
@@ -48,9 +63,19 @@ class AmbilightStreamManager:
         self._target_ips: list[str] = []
         self._frames_sent: int = 0
 
-    def set_sampler(self, sampler: ScreenSampler) -> None:
+    def set_sampler(self, sampler: ScreenSampler | None) -> None:
         """Asigna o reemplaza el adaptador de muestreo de pantalla."""
         self._sampler = sampler
+
+    @contextmanager
+    def hold_sampler_lock(self, timeout: float = 1.0) -> Iterator[bool]:
+        """Serializa el cierre del sampler respecto a capturas activas en otros hilos."""
+        acquired = self._sample_lock.acquire(timeout=timeout)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                self._sample_lock.release()
 
     def start(
         self,
@@ -72,17 +97,26 @@ class AmbilightStreamManager:
                 f"Invalid Ambilight color mode '{color_mode}'. "
                 f"Expected one of {VALID_AMBILIGHT_MODES}."
             )
-        parsed_alpha = float(smoothing_alpha)
+        parsed_alpha = require_finite_float(smoothing_alpha, "smoothing_alpha")
         if not (0.05 <= parsed_alpha <= 1.0):
             raise ValueError("Smoothing alpha must be between 0.05 and 1.0.")
 
-        validated_brightness = Brightness(int(brightness)).percent
-        clamped_min_brightness = max(5, min(20, int(min_brightness)))
+        validated_brightness = Brightness(require_int_value(brightness, "brightness")).percent
+        clamped_min_brightness = max(
+            5, min(20, require_int_value(min_brightness, "min_brightness"))
+        )
+        parsed_monitor = require_int_value(monitor_index, "monitor_index")
+        if parsed_monitor < 0:
+            raise ValueError("Monitor index must be zero or positive.")
+        loop = asyncio.get_running_loop()
 
         self.stop()
 
-        self._sampler = sampler
-        self._monitor_index = int(monitor_index)
+        self._generation += 1
+        run_id = self._generation
+        if sampler is not None:
+            self._sampler = sampler
+        self._monitor_index = parsed_monitor
         self._color_mode = normalized_mode
         self._auto_brightness = bool(auto_brightness)
         self._min_brightness = clamped_min_brightness
@@ -93,15 +127,15 @@ class AmbilightStreamManager:
         self._frames_sent = 0
         self._active = True
 
-        loop = asyncio.get_running_loop()
         self._task = loop.create_task(
-            self._run_loop(on_frame=on_frame),
+            self._run_loop(on_frame=on_frame, run_id=run_id),
             name="GestorLucesAmbilightStream",
         )
         return self.get_status()
 
     def stop(self) -> AwaitableStatusDict:
         """Detiene inmediatamente la captura continua sin apagar los focos."""
+        self._generation += 1
         if self._task is not None and not self._task.done():
             self._task.cancel()
         self._task = None
@@ -116,7 +150,7 @@ class AmbilightStreamManager:
 
     def update_fixed_brightness(self, brightness: int) -> None:
         """Actualiza el techo de brillo manual si el usuario mueve el deslizador maestro."""
-        validated = Brightness(int(brightness)).percent
+        validated = Brightness(require_int_value(brightness, "brightness")).percent
         self._fixed_brightness = validated
         if not self._auto_brightness:
             self._last_brightness = validated
@@ -147,25 +181,32 @@ class AmbilightStreamManager:
             }
         )
 
-    def _sample_once(self, monitor_index: int, color_mode: str) -> tuple[Color, int]:
+    def _sample_once(
+        self,
+        sampler: ScreenSampler | None,
+        monitor_index: int,
+        color_mode: str,
+        run_id: int,
+    ) -> tuple[Color, int]:
         """Ejecuta una captura sincrona de pantalla (invocada mediante `asyncio.to_thread`)."""
-        if self._sampler is None:
-            return Color(0, 0, 0), self._fixed_brightness
+        with self._sample_lock:
+            if self._generation != run_id or sampler is None or self._sampler is not sampler:
+                return Color(0, 0, 0), self._fixed_brightness
 
-        sample_frame_fn = getattr(self._sampler, "sample_frame", None)
-        if callable(sample_frame_fn):
-            color, suggested_brightness = sample_frame_fn(
-                monitor_index=monitor_index,
-                mode=color_mode,
-            )
-            return color, int(suggested_brightness)
+            sample_frame_fn = getattr(sampler, "sample_frame", None)
+            if callable(sample_frame_fn):
+                color, suggested_brightness = sample_frame_fn(
+                    monitor_index=monitor_index,
+                    mode=color_mode,
+                )
+                return color, sanitize_brightness(suggested_brightness, self._fixed_brightness)
 
-        # Compatibilidad con dobles de prueba que solo implementan `sample_average_color`
-        sig = inspect.signature(self._sampler.sample_average_color)
-        if "mode" in sig.parameters or len(sig.parameters) >= 2:
-            color = self._sampler.sample_average_color(monitor_index, color_mode)
-        else:
-            color = self._sampler.sample_average_color(monitor_index)
+            # Compatibilidad con dobles de prueba que solo implementan `sample_average_color`
+            sig = inspect.signature(sampler.sample_average_color)
+            if "mode" in sig.parameters or len(sig.parameters) >= 2:
+                color = sampler.sample_average_color(monitor_index, color_mode)
+            else:
+                color = sampler.sample_average_color(monitor_index)
 
         lum = (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255.0
         derived_brightness = max(10, min(100, round(10.0 + lum * 90.0)))
@@ -174,16 +215,26 @@ class AmbilightStreamManager:
     async def _run_loop(
         self,
         on_frame: Callable[[Color, int, list[str]], Awaitable[bool]],
+        run_id: int,
     ) -> None:
         """Bucle asincrono que muestrea el monitor y transmite fotogramas suavizados."""
+        consecutive_errors = 0
         try:
-            while self._active:
+            while self._active and self._generation == run_id:
+                sleep_delay = self._interval_seconds
                 try:
+                    sampler = self._sampler
+                    monitor_index = self._monitor_index
+                    color_mode = self._color_mode
                     sampled_color, suggested_brightness = await asyncio.to_thread(
                         self._sample_once,
-                        self._monitor_index,
-                        self._color_mode,
+                        sampler,
+                        monitor_index,
+                        color_mode,
+                        run_id,
                     )
+                    if self._generation != run_id or not self._active:
+                        break
                     # En escenas oscuras de cine, respetamos el piso elegido por el usuario
                     # y aseguramos el minimo fisico de 10% exigido por el protocolo UDP WiZ.
                     effective_brightness = (
@@ -200,19 +251,34 @@ class AmbilightStreamManager:
                             effective_brightness,
                             list(self._target_ips),
                         )
-                        if sent:
+                        if sent and self._generation == run_id:
                             self._frames_sent += 1
+                    consecutive_errors = 0
                 except asyncio.CancelledError:
                     raise
                 # FRONTERA: cada iteracion muestrea codigo ajeno en un hilo (mss/GDI y
                 # Pillow) y envia por UDP. Un fotograma fallido no puede terminar el flujo
-                # que el usuario inicio: se registra con traza y la proxima iteracion
-                # reintenta.
+                # que el usuario inicio: se registra con traza y se reintenta con backoff.
                 except Exception:
-                    _LOGGER.exception("Ambilight frame sampling iteration failed.")
+                    consecutive_errors += 1
+                    if consecutive_errors == 1:
+                        _LOGGER.exception("Ambilight frame sampling iteration failed.")
+                    else:
+                        _LOGGER.warning(
+                            "Ambilight frame sampling failed (%d consecutive errors).",
+                            consecutive_errors,
+                        )
+                    sleep_delay = min(
+                        self._max_error_backoff,
+                        self._interval_seconds * (2 ** min(consecutive_errors, 8)),
+                    )
 
-                await asyncio.sleep(self._interval_seconds)
+                if self._generation != run_id or not self._active:
+                    break
+                await asyncio.sleep(sleep_delay)
         except asyncio.CancelledError:
             raise
         finally:
-            self._active = False
+            if self._generation == run_id:
+                self._active = False
+                self._task = None
