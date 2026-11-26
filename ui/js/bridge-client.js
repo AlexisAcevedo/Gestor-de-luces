@@ -2,30 +2,17 @@
  * PyWebView bridge resolution, invocation wrapper, and in-memory browser mock API.
  */
 
-import {
-  ALLOWED_THEMES,
-  DEFAULT_THEME,
-  SCENE_CATALOG,
-  clampInt,
-  rgbToHex,
-  t
-} from "./store.js";
+import { ALLOWED_THEMES, DEFAULT_THEME, SCENE_CATALOG, clampInt, rgbToHex, t } from "./store.js";
 import { setStatusMessage, showToast } from "./toasts.js";
 
 /* Simulador en memoria cuando no existe el contenedor nativo de PyWebView */
 export function createBrowserMockApi() {
   let mockLanguage = "en";
   let mockTheme = DEFAULT_THEME;
-  let mockBulbs = [
-    {
-      ip: "192.168.0.34",
-      mac: "a8bb50df9029",
-      name: "Studio Key Light",
-      module_name: "ESP01_SHRGB1C_31",
-      is_online: true,
-      state: { is_on: true, brightness: 85, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
-    }
-  ];
+  let mockBulbs = [{
+    ip: "192.168.0.34", mac: "a8bb50df9029", name: "Studio Key Light", module_name: "ESP01_SHRGB1C_31", is_online: true,
+    state: { is_on: true, brightness: 85, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
+  }];
   let mockSelected = ["192.168.0.34"];
   let mockCustomScenes = [
     { id: "preset01", name: "Editorial Warmth", mode: "temperature", brightness: 70, color: null, temperature: 2700, built_in_scene_id: null, speed: 100, is_favorite: true },
@@ -48,14 +35,12 @@ export function createBrowserMockApi() {
     rms: 0.0, bass: 0.0, mid: 0.0, treble: 0.0,
     last_color: { r: 235, g: 45, b: 95, hex: "#eb2d5f" }, target_ips: [], frames_sent: 0
   };
-  const mockAudioDevices = [
-    {
-      index: -1,
-      name: "Speakers (Realtek High Definition Audio) [Loopback]",
-      label: "Default · Speakers (Realtek High Definition Audio) [Loopback] (48000 Hz)",
-      sample_rate: 48000, channels: 2, is_default: true
-    }
-  ];
+  const mockAudioDevices = [{
+    index: -1,
+    name: "Speakers (Realtek High Definition Audio) [Loopback]",
+    label: "Default · Speakers (Realtek High Definition Audio) [Loopback] (48000 Hz)",
+    sample_rate: 48000, channels: 2, is_default: true
+  }];
 
   function syncMockTimer() {
     if (!mockSleepTimer.active) return;
@@ -76,23 +61,15 @@ export function createBrowserMockApi() {
   function buildMockEnvelope() {
     syncMockTimer();
     return Promise.resolve({
-      ok: true,
-      language: mockLanguage,
-      theme: mockTheme,
-      bulbs: JSON.parse(JSON.stringify(mockBulbs)),
-      selected_ips: mockSelected.slice(),
-      scenes: SCENE_CATALOG.slice(),
-      custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
+      ok: true, language: mockLanguage, theme: mockTheme,
+      bulbs: JSON.parse(JSON.stringify(mockBulbs)), selected_ips: mockSelected.slice(),
+      scenes: SCENE_CATALOG.slice(), custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
       sleep_timer: {
-        active: mockSleepTimer.active,
-        remaining_seconds: mockSleepTimer.remaining_seconds,
-        total_seconds: mockSleepTimer.total_seconds,
-        target_ips: mockSleepTimer.target_ips.slice()
+        active: mockSleepTimer.active, remaining_seconds: mockSleepTimer.remaining_seconds,
+        total_seconds: mockSleepTimer.total_seconds, target_ips: mockSleepTimer.target_ips.slice()
       },
-      ambilight: JSON.parse(JSON.stringify(mockAmbilight)),
-      monitors: mockMonitors.slice(),
-      music_sync: JSON.parse(JSON.stringify(mockMusicSync)),
-      audio_devices: mockAudioDevices.slice(),
+      ambilight: JSON.parse(JSON.stringify(mockAmbilight)), monitors: mockMonitors.slice(),
+      music_sync: JSON.parse(JSON.stringify(mockMusicSync)), audio_devices: mockAudioDevices.slice(),
       error: null
     });
   }
@@ -275,7 +252,7 @@ export function createBrowserMockApi() {
     },
     get_ambilight_status: () => {
       if (mockAmbilight.active) mockAmbilight.frames_sent += 4;
-      return buildMockEnvelope();
+      return Promise.resolve({ ok: true, ambilight: JSON.parse(JSON.stringify(mockAmbilight)), error: null });
     },
     start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips) => {
       const targets = resolveTargets(ips);
@@ -301,63 +278,118 @@ export function createBrowserMockApi() {
     },
     get_music_sync_status: () => {
       if (mockMusicSync.active) mockMusicSync.frames_sent += 3;
-      return buildMockEnvelope();
+      return Promise.resolve({ ok: true, music_sync: JSON.parse(JSON.stringify(mockMusicSync)), error: null });
     }
   };
 }
 
 let backendApi = null;
+let usingMockBackend = false;
 let envelopeHandler = null;
+let backendUpgradeHandler = null;
+let lateReadyListener = null;
+let requestSeq = 0;
+let latestMutationSeq = 0;
+let lastAppliedMutationSeq = 0;
+const inFlightKeys = new Set();
 
-export function getBackendApi() {
-  return backendApi;
-}
+export function getBackendApi() { return backendApi; }
+export function isMockBackend() { return usingMockBackend; }
+export function setEnvelopeHandler(fn) { envelopeHandler = fn; }
+export function setBackendUpgradeHandler(fn) { backendUpgradeHandler = fn; }
 
-export function setEnvelopeHandler(fn) {
-  envelopeHandler = fn;
+export function resetBridgeStateForTests() {
+  if (lateReadyListener && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+    window.removeEventListener("pywebviewready", lateReadyListener);
+  }
+  backendApi = null;
+  usingMockBackend = false;
+  envelopeHandler = null;
+  backendUpgradeHandler = null;
+  lateReadyListener = null;
+  requestSeq = 0;
+  latestMutationSeq = 0;
+  lastAppliedMutationSeq = 0;
+  inFlightKeys.clear();
 }
 
 /* Resuelve el puente nativo de PyWebView o activa el simulador de desarrollo */
-export async function resolveBackendApi() {
+export async function resolveBackendApi(options = {}) {
+  if (lateReadyListener && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+    window.removeEventListener("pywebviewready", lateReadyListener);
+    lateReadyListener = null;
+  }
   if (window.pywebview && window.pywebview.api) {
     backendApi = window.pywebview.api;
+    usingMockBackend = false;
     return backendApi;
   }
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 2000;
   return new Promise((resolve) => {
     let settled = false;
+    let timerId = null;
     const onReady = () => {
       if (!settled && window.pywebview && window.pywebview.api) {
         settled = true;
+        if (timerId !== null) clearTimeout(timerId);
         backendApi = window.pywebview.api;
+        usingMockBackend = false;
         resolve(backendApi);
       }
     };
     window.addEventListener("pywebviewready", onReady, { once: true });
-    setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        backendApi = createBrowserMockApi();
-        resolve(backendApi);
+    timerId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      if (typeof window.removeEventListener === "function") {
+        window.removeEventListener("pywebviewready", onReady);
       }
-    }, 350);
+      backendApi = createBrowserMockApi();
+      usingMockBackend = true;
+      lateReadyListener = () => {
+        if (!window.pywebview || !window.pywebview.api) return;
+        lateReadyListener = null;
+        backendApi = window.pywebview.api;
+        usingMockBackend = false;
+        requestSeq = 0;
+        latestMutationSeq = 0;
+        lastAppliedMutationSeq = 0;
+        inFlightKeys.clear();
+        if (typeof backendUpgradeHandler === "function") backendUpgradeHandler(backendApi);
+      };
+      window.addEventListener("pywebviewready", lateReadyListener, { once: true });
+      resolve(backendApi);
+    }, timeoutMs);
   });
 }
 
 /* Ejecuta llamadas hacia WebviewBridge de forma uniforme */
 export async function invokeApi(callFn, successMessage, options) {
-  if (!backendApi) return;
+  if (!backendApi) return false;
   const retry = () => invokeApi(callFn, successMessage, options);
   const silent = Boolean(options && options.silent);
+  const isPoll = Boolean(options && options.poll);
+  const dedupeKey = options && typeof options.dedupeKey === "string" ? options.dedupeKey : null;
+  if (dedupeKey && inFlightKeys.has(dedupeKey)) return false;
+  if (dedupeKey) inFlightKeys.add(dedupeKey);
+  const seq = ++requestSeq;
+  if (!isPoll) latestMutationSeq = seq;
   try {
     const response = await callFn();
+    if (isPoll && seq < latestMutationSeq) return false;
+    if (!isPoll && seq < lastAppliedMutationSeq) return false;
+    if (!isPoll) lastAppliedMutationSeq = seq;
     if (typeof envelopeHandler === "function") {
-      envelopeHandler(response, successMessage, retry, silent);
+      envelopeHandler(response, successMessage, retry, silent, options);
     }
+    return true;
   } catch (err) {
-    const message = t("status.commError", {
-      error: err && err.message ? err.message : String(err),
-    });
+    if (isPoll && seq < latestMutationSeq) return false;
+    const message = t("status.commError", { error: err && err.message ? err.message : String(err) });
     setStatusMessage(message);
     showToast({ kind: "error", message, retry });
+    return false;
+  } finally {
+    if (dedupeKey) inFlightKeys.delete(dedupeKey);
   }
 }

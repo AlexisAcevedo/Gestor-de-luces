@@ -5,64 +5,45 @@
  * el cambio de tema e idioma, las pestanas WAI-ARIA y la sincronizacion con WebviewBridge.
  */
 
+import { bindAmbilightEvents, renderAmbilightPanel, syncAmbilightPolling } from "./ambilight.js";
 import {
-  bindAmbilightEvents,
-  renderAmbilightPanel,
-  syncAmbilightPolling
-} from "./ambilight.js";
-import {
-  getBackendApi,
-  invokeApi,
-  resolveBackendApi,
-  setEnvelopeHandler
+  getBackendApi, invokeApi, resolveBackendApi, setBackendUpgradeHandler, setEnvelopeHandler
 } from "./bridge-client.js";
 import {
-  bindFixtureEvents,
-  renderFixtureList,
-  renderSleepTimer,
-  syncSleepTimerPolling
+  bindFixtureEvents, renderFixtureList, renderSleepTimer, syncSleepTimerPolling
 } from "./fixtures.js";
+import { bindMusicEvents, renderMusicPanel, syncMusicPolling } from "./music.js";
+import { bindSceneEvents, renderCustomScenesGrid, renderScenesGrid } from "./scenes.js";
 import {
-  bindMusicEvents,
-  renderMusicPanel,
-  syncMusicPolling
-} from "./music.js";
-import {
-  bindSceneEvents,
-  renderCustomScenesGrid,
-  renderScenesGrid
-} from "./scenes.js";
-import {
-  requestFit,
-  setupDialogLightDismissFallbacks,
-  setupGlobalShortcuts,
-  setupResizeThrottle,
-  setupWindowFit
+  requestFit, setupDialogLightDismissFallbacks, setupGlobalShortcuts,
+  setupResizeThrottle, setupWindowFit
 } from "./shortcuts.js";
 import {
-  bindStageControlEvents,
-  drawColorWheel,
-  positionReticleFromRgb,
-  renderStageHeaderAndControls
+  bindStageControlEvents, drawColorWheel, positionReticleFromRgb, renderStageHeaderAndControls
 } from "./stage-controls.js";
 import {
-  ALLOWED_THEMES,
-  DEFAULT_THEME,
-  appState,
-  clampInt,
-  loadSceneCatalog,
-  loadUiPrefs,
-  normalizeTheme,
-  saveUiPref,
-  t,
-  updateAllSlidersFill
+  ALLOWED_THEMES, DEFAULT_THEME, appState, clampInt, getPrimaryBulb, loadSceneCatalog,
+  loadUiPrefs, normalizeTheme, saveUiPref, t, updateAllSlidersFill
 } from "./store.js";
 import { setStatusMessage, showToast } from "./toasts.js";
 
+const lastRendered = {
+  language: null, theme: null, persistedTheme: null,
+  bulbsKey: null, scenesKey: null, customKey: null, sleepKey: null, ambiKey: null, musicKey: null
+};
+
+export function resetUiSyncCache() {
+  Object.keys(lastRendered).forEach((k) => { lastRendered[k] = null; });
+}
+
 /* Sincroniza el selector visual de idioma (EN | ES) y traduce el arbol DOM estatico */
-function syncLanguageUi(lang) {
+export function syncLanguageUi(lang) {
   const normalized = String(lang || "en").trim().toLowerCase() === "es" ? "es" : "en";
+  if (lastRendered.language === normalized && appState.language === normalized) {
+    return false;
+  }
   const prevLang = appState.language;
+  lastRendered.language = normalized;
   appState.language = normalized;
   if (window.I18N) {
     window.I18N.setLanguage(normalized);
@@ -76,6 +57,7 @@ function syncLanguageUi(lang) {
     // Las etiquetas cambian de largo y de alto: la ventana se reajusta al contenido nuevo.
     requestFit(true);
   }
+  return true;
 }
 
 function readHashTheme() {
@@ -92,38 +74,38 @@ function readHashTheme() {
   }
 }
 
-function syncThemeUi(theme, { persist = true } = {}) {
+export function syncThemeUi(theme, { persist = true } = {}) {
   const normalized = normalizeTheme(theme);
   const prevTheme = appState.theme;
   const prevDomTheme = document.documentElement.dataset.theme;
-  appState.theme = normalized;
-  document.documentElement.dataset.theme = normalized;
-  const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
-  if (colorSchemeMeta) {
-    colorSchemeMeta.setAttribute(
-      "content",
-      normalized === "atmospheric-dark" ? "dark" : "light"
-    );
+  const domAlreadyMatches = prevDomTheme === normalized;
+  if (lastRendered.theme !== normalized || prevTheme !== normalized || !domAlreadyMatches) {
+    document.documentElement.dataset.theme = normalized;
+    const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
+    if (colorSchemeMeta) {
+      colorSchemeMeta.setAttribute("content", normalized === "atmospheric-dark" ? "dark" : "light");
+    }
+    const consoleShell = document.getElementById("console-shell");
+    if (consoleShell) consoleShell.dataset.look = normalized;
+    const stoneBtn = document.getElementById("theme-btn-stone");
+    if (stoneBtn) {
+      const isStone = normalized === "architectural-stone";
+      stoneBtn.classList.toggle("active", isStone);
+      stoneBtn.setAttribute("aria-pressed", isStone ? "true" : "false");
+    }
+    const darkBtn = document.getElementById("theme-btn-dark");
+    if (darkBtn) {
+      const isDark = normalized === "atmospheric-dark";
+      darkBtn.classList.toggle("active", isDark);
+      darkBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
+    }
   }
-  const consoleShell = document.getElementById("console-shell");
-  if (consoleShell) {
-    consoleShell.dataset.look = normalized;
-  }
-  const stoneBtn = document.getElementById("theme-btn-stone");
-  if (stoneBtn) {
-    const isStone = normalized === "architectural-stone";
-    stoneBtn.classList.toggle("active", isStone);
-    stoneBtn.setAttribute("aria-pressed", isStone ? "true" : "false");
-  }
-  const darkBtn = document.getElementById("theme-btn-dark");
-  if (darkBtn) {
-    const isDark = normalized === "atmospheric-dark";
-    darkBtn.classList.toggle("active", isDark);
-    darkBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
-  }
-  if (persist) {
+  if (persist && lastRendered.persistedTheme !== normalized) {
     saveUiPref("theme", normalized);
+    lastRendered.persistedTheme = normalized;
   }
+  lastRendered.theme = normalized;
+  appState.theme = normalized;
   if (prevTheme !== normalized || prevDomTheme !== normalized) {
     requestFit(true);
   }
@@ -140,41 +122,31 @@ function renderAllPanels() {
 }
 
 /* Actualiza la variable CSS `--beam-color` y toda la interfaz a partir del sobre del backend */
-function applyBackendEnvelope(envelope, statusText, retry, silent) {
+export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   if (!envelope) return;
-  if (typeof envelope.language === "string") {
-    syncLanguageUi(envelope.language);
-  }
-  if (typeof envelope.theme === "string") {
-    syncThemeUi(envelope.theme);
-  }
-  if (Array.isArray(envelope.bulbs)) {
-    appState.bulbs = envelope.bulbs;
-  }
-  if (Array.isArray(envelope.selected_ips)) {
-    appState.selectedIps = envelope.selected_ips;
-  }
-  if (Array.isArray(envelope.scenes) && envelope.scenes.length > 0) {
-    appState.scenes = envelope.scenes;
-  }
-  if (Array.isArray(envelope.custom_scenes)) {
-    appState.customScenes = envelope.custom_scenes;
-  }
-  if (envelope.sleep_timer && typeof envelope.sleep_timer === "object") {
-    appState.sleepTimer = envelope.sleep_timer;
-  }
-  if (envelope.ambilight && typeof envelope.ambilight === "object") {
-    appState.ambilight = envelope.ambilight;
-  }
-  if (Array.isArray(envelope.monitors) && envelope.monitors.length > 0) {
-    appState.monitors = envelope.monitors;
-  }
-  if (envelope.music_sync && typeof envelope.music_sync === "object") {
-    appState.musicSync = envelope.music_sync;
-  }
-  if (Array.isArray(envelope.audio_devices) && envelope.audio_devices.length > 0) {
-    appState.audioDevices = envelope.audio_devices;
-  }
+  const wasAmbiActive = Boolean(appState.ambilight && appState.ambilight.active);
+  const wasMusicActive = Boolean(appState.musicSync && appState.musicSync.active);
+  const hasBulbs = Array.isArray(envelope.bulbs);
+  const hasSelected = Array.isArray(envelope.selected_ips);
+  const hasScenes = Array.isArray(envelope.scenes) && envelope.scenes.length > 0;
+  const hasCustom = Array.isArray(envelope.custom_scenes);
+  const hasSleep = Boolean(envelope.sleep_timer && typeof envelope.sleep_timer === "object");
+  const hasAmbi = Boolean(envelope.ambilight && typeof envelope.ambilight === "object");
+  const hasMonitors = Array.isArray(envelope.monitors) && envelope.monitors.length > 0;
+  const hasMusic = Boolean(envelope.music_sync && typeof envelope.music_sync === "object");
+  const hasAudio = Array.isArray(envelope.audio_devices) && envelope.audio_devices.length > 0;
+
+  const langChanged = typeof envelope.language === "string" ? syncLanguageUi(envelope.language) : false;
+  if (typeof envelope.theme === "string") syncThemeUi(envelope.theme);
+  if (hasBulbs) appState.bulbs = envelope.bulbs;
+  if (hasSelected) appState.selectedIps = envelope.selected_ips;
+  if (hasScenes) appState.scenes = envelope.scenes;
+  if (hasCustom) appState.customScenes = envelope.custom_scenes;
+  if (hasSleep) appState.sleepTimer = envelope.sleep_timer;
+  if (hasAmbi) appState.ambilight = envelope.ambilight;
+  if (hasMonitors) appState.monitors = envelope.monitors;
+  if (hasMusic) appState.musicSync = envelope.music_sync;
+  if (hasAudio) appState.audioDevices = envelope.audio_devices;
 
   if (!envelope.ok && envelope.error) {
     const warning = t("status.warning", { error: envelope.error });
@@ -188,13 +160,74 @@ function applyBackendEnvelope(envelope, statusText, retry, silent) {
     }
   }
 
-  syncSleepTimerPolling();
-  syncAmbilightPolling();
-  syncMusicPolling();
-  renderAllPanels();
+  if (langChanged) {
+    lastRendered.bulbsKey = lastRendered.scenesKey = lastRendered.customKey = null;
+    lastRendered.sleepKey = lastRendered.ambiKey = lastRendered.musicKey = null;
+  }
+
+  let bulbsChanged = false;
+  if (hasBulbs || hasSelected || langChanged) {
+    const nextKey = JSON.stringify([appState.bulbs, appState.selectedIps]);
+    if (nextKey !== lastRendered.bulbsKey) {
+      lastRendered.bulbsKey = nextKey;
+      bulbsChanged = true;
+      renderFixtureList();
+      renderStageHeaderAndControls();
+    }
+  }
+  if (hasScenes || bulbsChanged || langChanged) {
+    const primary = getPrimaryBulb();
+    const activeSig = primary ? [primary.state?.mode, primary.state?.scene_id, primary.state?.speed] : null;
+    const nextKey = JSON.stringify([appState.scenes, activeSig]);
+    if (nextKey !== lastRendered.scenesKey) {
+      lastRendered.scenesKey = nextKey;
+      renderScenesGrid();
+    }
+  }
+  if (hasCustom || hasScenes || langChanged) {
+    const nextKey = JSON.stringify([appState.customScenes, appState.scenes.length]);
+    if (nextKey !== lastRendered.customKey) {
+      lastRendered.customKey = nextKey;
+      renderCustomScenesGrid();
+    }
+  }
+  if (hasSleep || langChanged) {
+    const nextKey = JSON.stringify(appState.sleepTimer);
+    if (nextKey !== lastRendered.sleepKey) {
+      lastRendered.sleepKey = nextKey;
+      renderSleepTimer();
+    }
+    if (hasSleep) syncSleepTimerPolling();
+  }
+  if (hasAmbi || hasMonitors || langChanged) {
+    const nextKey = JSON.stringify([appState.ambilight, appState.monitors]);
+    if (nextKey !== lastRendered.ambiKey) {
+      lastRendered.ambiKey = nextKey;
+      renderAmbilightPanel();
+    }
+    if (hasAmbi) syncAmbilightPolling();
+  }
+  if (hasMusic || hasAudio || langChanged) {
+    const nextKey = JSON.stringify([appState.musicSync, appState.audioDevices]);
+    if (nextKey !== lastRendered.musicKey) {
+      lastRendered.musicKey = nextKey;
+      renderMusicPanel();
+    }
+    if (hasMusic) syncMusicPolling();
+  }
+  if (
+    !hasBulbs &&
+    ((hasAmbi && wasAmbiActive && !appState.ambilight.active) ||
+      (hasMusic && wasMusicActive && !appState.musicSync.active))
+  ) {
+    refreshStates();
+  }
 }
 
 setEnvelopeHandler(applyBackendEnvelope);
+setBackendUpgradeHandler(() =>
+  invokeApi(() => getBackendApi().get_initial_state(), () => t("status.connected"))
+);
 
 /* Refresca el estado completo de la consola cuando se solicita manual o externamente */
 function refreshStates(statusMessage) {
@@ -206,12 +239,14 @@ function refreshStates(statusMessage) {
 }
 
 /* Callback global invocado desde Python cuando el usuario opera el menu de la bandeja */
-window.onTrayStateChanged = () => {
-  refreshStates();
-};
+if (typeof window !== "undefined") {
+  window.onTrayStateChanged = () => {
+    refreshStates();
+  };
+}
 
 /* Gestion de pestanas accesibles (WAI-ARIA Tabs con navegacion por flechas) */
-function activateTab(modeName, focusTab) {
+export function activateTab(modeName, focusTab) {
   appState.activeTab = modeName;
   saveUiPref("activeTab", modeName);
   const tabs = Array.from(document.querySelectorAll(".mode-tab"));
@@ -277,38 +312,28 @@ async function handleSetTheme(theme) {
   syncThemeUi(normalized);
   const api = getBackendApi();
   if (api && typeof api.set_theme === "function") {
-    await invokeApi(
-      () => api.set_theme(normalized),
-      null,
-      { silent: true }
-    );
+    await invokeApi(() => api.set_theme(normalized), null, { silent: true });
   }
 }
 
-function bindEvents() {
+export function bindEvents() {
+  if (typeof window !== "undefined") {
+    window.onTrayStateChanged = () => { refreshStates(); };
+  }
   setupDialogLightDismissFallbacks();
   setupGlobalShortcuts({ activateTab });
 
-  /* Selector segmentado de tema (Architectural Stone | Atmospheric Dark) */
   const themeBtnStone = document.getElementById("theme-btn-stone");
-  if (themeBtnStone) {
-    themeBtnStone.addEventListener("click", () => handleSetTheme("architectural-stone"));
-  }
+  if (themeBtnStone) themeBtnStone.addEventListener("click", () => handleSetTheme("architectural-stone"));
   const themeBtnDark = document.getElementById("theme-btn-dark");
-  if (themeBtnDark) {
-    themeBtnDark.addEventListener("click", () => handleSetTheme("atmospheric-dark"));
-  }
+  if (themeBtnDark) themeBtnDark.addEventListener("click", () => handleSetTheme("atmospheric-dark"));
 
-  /* Selector segmentado de idioma (EN | ES) */
   document.querySelectorAll(".lang-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const targetLang = btn.getAttribute("data-lang") || "en";
       const api = getBackendApi();
       if (api && typeof api.set_language === "function") {
-        invokeApi(
-          () => api.set_language(targetLang),
-          () => t("status.languageChanged")
-        );
+        invokeApi(() => api.set_language(targetLang), () => t("status.languageChanged"));
       } else {
         syncLanguageUi(targetLang);
         renderAllPanels();
@@ -341,31 +366,34 @@ function bindEvents() {
     const api = getBackendApi();
     if (!document.hidden && api) {
       if (appState.ambilight && appState.ambilight.active) {
-        invokeApi(() => api.get_ambilight_status(), null);
+        invokeApi(() => api.get_ambilight_status(), null, {
+          silent: true, poll: true, dedupeKey: "poll:ambilight"
+        });
       } else if (appState.musicSync && appState.musicSync.active) {
-        invokeApi(() => api.get_music_sync_status(), null);
+        invokeApi(() => api.get_music_sync_status(), null, {
+          silent: true, poll: true, dedupeKey: "poll:music"
+        });
       } else if (appState.sleepTimer && appState.sleepTimer.active) {
-        invokeApi(() => api.get_sleep_timer_status(), null);
+        invokeApi(() => api.get_sleep_timer_status(), null, {
+          silent: true, poll: true, dedupeKey: "poll:sleep"
+        });
       }
     }
   });
 }
 
-setupResizeThrottle();
-
-/* Inicializacion principal al cargar el DOM */
-document.addEventListener("DOMContentLoaded", async () => {
-  syncThemeUi(normalizeTheme(document.documentElement.dataset.theme), { persist: false });
-  loadSceneCatalog();
-  syncLanguageUi("en");
-  drawColorWheel();
-  updateAllSlidersFill();
-  bindEvents();
-  restoreUiPrefs();
-  await resolveBackendApi();
-  setupWindowFit();
-  await invokeApi(
-    () => getBackendApi().get_initial_state(),
-    () => t("status.connected")
-  );
-});
+if (typeof window !== "undefined" && typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  setupResizeThrottle();
+  document.addEventListener("DOMContentLoaded", async () => {
+    syncThemeUi(normalizeTheme(document.documentElement.dataset.theme), { persist: false });
+    loadSceneCatalog();
+    syncLanguageUi("en");
+    drawColorWheel();
+    updateAllSlidersFill();
+    bindEvents();
+    restoreUiPrefs();
+    await resolveBackendApi();
+    setupWindowFit();
+    await invokeApi(() => getBackendApi().get_initial_state(), () => t("status.connected"));
+  });
+}
