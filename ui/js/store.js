@@ -74,7 +74,7 @@ export function loadFavoriteSceneIds() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id >= 1 && id <= 36);
+    return [...new Set(parsed.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id >= 1 && id <= 36))];
   } catch (_err) {
     return [];
   }
@@ -251,22 +251,25 @@ export function parseHexToRgb(hexStr) {
 }
 
 export function hsvToRgb(h, s, v) {
-  const c = v * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = v - c;
+  const hue = ((Number(h) % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(1, Number(s) || 0));
+  const val = Math.max(0, Math.min(1, Number(v) || 0));
+  const c = val * sat;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = val - c;
   let rPrime = 0;
   let gPrime = 0;
   let bPrime = 0;
 
-  if (h >= 0 && h < 60) {
+  if (hue >= 0 && hue < 60) {
     rPrime = c; gPrime = x; bPrime = 0;
-  } else if (h >= 60 && h < 120) {
+  } else if (hue >= 60 && hue < 120) {
     rPrime = x; gPrime = c; bPrime = 0;
-  } else if (h >= 120 && h < 180) {
+  } else if (hue >= 120 && hue < 180) {
     rPrime = 0; gPrime = c; bPrime = x;
-  } else if (h >= 180 && h < 240) {
+  } else if (hue >= 180 && hue < 240) {
     rPrime = 0; gPrime = x; bPrime = c;
-  } else if (h >= 240 && h < 300) {
+  } else if (hue >= 240 && hue < 300) {
     rPrime = x; gPrime = 0; bPrime = c;
   } else {
     rPrime = c; gPrime = 0; bPrime = x;
@@ -337,7 +340,10 @@ export function computeLiveFps(telemetrySlot, isActive, currentFrames, nominalFp
     telemetrySlot.fps = 0;
     return 0;
   }
-  if (telemetrySlot.lastTs > 0 && frames > telemetrySlot.lastFrames) {
+  if (frames < telemetrySlot.lastFrames) {
+    telemetrySlot.lastFrames = frames;
+    telemetrySlot.lastTs = now;
+  } else if (telemetrySlot.lastTs > 0 && frames > telemetrySlot.lastFrames) {
     const elapsedSec = (now - telemetrySlot.lastTs) / 1000;
     if (elapsedSec >= 0.15) {
       const measured = (frames - telemetrySlot.lastFrames) / elapsedSec;

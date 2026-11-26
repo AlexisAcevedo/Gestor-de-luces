@@ -460,6 +460,12 @@
                 id="color-wheel-canvas"
                 width="240"
                 height="240"
+                tabindex="0"
+                role="slider"
+                aria-valuemin="0"
+                aria-valuemax="360"
+                aria-valuenow="24"
+                aria-valuetext="Hue 24°, Saturation 74%"
                 aria-label="Interactive HSV color wheel"
                 data-i18n-aria-label="rgb.wheelAria"
               ></canvas>
@@ -686,7 +692,7 @@
                 step="0.01"
                 value="0.38"
               >
-              <div class="slider-scale-anchored" role="group" aria-label="EMA alpha presets">
+              <div class="slider-scale-anchored" role="group" aria-label="EMA alpha presets" data-i18n-aria-label="ambi.smoothingPresetsAria">
                 <button
                   type="button"
                   class="scale-preset-btn pos-0"
@@ -883,7 +889,7 @@
                 step="0.1"
                 value="1.0"
               >
-              <div class="slider-scale-anchored" role="group" aria-label="Beat sensitivity presets">
+              <div class="slider-scale-anchored" role="group" aria-label="Beat sensitivity presets" data-i18n-aria-label="music.sensitivityPresetsAria">
                 <button
                   type="button"
                   class="scale-preset-btn pos-0"
@@ -931,7 +937,7 @@
                 step="0.05"
                 value="0.50"
               >
-              <div class="slider-scale-anchored" role="group" aria-label="Music EMA smoothing presets">
+              <div class="slider-scale-anchored" role="group" aria-label="Music EMA smoothing presets" data-i18n-aria-label="music.smoothingPresetsAria">
                 <button
                   type="button"
                   class="scale-preset-btn pos-0"
@@ -984,7 +990,7 @@
               <path d="M10 7.75v3.5l2.25 1.5M7.75 2.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <div>
-              <h2 id="sleep-timer-heading" class="well-title" data-i18n="sleep.title">Sleep Timer (Progressive Fade)</h2>
+              <span id="sleep-timer-heading" class="well-title" data-i18n="sleep.title">Sleep Timer (Progressive Fade)</span>
               <p class="well-description" data-i18n="sleep.description">Gradually dims fixtures during the final 30% of the countdown before powering off.</p>
             </div>
           </div>
@@ -1042,6 +1048,7 @@
             type="text"
             id="manual-ip-input"
             placeholder="192.168.1.45"
+            maxlength="32"
             required
             autocomplete="off"
             spellcheck="false"
@@ -1055,6 +1062,7 @@
             id="manual-name-input"
             placeholder="Studio Key Light"
             data-i18n-placeholder="dialog.addNamePlaceholder"
+            maxlength="80"
             autocomplete="off"
           >
         </div>
@@ -1082,6 +1090,7 @@
           <input
             type="text"
             id="rename-bulb-name-input"
+            maxlength="80"
             required
             autocomplete="off"
           >
@@ -1132,6 +1141,7 @@
             id="custom-scene-name-input"
             placeholder="Late Night Coding"
             data-i18n-placeholder="dialog.presetNamePlaceholder"
+            maxlength="80"
             required
             autocomplete="off"
           >

@@ -503,7 +503,7 @@
     opacity: 1;
   }
 
-  /* Superficies en vidrio ahumado con desenfoque y borde especular */
+  /* Superficies en vidrio ahumado con desenfoque y borde especular (solo contenedores estructurales/flotantes) */
   html[data-theme="atmospheric-dark"] :is(
     .fixture-pill-trigger,
     .lang-switcher,
@@ -512,15 +512,10 @@
     .control-well,
     .mode-tabs,
     .rgb-workbench,
-    .kelvin-card,
     .scenes-toolbar,
-    .scene-card,
-    .custom-scene-card,
     .ambilight-workbench,
     .music-workbench,
-    .toast,
-    .btn-power,
-    #master-power-btn
+    .toast
   ) {
     backdrop-filter: var(--glass-backdrop);
     -webkit-backdrop-filter: var(--glass-backdrop);

@@ -161,7 +161,7 @@ describe("favourite scenes persistence", () => {
     window.localStorage.setItem(store.FAV_SCENES_STORAGE_KEY, '{"1":true}');
     assert.deepEqual(store.loadFavoriteSceneIds(), []);
 
-    window.localStorage.setItem(store.FAV_SCENES_STORAGE_KEY, '[1,"2",37,0,-3,3.5,36]');
+    window.localStorage.setItem(store.FAV_SCENES_STORAGE_KEY, '[1,"2",1,37,0,-3,3.5,36]');
     assert.deepEqual(store.loadFavoriteSceneIds(), [1, 2, 36]);
   });
 
@@ -415,6 +415,11 @@ describe("HSV conversion", () => {
     assert.deepEqual(store.hsvToRgb(210, 0, 0.5), { r: 128, g: 128, b: 128 });
   });
 
+  test("hsvToRgb normalizes negative/wrapped hues and clamps saturation/value", () => {
+    assert.deepEqual(store.hsvToRgb(-60, 1.5, 2), store.hsvToRgb(300, 1, 1));
+    assert.deepEqual(store.hsvToRgb(480, -0.5, 1), { r: 255, g: 255, b: 255 });
+  });
+
   test("rgbToHsv recovers the hue of the primary colors", () => {
     assert.deepEqual(store.rgbToHsv(255, 0, 0), { h: 0, s: 1, v: 1 });
     assert.deepEqual(store.rgbToHsv(0, 255, 0), { h: 120, s: 1, v: 1 });
@@ -500,6 +505,15 @@ describe("computeLiveFps()", () => {
     now = 2000;
     assert.equal(store.computeLiveFps(slot, true, 30, 12), 30);
     assert.equal(slot.lastFrames, 30);
+  });
+
+  test("resets its baseline when frame count drops after a stream restart", () => {
+    let now = 1000;
+    Date.now = () => now;
+    const slot = { lastFrames: 50, lastTs: 500, fps: 12 };
+    assert.equal(store.computeLiveFps(slot, true, 2, 10), 12);
+    assert.equal(slot.lastFrames, 2);
+    assert.equal(slot.lastTs, 1000);
   });
 
   test("the measured rate is clamped to 1..30", () => {

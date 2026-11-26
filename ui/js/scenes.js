@@ -113,18 +113,19 @@ export function renderScenesGrid() {
     };
 
     const card = createEl("article", `scene-card${isSceneActive ? " active" : ""}`);
-    card.setAttribute("role", "button");
-    card.tabIndex = 0;
     card.style.setProperty("--scene-accent", chroma.accent);
     card.style.setProperty("--scene-gradient", chroma.gradient);
 
-    const top = createEl("div", "scene-card-top");
-    const idGroup = createEl("div", "scene-card-id-group");
+    const trigger = createEl("button", "scene-card-trigger");
+    trigger.type = "button";
+
+    const top = createEl("span", "scene-card-top");
+    const idGroup = createEl("span", "scene-card-id-group");
     const colorDot = createEl("span", "scene-color-dot");
     colorDot.setAttribute("aria-hidden", "true");
     idGroup.append(colorDot, createEl("span", "scene-id-badge", `#${String(scene.scene_id).padStart(2, "0")}`));
 
-    const badgesGroup = createEl("div", "scene-card-badges");
+    const badgesGroup = createEl("span", "scene-card-badges");
     if (isSceneActive) {
       badgesGroup.appendChild(createEl("span", "scene-active-badge", t("scenes.badgeActive")));
     }
@@ -133,8 +134,7 @@ export function renderScenesGrid() {
     );
     top.append(idGroup, badgesGroup);
 
-    const bottom = createEl("div", "scene-card-bottom");
-    const title = createEl("p", "scene-name", displayName);
+    const title = createEl("span", "scene-name", displayName);
 
     const favBtn = createEl("button", `scene-fav-btn${isFav ? " is-fav" : ""}`);
     favBtn.type = "button";
@@ -158,9 +158,6 @@ export function renderScenesGrid() {
       setStatusMessage(t(exists ? "status.sceneFavRemoved" : "status.sceneFavAdded", { name: displayName }));
     });
 
-    bottom.append(title, favBtn);
-    card.append(top, bottom);
-
     const activateScene = () => {
       const speedInput = document.getElementById("scene-speed-slider");
       const speedVal = scene.supports_speed && speedInput ? Number(speedInput.value) : null;
@@ -170,15 +167,9 @@ export function renderScenesGrid() {
       );
     };
 
-    card.addEventListener("click", activateScene);
-    card.addEventListener("keydown", (event) => {
-      if (event.target !== card) return;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        activateScene();
-      }
-    });
-
+    trigger.addEventListener("click", activateScene);
+    trigger.append(top, title);
+    card.append(trigger, favBtn);
     grid.appendChild(card);
   });
 }
@@ -221,19 +212,18 @@ export function renderCustomScenesGrid() {
       summaryText = `${k} K · ${preset.brightness}%`;
     }
 
-    const topArea = createEl("div", "custom-scene-top");
-    topArea.setAttribute("role", "button");
-    topArea.tabIndex = 0;
+    const topArea = createEl("button", "custom-scene-top");
+    topArea.type = "button";
     topArea.setAttribute("aria-label", t("custom.applyAria", { name: preset.name }));
 
     const swatch = createEl("span", "custom-scene-swatch");
     swatch.style.setProperty("--preset-swatch", swatchCss);
     swatch.setAttribute("aria-hidden", "true");
 
-    const meta = createEl("div", "custom-scene-meta");
+    const meta = createEl("span", "custom-scene-meta");
     meta.append(
-      createEl("h4", "custom-scene-title", preset.name),
-      createEl("p", "custom-scene-summary", summaryText)
+      createEl("span", "custom-scene-title", preset.name),
+      createEl("span", "custom-scene-summary", summaryText)
     );
     topArea.append(swatch, meta);
 
@@ -245,12 +235,6 @@ export function renderCustomScenesGrid() {
     };
 
     topArea.addEventListener("click", triggerApply);
-    topArea.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        triggerApply();
-      }
-    });
 
     const actions = createEl("div", "custom-scene-actions");
     const isFavorite = Boolean(preset.is_favorite);

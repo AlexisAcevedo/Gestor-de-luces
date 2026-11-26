@@ -29,21 +29,14 @@ export function drawColorWheel() {
   const radius = width / 2;
   const imageData = ctx.createImageData(width, height);
   const data = imageData.data;
-
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const dx = x - radius;
-      const dy = y - radius;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const idx = (y * width + x) * 4;
+      const dx = x - radius, dy = y - radius, dist = Math.sqrt(dx * dx + dy * dy), idx = (y * width + x) * 4;
       if (dist <= radius) {
         let angle = Math.atan2(dy, dx) * (180 / Math.PI);
         if (angle < 0) angle += 360;
         const rgb = hsvToRgb(angle, Math.min(1, dist / radius), 1);
-        data[idx] = rgb.r;
-        data[idx + 1] = rgb.g;
-        data[idx + 2] = rgb.b;
-        data[idx + 3] = 255;
+        data[idx] = rgb.r; data[idx + 1] = rgb.g; data[idx + 2] = rgb.b; data[idx + 3] = 255;
       } else {
         data[idx + 3] = 0;
       }
@@ -62,6 +55,8 @@ export function positionReticleFromRgb(r, g, b) {
   const dist = hsv.s * radius;
   reticle.style.left = `${radius + Math.cos(rad) * dist}px`;
   reticle.style.top = `${radius + Math.sin(rad) * dist}px`;
+  canvas.setAttribute("aria-valuenow", String(Math.round(hsv.h)));
+  canvas.setAttribute("aria-valuetext", `Hue ${Math.round(hsv.h)}°, Saturation ${Math.round(hsv.s * 100)}%`);
 }
 
 function updateApertureGlow(aperture, isOn, brightness) {
@@ -217,10 +212,7 @@ export function bindStageControlEvents() {
     masterPowerBtn.addEventListener("click", () => {
       const primary = getPrimaryBulb();
       const nextPower = primary ? !primary.state.is_on : true;
-      invokeApi(
-        () => getBackendApi().set_power(nextPower, null, null),
-        () => t(nextPower ? "status.masterTurnedOn" : "status.masterTurnedOff")
-      );
+      invokeApi(() => getBackendApi().set_power(nextPower, null, null), () => t(nextPower ? "status.masterTurnedOn" : "status.masterTurnedOff"));
     });
   }
 
@@ -242,16 +234,25 @@ export function bindStageControlEvents() {
   document.querySelectorAll(".brightness-preset").forEach((btn) => {
     btn.addEventListener("click", () => {
       const val = clampInt(btn.dataset.brightness, 10, 100);
-      if (brightnessSlider) {
-        brightnessSlider.value = String(val);
-        updateSliderFill(brightnessSlider);
-      }
+      if (brightnessSlider) { brightnessSlider.value = String(val); updateSliderFill(brightnessSlider); }
       if (brightnessOutput) brightnessOutput.textContent = `${val}%`;
       invokeApi(() => getBackendApi().set_brightness(val, null), () => t("status.brightnessSet", { brightness: val }));
     });
   });
 
   const WHEEL_THROTTLE_MS = 70;
+  const syncRgbPreview = (rgb) => {
+    const rIn = document.getElementById("input-r");
+    const gIn = document.getElementById("input-g");
+    const bIn = document.getElementById("input-b");
+    const hexIn = document.getElementById("input-hex");
+    if (rIn) rIn.value = String(rgb.r);
+    if (gIn) gIn.value = String(rgb.g);
+    if (bIn) bIn.value = String(rgb.b);
+    if (hexIn) hexIn.value = rgbToHex(rgb.r, rgb.g, rgb.b);
+    positionReticleFromRgb(rgb.r, rgb.g, rgb.b);
+    document.documentElement.style.setProperty("--beam-color", `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
+  };
   const canvas = document.getElementById("color-wheel-canvas");
   if (canvas) {
     const dispatchWheelRgb = (rgb, isFinalCommit) => {
@@ -272,17 +273,7 @@ export function bindStageControlEvents() {
       let angle = Math.atan2(dy, dx) * (180 / Math.PI);
       if (angle < 0) angle += 360;
       const rgb = hsvToRgb(angle, dist / radius, 1);
-
-      const rIn = document.getElementById("input-r");
-      const gIn = document.getElementById("input-g");
-      const bIn = document.getElementById("input-b");
-      const hexIn = document.getElementById("input-hex");
-      if (rIn) rIn.value = String(rgb.r);
-      if (gIn) gIn.value = String(rgb.g);
-      if (bIn) bIn.value = String(rgb.b);
-      if (hexIn) hexIn.value = rgbToHex(rgb.r, rgb.g, rgb.b);
-      positionReticleFromRgb(rgb.r, rgb.g, rgb.b);
-      document.documentElement.style.setProperty("--beam-color", `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
+      syncRgbPreview(rgb);
 
       if (appState.wheelThrottleTimer) {
         clearTimeout(appState.wheelThrottleTimer);
@@ -293,7 +284,6 @@ export function bindStageControlEvents() {
         dispatchWheelRgb(rgb, true);
         return;
       }
-
       const now = Date.now();
       const elapsed = now - appState.lastWheelSendMs;
       if (elapsed >= WHEEL_THROTTLE_MS) {
@@ -314,8 +304,7 @@ export function bindStageControlEvents() {
       pickColorFromPointer(event.clientX, event.clientY, false);
     });
     canvas.addEventListener("pointermove", (event) => {
-      if (!appState.isDraggingWheel) return;
-      pickColorFromPointer(event.clientX, event.clientY, false);
+      if (appState.isDraggingWheel) pickColorFromPointer(event.clientX, event.clientY, false);
     });
     canvas.addEventListener("pointerup", (event) => {
       if (!appState.isDraggingWheel) return;
@@ -323,11 +312,29 @@ export function bindStageControlEvents() {
       pickColorFromPointer(event.clientX, event.clientY, true);
     });
     canvas.addEventListener("pointercancel", () => {
-      if (appState.wheelThrottleTimer) {
-        clearTimeout(appState.wheelThrottleTimer);
-        appState.wheelThrottleTimer = null;
-      }
+      if (appState.wheelThrottleTimer) clearTimeout(appState.wheelThrottleTimer);
+      appState.wheelThrottleTimer = null;
       appState.isDraggingWheel = false;
+    });
+    canvas.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const curR = clampInt(document.getElementById("input-r")?.value ?? 255, 0, 255);
+      const curG = clampInt(document.getElementById("input-g")?.value ?? 140, 0, 255);
+      const curB = clampInt(document.getElementById("input-b")?.value ?? 66, 0, 255);
+      const hsv = rgbToHsv(curR, curG, curB);
+      const hueStep = event.shiftKey ? 30 : 10;
+      const satStep = event.shiftKey ? 0.25 : 0.1;
+      let hue = hsv.s > 0 ? hsv.h : (Number(canvas.getAttribute("aria-valuenow")) || 0);
+      let sat = hsv.s;
+      if (event.key === "ArrowRight") { hue = (hue + hueStep) % 360; if (sat === 0) sat = 0.5; }
+      if (event.key === "ArrowLeft") { hue = (hue - hueStep + 360) % 360; if (sat === 0) sat = 0.5; }
+      if (event.key === "ArrowUp") sat = Math.min(1, sat + satStep);
+      if (event.key === "ArrowDown") sat = Math.max(0, sat - satStep);
+      const rgb = hsvToRgb(hue, sat, 1);
+      syncRgbPreview(rgb);
+      dispatchWheelRgb(rgb, true);
     });
   }
 
@@ -340,38 +347,33 @@ export function bindStageControlEvents() {
     positionReticleFromRgb(r, g, b);
     invokeApi(() => getBackendApi().set_color(r, g, b, null, null), () => t("status.rgbApplied", { r, g, b }));
   };
+  const applyHexAndCommit = () => {
+    const hexIn = document.getElementById("input-hex");
+    const parsed = hexIn ? parseHexToRgb(hexIn.value) : null;
+    if (parsed) {
+      document.getElementById("input-r").value = String(parsed.r);
+      document.getElementById("input-g").value = String(parsed.g);
+      document.getElementById("input-b").value = String(parsed.b);
+    }
+    applyRgbInputs();
+  };
 
   ["input-r", "input-g", "input-b"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", applyRgbInputs);
   });
-
+  const hexInputEl = document.getElementById("input-hex");
+  if (hexInputEl) hexInputEl.addEventListener("change", applyHexAndCommit);
   const applyRgbBtn = document.getElementById("apply-rgb-btn");
-  if (applyRgbBtn) {
-    applyRgbBtn.addEventListener("click", () => {
-      const hexIn = document.getElementById("input-hex");
-      const parsed = hexIn ? parseHexToRgb(hexIn.value) : null;
-      if (parsed) {
-        document.getElementById("input-r").value = String(parsed.r);
-        document.getElementById("input-g").value = String(parsed.g);
-        document.getElementById("input-b").value = String(parsed.b);
-      }
-      applyRgbInputs();
-    });
-  }
+  if (applyRgbBtn) applyRgbBtn.addEventListener("click", applyHexAndCommit);
 
   document.querySelectorAll(".color-swatch").forEach((swatch) => {
-    const r = clampInt(swatch.dataset.r, 0, 255);
-    const g = clampInt(swatch.dataset.g, 0, 255);
-    const b = clampInt(swatch.dataset.b, 0, 255);
+    const r = clampInt(swatch.dataset.r, 0, 255), g = clampInt(swatch.dataset.g, 0, 255), b = clampInt(swatch.dataset.b, 0, 255);
     swatch.style.setProperty("--swatch-rgb", `rgb(${r}, ${g}, ${b})`);
-    swatch.addEventListener("click", () => {
-      invokeApi(() => getBackendApi().set_color(r, g, b, null, null), () => t("status.swatchApplied", { r, g, b }));
-    });
+    swatch.addEventListener("click", () => invokeApi(() => getBackendApi().set_color(r, g, b, null, null), () => t("status.swatchApplied", { r, g, b })));
   });
 
-  const kelvinSlider = document.getElementById("kelvin-slider");
-  const kelvinOutput = document.getElementById("kelvin-output");
+  const kelvinSlider = document.getElementById("kelvin-slider"), kelvinOutput = document.getElementById("kelvin-output");
   if (kelvinSlider && kelvinOutput) {
     kelvinSlider.addEventListener("input", () => {
       const k = clampInt(kelvinSlider.value, 2200, 6500);
