@@ -40,7 +40,12 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     build_about_title,
     build_app_menu,
 )
-from gestor_luces.adapters.ui_webview.bridge import JsApi, WebviewBridge
+from gestor_luces.adapters.ui_webview.bridge import (
+    BlockedJsApi,
+    JsApi,
+    WebviewBridge,
+    build_exposed_functions,
+)
 from gestor_luces.adapters.ui_webview.http_server import NoCacheBottleServer
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import DEFAULT_THEME, normalize_theme
@@ -168,6 +173,7 @@ class DesktopApplication:
 
         initial_theme = normalize_theme(self._service.get_theme())
         initial_chrome = THEME_WINDOW_CHROME.get(initial_theme, THEME_WINDOW_CHROME[DEFAULT_THEME])
+        js_api = JsApi(self._bridge, fit_window=self.fit_window)
         self._window = webview.create_window(
             title=WINDOW_TITLE,
             url=_build_initial_ui_url(
@@ -175,7 +181,7 @@ class DesktopApplication:
                 initial_theme,
                 cache_bust=uuid.uuid4().hex[:8],
             ),
-            js_api=JsApi(self._bridge, fit_window=self.fit_window),
+            js_api=BlockedJsApi(),
             width=win_width,
             height=win_height,
             x=win_x,
@@ -184,6 +190,7 @@ class DesktopApplication:
             background_color=str(initial_chrome["background_color"]),
             hidden=self._minimized,
         )
+        self._window.expose(*build_exposed_functions(js_api))
         self._tray = TrayController(
             self._bridge,
             show_window=self.show_window,
