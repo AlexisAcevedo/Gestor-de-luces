@@ -115,13 +115,13 @@ export function renderFixtureList() {
       openRenameDialog(bulb);
     });
 
-    titleRow.append(nameHeading, renameBtn);
+    titleRow.append(nameHeading);
     const addressLine = document.createElement("p");
     addressLine.className = "fixture-address";
     addressLine.textContent = `${bulb.ip} · ${bulb.mac}`;
     metaDiv.append(titleRow, addressLine);
     selectLabel.append(checkbox, metaDiv);
-    topRow.appendChild(selectLabel);
+    topRow.append(selectLabel, renameBtn);
 
     const bottomRow = document.createElement("div");
     bottomRow.className = "fixture-card-bottom";

@@ -543,7 +543,7 @@ describe("renderScenesGrid(): built-in scene grid", () => {
 
     const dynamicScene = scene(1);
     assert.equal(dynamicScene.supports_speed, true);
-    cardFor(page.grid, dynamicScene.name).click();
+    findByClass(cardFor(page.grid, dynamicScene.name), "scene-card-trigger").click();
     await tick();
 
     assert.deepEqual(backend.calledWith("set_builtin_scene"), [[1, 100, null, null]]);
@@ -558,7 +558,7 @@ describe("renderScenesGrid(): built-in scene grid", () => {
 
     const staticScene = scene(34);
     assert.equal(staticScene.supports_speed, false);
-    cardFor(page.grid, staticScene.name).click();
+    findByClass(cardFor(page.grid, staticScene.name), "scene-card-trigger").click();
     await tick();
 
     assert.deepEqual(backend.calledWith("set_builtin_scene"), [[34, null, null, null]]);
@@ -568,36 +568,30 @@ describe("renderScenesGrid(): built-in scene grid", () => {
     page.slider.value = "175";
     renderScenesGrid();
 
-    cardFor(page.grid, scene(4).name).click();
+    findByClass(cardFor(page.grid, scene(4).name), "scene-card-trigger").click();
     await tick();
 
     assert.deepEqual(backend.calledWith("set_builtin_scene"), [[4, 175, null, null]]);
   });
 
-  test("Enter and Space on a card map to the same command, other keys do not", async () => {
+  test("scene card trigger is a native button and favorite button is an unnested sibling", async () => {
     renderScenesGrid();
     const card = cardFor(page.grid, scene(2).name);
-
-    card.dispatchEvent({ type: "keydown", key: "a", target: card });
-    card.dispatchEvent({ type: "keydown", key: "Enter", target: card });
-    card.dispatchEvent({ type: "keydown", key: " ", target: card });
-    await tick();
-
-    assert.deepEqual(backend.calledWith("set_builtin_scene"), [
-      [2, 100, null, null],
-      [2, 100, null, null]
-    ]);
-  });
-
-  test("keydown bubbling from a card child does not activate the scene", async () => {
-    renderScenesGrid();
-    const card = cardFor(page.grid, scene(2).name);
+    const trigger = findByClass(card, "scene-card-trigger");
     const star = findByClass(card, "scene-fav-btn");
 
-    card.dispatchEvent({ type: "keydown", key: "Enter", target: star });
-    await tick();
+    assert.equal(card.getAttribute("role"), null);
+    assert.equal(trigger.tagName, "button");
+    assert.equal(trigger.type, "button");
+    assert.equal(descendants(trigger).includes(star), false);
 
+    star.click();
+    await tick();
     assert.deepEqual(backend.calledWith("set_builtin_scene"), []);
+
+    trigger.click();
+    await tick();
+    assert.deepEqual(backend.calledWith("set_builtin_scene"), [[2, 100, null, null]]);
   });
 
   test("the active scene is marked and enables the speed control", () => {
@@ -885,12 +879,15 @@ describe("renderCustomScenesGrid(): custom presets", () => {
     assert.deepEqual(backend.calls.map((call) => call.name), ["apply_custom_scene"]);
   });
 
-  test("keyboard activation of a preset behaves like a click", async () => {
+  test("custom preset top trigger is a native button without redundant role=button", async () => {
     appState.customScenes = [RGB_PRESET];
     renderCustomScenesGrid();
 
     const topArea = findByClass(page.customGrid.children[0], "custom-scene-top");
-    topArea.dispatchEvent({ type: "keydown", key: "Enter", target: topArea });
+    assert.equal(topArea.tagName, "button");
+    assert.equal(topArea.type, "button");
+    assert.equal(topArea.getAttribute("role"), null);
+    topArea.click();
     await tick();
 
     assert.deepEqual(backend.calledWith("apply_custom_scene"), [["preset-rgb", null]]);

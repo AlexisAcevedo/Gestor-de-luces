@@ -789,6 +789,7 @@
   }
 
   .well-title {
+    display: block;
     margin: 0;
     font-size: 0.88rem;
     font-weight: 600;
@@ -1057,6 +1058,11 @@
     forced-color-adjust: none;
   }
 
+  #color-wheel-canvas:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 3px;
+  }
+
   .wheel-reticle {
     position: absolute;
     top: 50%;
@@ -1123,7 +1129,17 @@
   .field-group input[type="text"]:focus {
     background-color: var(--surface-3);
     box-shadow: 0 0 0 1.5px var(--border-focus);
+  }
+
+  .field-group input[type="number"]:focus:not(:focus-visible),
+  .field-group input[type="text"]:focus:not(:focus-visible) {
     outline: none;
+  }
+
+  .field-group input[type="number"]:focus-visible,
+  .field-group input[type="text"]:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 1px;
   }
 
   .hex-input-row {
@@ -1359,20 +1375,32 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 6px;
     min-height: 58px;
-    padding: 8px 10px 8px 12px;
+    padding: 0;
     background-color: var(--surface-3);
     color: var(--text-primary);
     border: none;
     box-shadow: var(--shadow-keycap);
     border-radius: var(--radius-md);
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
     overflow: clip;
     transition: background-color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+  }
+
+  .scene-card-trigger {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    min-height: 58px;
+    padding: 8px 10px 8px 12px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: inherit;
   }
 
   .scene-card::before {
@@ -1463,6 +1491,7 @@
 
   .scene-name {
     margin: 0;
+    padding-right: 28px;
     font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
@@ -1473,11 +1502,17 @@
   }
 
   .scene-fav-btn {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    min-width: 24px;
+    min-height: 24px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
@@ -1639,6 +1674,17 @@
     padding: 0 8px 0 0;
   }
 
+  .minutes-input-group:focus-within {
+    box-shadow:
+      0 0 0 1.5px var(--border-focus),
+      var(--shadow-well-recessed);
+  }
+
+  .minutes-input-group:has(input:focus-visible) {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
   .minutes-input-group input[type="number"] {
     width: 68px;
     background: transparent;
@@ -1699,6 +1745,14 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
 
@@ -2078,10 +2132,12 @@
   }
 
   .music-meter-fill {
-    width: 0%;
+    width: 100%;
     height: 100%;
     border-radius: 2px;
-    transition: width 50ms linear;
+    transform-origin: left center;
+    transform: scaleX(var(--meter-scale, 0));
+    transition: transform 50ms linear;
     forced-color-adjust: none;
   }
 
@@ -2382,11 +2438,15 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto !important;
+    }
+
     *,
     *::before,
     *::after {
-      transition-duration: 0.01ms !important;
-      animation-duration: 0.01ms !important;
+      animation: none !important;
+      transition-property: color, background-color, border-color, opacity !important;
     }
   }
 
@@ -2404,10 +2464,18 @@
       border-color: Highlight;
     }
 
+    .minutes-input-group:focus-within {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+
     .btn,
     .chip-btn,
     .console-dialog,
     .control-well,
+    .minutes-input-group,
+    .field-group input[type="number"],
+    .field-group input[type="text"],
     .music-meter-track {
       border: 1px solid ButtonText;
     }

@@ -185,6 +185,7 @@
       "ambi.scaleCinematic": "0.15 Cinematic",
       "ambi.scaleBalanced": "0.38 Balanced",
       "ambi.scaleFast": "0.75 Fast Response",
+      "ambi.smoothingPresetsAria": "EMA alpha presets",
       "ambi.autoBrightness": "Track screen brightness automatically (ITU-R BT.709 luminance)",
       "ambi.minBrightnessLabel": "Min Brightness Floor",
       "ambi.minBrightnessHint": "Prevents dark movie scenes from dimming the fixture below this threshold.",
@@ -212,10 +213,12 @@
       "music.scaleSubtle": "0.4x Subtle",
       "music.scaleBalanced": "1.0x Balanced",
       "music.scaleHighGain": "2.5x High Gain",
+      "music.sensitivityPresetsAria": "Beat sensitivity presets",
       "music.smoothingLabel": "EMA Smoothing Response (Alpha)",
       "music.scaleSmooth": "0.20 Smooth",
       "music.scalePunchy": "0.50 Punchy",
       "music.scaleInstant": "0.85 Instant Beat",
+      "music.smoothingPresetsAria": "Music EMA smoothing presets",
       "music.audioBrightness": "Modulate brightness with audio volume",
 
       /* Dialogos modales */
@@ -480,6 +483,7 @@
       "ambi.scaleCinematic": "0.15 Cinematográfico",
       "ambi.scaleBalanced": "0.38 Equilibrado",
       "ambi.scaleFast": "0.75 Respuesta Rápida",
+      "ambi.smoothingPresetsAria": "Preajustes de suavizado EMA",
       "ambi.autoBrightness": "Ajustar el brillo automáticamente según la luminancia de pantalla (ITU-R BT.709)",
       "ambi.minBrightnessLabel": "Piso Mínimo de Brillo",
       "ambi.minBrightnessHint": "Evita que escenas oscuras atenúen la luminaria por debajo de este umbral.",
@@ -507,10 +511,12 @@
       "music.scaleSubtle": "0.4x Sutil",
       "music.scaleBalanced": "1.0x Equilibrado",
       "music.scaleHighGain": "2.5x Alta Ganancia",
+      "music.sensitivityPresetsAria": "Preajustes de sensibilidad al ritmo",
       "music.smoothingLabel": "Respuesta de Suavizado EMA (Alfa)",
       "music.scaleSmooth": "0.20 Suave",
       "music.scalePunchy": "0.50 Dinámico",
       "music.scaleInstant": "0.85 Pulso Instantáneo",
+      "music.smoothingPresetsAria": "Preajustes de suavizado EMA musical",
       "music.audioBrightness": "Modular el brillo con el volumen de audio",
 
       /* Dialogos modales */

@@ -117,7 +117,7 @@ export function renderMusicPanel() {
     const pct = clampInt(Math.round((Number(ratio) || 0) * 100), 0, 100);
     const fill = document.getElementById(`music-meter-${bandName}-fill`);
     const val = document.getElementById(`music-meter-${bandName}-val`);
-    if (fill) fill.style.width = `${pct}%`;
+    if (fill) fill.style.setProperty("--meter-scale", (pct / 100).toFixed(3));
     if (val) val.textContent = `${pct}%`;
   };
 
