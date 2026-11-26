@@ -184,3 +184,31 @@ def test_every_builtin_scene_is_well_formed_and_unknown_ids_are_not_invented() -
 
     assert get_builtin_scene(0) is None
     assert get_builtin_scene(999) is None
+
+
+def test_domain_hardens_hex_lerp_bulb_and_from_dict_inputs() -> None:
+    """Reject non-hex signs, non-finite lerp factors, non-local Bulb IPs, and bool JSON fields."""
+    for bad_hex in ("###ff0000", "+1+2+3", 123456):
+        with pytest.raises(ValueError):
+            Color.from_hex(bad_hex)  # type: ignore[arg-type]
+
+    for bad_t in (float("nan"), float("inf"), True):
+        with pytest.raises(ValueError):
+            Color(0, 0, 0).lerp(Color(255, 255, 255), bad_t)  # type: ignore[arg-type]
+
+    for bad_ip in ("8.8.8.8", "0.0.0.0", "255.255.255.255", 123):  # noqa: S104
+        with pytest.raises(ValueError):
+            Bulb(ip=bad_ip)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError):
+        Bulb.from_dict({"ip": None})  # type: ignore[dict-item]
+    with pytest.raises(ValueError):
+        Bulb.from_dict({"ip": "192.168.1.10", "mac": 123})
+    with pytest.raises(ValueError):
+        LightState.from_dict({"brightness": True})
+    with pytest.raises(ValueError):
+        LightState.from_dict({"temperature": float("inf")})
+    with pytest.raises(ValueError):
+        CustomScene.from_dict({"id": None, "name": "Test", "mode": "temperature"})
+    with pytest.raises(ValueError):
+        CustomScene.from_dict({"id": "x", "name": "Test", "mode": "temperature", "speed": True})
