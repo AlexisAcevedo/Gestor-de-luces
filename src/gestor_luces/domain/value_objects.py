@@ -9,6 +9,8 @@ sin riesgo de efectos secundarios.
 
 from __future__ import annotations
 
+import ipaddress
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -16,6 +18,89 @@ SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
 DEFAULT_LANGUAGE: str = "en"
 SUPPORTED_THEMES: tuple[str, ...] = ("architectural-stone", "atmospheric-dark")
 DEFAULT_THEME: str = "architectural-stone"
+
+DEFAULT_WIZ_UDP_PORT = 38899
+MIN_LOOPBACK_PORT = 1024
+MAX_UDP_PORT = 65535
+
+_ALLOWED_LOCAL_IPV4_NETWORKS: tuple[ipaddress.IPv4Network, ...] = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+    ipaddress.IPv4Network("169.254.0.0/16"),
+    ipaddress.IPv4Network("127.0.0.0/8"),
+)
+_RESERVED_LINK_LOCAL_NETWORKS: tuple[ipaddress.IPv4Network, ...] = (
+    ipaddress.IPv4Network("169.254.0.0/24"),
+    ipaddress.IPv4Network("169.254.255.0/24"),
+)
+
+
+def parse_strict_int(value: object, *, field: str) -> int:
+    """Parse an integer value strictly, rejecting booleans and non-finite floats."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be an integer.")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer():
+            raise ValueError(f"{field} must be a finite integer.")
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            raise ValueError(f"{field} must be an integer.")
+        try:
+            return int(text)
+        except ValueError as exc:
+            raise ValueError(f"{field} must be an integer.") from exc
+    raise ValueError(f"{field} must be an integer.")
+
+
+def validate_local_endpoint(value: str) -> str:
+    """Validate that an endpoint targets a unicast local IPv4 host and allowed UDP port.
+
+    Accepts ``a.b.c.d`` or ``a.b.c.d:port``. Loopback endpoints permit unprivileged
+    ports ``1024..65535`` (for local simulators); LAN endpoints only permit the
+    standard WiZ UDP port ``38899`` (or no explicit port). Rejects unspecified,
+    multicast, reserved, network, and broadcast addresses.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"Invalid bulb IPv4 address: {value!r}")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"Invalid bulb IPv4 address: {value!r}")
+
+    host, sep, raw_port = cleaned.partition(":")
+    try:
+        address = ipaddress.IPv4Address(host)
+    except ValueError as exc:
+        raise ValueError(f"Invalid bulb IPv4 address: {value!r}") from exc
+
+    if address.is_unspecified or address.is_multicast or address.is_reserved:
+        raise ValueError(f"Bulb address must be a unicast local host: {value!r}")
+
+    matched_net = next((net for net in _ALLOWED_LOCAL_IPV4_NETWORKS if address in net), None)
+    if matched_net is None:
+        raise ValueError(f"Bulb address must be on the local network: {value!r}")
+    if address == matched_net.network_address or address == matched_net.broadcast_address:
+        raise ValueError(f"Bulb address cannot be a network or broadcast address: {value!r}")
+    if address.packed[-1] == 255:
+        raise ValueError(f"Bulb address cannot be a directed broadcast address: {value!r}")
+    if any(address in reserved for reserved in _RESERVED_LINK_LOCAL_NETWORKS):
+        raise ValueError(f"Bulb address cannot be in reserved link-local range: {value!r}")
+
+    if sep:
+        if not (raw_port.isascii() and raw_port.isdigit()):
+            raise ValueError(f"Invalid bulb port: {value!r}")
+        port = int(raw_port)
+        if address.is_loopback:
+            if not (MIN_LOOPBACK_PORT <= port <= MAX_UDP_PORT):
+                raise ValueError(f"Invalid loopback bulb port: {value!r}")
+        elif port != DEFAULT_WIZ_UDP_PORT:
+            raise ValueError(f"LAN bulb port must be {DEFAULT_WIZ_UDP_PORT}: {value!r}")
+
+    return cleaned
 
 
 def normalize_language(value: object) -> str:
@@ -71,16 +156,18 @@ class Color:
     @classmethod
     def from_hex(cls, hex_str: str) -> Color:
         """Construye un Color a partir de una cadena hexadecimal (#RRGGBB o RRGGBB)."""
-        cleaned = hex_str.strip().lstrip("#")
-        if len(cleaned) != 6:
+        if not isinstance(hex_str, str):
             raise ValueError(f"Invalid hex color format: {hex_str!r}. Expected 6 hex digits.")
-        try:
-            r = int(cleaned[0:2], 16)
-            g = int(cleaned[2:4], 16)
-            b = int(cleaned[4:6], 16)
-        except ValueError as exc:
-            raise ValueError(f"Invalid hex color format: {hex_str!r}.") from exc
-        return cls(r=r, g=g, b=b)
+        cleaned = hex_str.strip()
+        if cleaned.startswith("#"):
+            cleaned = cleaned[1:]
+        if len(cleaned) != 6 or any(ch not in "0123456789abcdefABCDEF" for ch in cleaned):
+            raise ValueError(f"Invalid hex color format: {hex_str!r}. Expected 6 hex digits.")
+        return cls(
+            r=int(cleaned[0:2], 16),
+            g=int(cleaned[2:4], 16),
+            b=int(cleaned[4:6], 16),
+        )
 
     def lerp(self, other: Color, t: float) -> Color:
         """Interpola linealmente entre este color y otro segun el factor t en [0.0, 1.0].
@@ -88,7 +175,15 @@ class Color:
         Se utiliza en el suavizado exponencial (EMA) para evitar parpadeos bruscos
         cuando el color promedio de la pantalla o el espectro de audio cambian rapido.
         """
-        clamped_t = max(0.0, min(1.0, float(t)))
+        if isinstance(t, bool):
+            raise ValueError("Interpolation factor t must be a finite number.")
+        try:
+            numeric_t = float(t)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("Interpolation factor t must be a finite number.") from exc
+        if not math.isfinite(numeric_t):
+            raise ValueError("Interpolation factor t must be a finite number.")
+        clamped_t = max(0.0, min(1.0, numeric_t))
         r = round(self.r + (other.r - self.r) * clamped_t)
         g = round(self.g + (other.g - self.g) * clamped_t)
         b = round(self.b + (other.b - self.b) * clamped_t)

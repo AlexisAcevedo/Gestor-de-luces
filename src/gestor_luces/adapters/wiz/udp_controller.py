@@ -21,9 +21,15 @@ from pywizlight.scenes import SCENES as PYWIZLIGHT_SCENES
 
 from gestor_luces.domain.models import Bulb, LightState
 from gestor_luces.domain.scenes import get_builtin_scene
-from gestor_luces.domain.value_objects import Color, LightMode
+from gestor_luces.domain.value_objects import (
+    DEFAULT_WIZ_UDP_PORT,
+    MAX_UDP_PORT,
+    MIN_LOOPBACK_PORT,
+    Color,
+    LightMode,
+    validate_local_endpoint,
+)
 
-DEFAULT_WIZ_UDP_PORT = 38899
 _MAX_NETWORK_TEXT_LEN = 64
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,6 +37,8 @@ _LOGGER = logging.getLogger(__name__)
 
 def _safe_int(value: Any, default: int) -> int:
     """Convierte datos no confiables de red a int sin lanzar excepciones."""
+    if isinstance(value, bool):
+        return default
     try:
         return int(value)
     except (TypeError, ValueError, OverflowError):
@@ -116,11 +124,17 @@ class WizUdpController:
             self._stream_sock = None
 
     def _resolve_endpoint(self, ip_or_endpoint: str) -> tuple[str, int]:
-        """Permite direcciones IP estandar o endpoints 'ip:puerto' para pruebas locales."""
-        cleaned = ip_or_endpoint.strip()
+        """Validate local IPv4 target and resolve `(host, port)` for UDP transport."""
+        cleaned = validate_local_endpoint(ip_or_endpoint)
         if ":" in cleaned:
             host, raw_port = cleaned.rsplit(":", 1)
             return host, int(raw_port)
+        address = ipaddress.IPv4Address(cleaned)
+        if address.is_loopback:
+            if not (MIN_LOOPBACK_PORT <= self._port <= MAX_UDP_PORT):
+                raise ValueError(f"Invalid loopback UDP port: {self._port}")
+        elif self._port != DEFAULT_WIZ_UDP_PORT:
+            raise ValueError(f"LAN bulb port must be {DEFAULT_WIZ_UDP_PORT}, got {self._port}")
         return cleaned, self._port
 
     async def _send_request(
@@ -138,17 +152,19 @@ class WizUdpController:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()
 
-        transport, _ = await loop.create_datagram_endpoint(
-            lambda: _UdpResponseProtocol(future),
-            remote_addr=(host, port),
-        )
+        transport: asyncio.DatagramTransport | None = None
         try:
+            transport, _ = await loop.create_datagram_endpoint(
+                lambda: _UdpResponseProtocol(future),
+                remote_addr=(host, port),
+            )
             transport.sendto(payload)
             return await asyncio.wait_for(future, timeout=effective_timeout)
         except (TimeoutError, OSError):
             return None
         finally:
-            transport.close()
+            if transport is not None:
+                transport.close()
 
     async def discover(self, wait_time: float = 2.5) -> list[Bulb]:
         """Descubre focos WiZ combinando broadcast UDP y barrido unicast de respaldo."""
@@ -176,9 +192,15 @@ class WizUdpController:
                     wait_time=wait_time,
                 )
                 for item in discovered:
-                    probed = await self.probe_bulb(item.ip, timeout=0.6)
+                    try:
+                        probed = await self.probe_bulb(item.ip, timeout=0.6)
+                    except (OSError, ValueError):
+                        _LOGGER.debug(
+                            "Ignoring invalid discovery candidate %r.", item.ip, exc_info=True
+                        )
+                        continue
                     if probed is not None:
-                        found_by_ip[item.ip] = probed
+                        found_by_ip[probed.ip] = probed
             except OSError:
                 # El Firewall de Windows puede filtrar las respuestas broadcast: no es un
                 # error del usuario, y el respaldo unicast /24 de abajo cubre ese caso.
@@ -232,10 +254,10 @@ class WizUdpController:
         is_on = bool(pilot.get("state", False))
         raw_dimming = _safe_int(pilot.get("dimming", 100), 100)
         brightness = max(10, min(100, raw_dimming))
-        speed = _safe_int(pilot.get("speed", 100), 100)
+        speed = max(10, min(200, _safe_int(pilot.get("speed", 100), 100)))
 
         scene_id = pilot.get("sceneId")
-        if isinstance(scene_id, int) and scene_id > 0:
+        if isinstance(scene_id, int) and not isinstance(scene_id, bool) and scene_id > 0:
             builtin = get_builtin_scene(scene_id)
             scene_name = (
                 builtin.name
