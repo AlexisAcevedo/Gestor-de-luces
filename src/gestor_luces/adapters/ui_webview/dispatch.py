@@ -90,9 +90,38 @@ def _run_fit_callback(callback: Callable[[int], bool], content_px: int) -> dict[
     # FRONTERA: el callback es el host nativo de la ventana (pywebview, pythonnet/WinForms y
     # ctypes para DWM), que no garantiza el tipo de excepcion. Su fallo debe volver a la
     # vista como error de ajuste en lugar de propagarse por el puente.
-    except Exception as exc:
+    except Exception:
         _LOGGER.debug("Window fit callback failed.", exc_info=True)
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "Unable to adjust window height."}
+
+
+class BlockedJsApi:
+    """Sentinel passed as `js_api` to block pywebview's dotted `getattr` traversal."""
+
+    __slots__ = ()
+
+    def __dir__(self) -> list[str]:
+        return []
+
+    def __getattribute__(self, name: str) -> Any:
+        raise AttributeError(name)
+
+
+def _make_exposed_callable(name: str, target: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap an API bound method in a plain function preserving its JS name."""
+
+    def _exposed(*args: Any, **kwargs: Any) -> Any:
+        return target(*args, **kwargs)
+
+    _exposed.__name__ = name
+    _exposed.__qualname__ = name
+    return _exposed
+
+
+def build_exposed_functions(api: JsApi) -> tuple[Callable[..., Any], ...]:
+    """Build the explicit tuple of exposed IPC callables for `window.expose(...)`."""
+    names = sorted((*JS_API_DISPATCH, "fit_window_height"))
+    return tuple(_make_exposed_callable(name, getattr(api, name)) for name in names)
 
 
 class WindowFitHandlers:

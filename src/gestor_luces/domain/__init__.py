@@ -12,11 +12,13 @@ from gestor_luces.domain.scenes import (
     list_builtin_scenes,
 )
 from gestor_luces.domain.value_objects import (
+    DEFAULT_WIZ_UDP_PORT,
     Brightness,
     Color,
     ColorTemperature,
     LightMode,
     SceneSpeed,
+    validate_local_endpoint,
 )
 
 __all__ = [
@@ -27,9 +29,11 @@ __all__ = [
     "Color",
     "ColorTemperature",
     "CustomScene",
+    "DEFAULT_WIZ_UDP_PORT",
     "LightMode",
     "LightState",
     "SceneSpeed",
     "get_builtin_scene",
     "list_builtin_scenes",
+    "validate_local_endpoint",
 ]

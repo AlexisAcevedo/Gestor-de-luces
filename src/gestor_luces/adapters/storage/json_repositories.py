@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +26,17 @@ from gestor_luces.domain.value_objects import (
     DEFAULT_THEME,
     normalize_language,
     normalize_theme,
+    validate_local_endpoint,
 )
+
+_LOGGER = logging.getLogger(__name__)
+
+MAX_JSON_FILE_BYTES = 1 * 1024 * 1024
+MAX_BULB_RECORDS = 256
+MAX_SCENE_RECORDS = 512
+_REPLACE_RETRY_ATTEMPTS = 5
+_REPLACE_RETRY_BASE_DELAY = 0.02
+_MISSING = object()
 
 
 def resolve_default_data_dir() -> Path:
@@ -41,6 +53,32 @@ def resolve_default_data_dir() -> Path:
         base_dir = Path.home() / ".gestor_de_luces"
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir
+
+
+def _replace_with_retry(src: Path, dst: Path) -> None:
+    """Replace destination file atomically, retrying transient Windows file locks."""
+    for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_BASE_DELAY * (2**attempt))
+
+
+def _quarantine_corrupt_file(target_path: Path, reason: str) -> None:
+    """Back up a corrupt JSON file before returning defaults so data is not silently lost."""
+    _LOGGER.warning(
+        "Corrupt JSON file %s (%s); backing up and resetting to defaults.",
+        target_path,
+        reason,
+    )
+    backup_path = target_path.with_name(f"{target_path.name}.corrupt")
+    try:
+        os.replace(target_path, backup_path)
+    except OSError:
+        _LOGGER.warning("Unable to back up corrupt JSON file %s.", target_path, exc_info=True)
 
 
 def _atomic_write_json(target_path: Path, payload: Any) -> None:
@@ -65,7 +103,7 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
             handle.write(serialized)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_path, target_path)
+        _replace_with_retry(tmp_path, target_path)
         replaced = True
     finally:
         # El temporal se descarta ante cualquier salida que no sea el reemplazo exitoso,
@@ -76,26 +114,50 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
                 tmp_path.unlink(missing_ok=True)
 
 
+def _read_json_document(target_path: Path) -> Any:
+    """Read and parse JSON with file size and recursion depth safeguards."""
+    if not target_path.is_file():
+        return _MISSING
+    try:
+        file_size = target_path.stat().st_size
+    except OSError:
+        _LOGGER.warning("Failed to stat JSON file %s.", target_path, exc_info=True)
+        return _MISSING
+    if file_size > MAX_JSON_FILE_BYTES:
+        _LOGGER.warning(
+            "JSON file %s exceeds %d bytes (%d); ignoring.",
+            target_path,
+            MAX_JSON_FILE_BYTES,
+            file_size,
+        )
+        return _MISSING
+    try:
+        raw_text = target_path.read_text(encoding="utf-8")
+        return json.loads(raw_text)
+    except OSError:
+        _LOGGER.warning("Failed to read JSON file %s.", target_path, exc_info=True)
+        return _MISSING
+    except (json.JSONDecodeError, ValueError, RecursionError) as exc:
+        _quarantine_corrupt_file(target_path, type(exc).__name__)
+        return _MISSING
+
+
 def _safe_read_json_list(target_path: Path) -> list[dict[str, Any]]:
     """Lee una lista de objetos JSON desde disco tolerando archivos inexistentes o danados.
 
     Si el usuario edita manualmente el archivo con errores de sintaxis o aun no existe,
     devolver una lista vacia permite que la consola inicie limpiamente sin bloquearse.
     """
-    if not target_path.is_file():
+    parsed = _read_json_document(target_path)
+    if parsed is _MISSING:
         return []
-    try:
-        raw_text = target_path.read_text(encoding="utf-8")
-        parsed = json.loads(raw_text)
-    except (OSError, json.JSONDecodeError, ValueError):
-        return []
-
     if isinstance(parsed, list):
         return [item for item in parsed if isinstance(item, dict)]
     if isinstance(parsed, dict):
         items = parsed.get("items")
         if isinstance(items, list):
             return [item for item in items if isinstance(item, dict)]
+    _quarantine_corrupt_file(target_path, "unexpected root type")
     return []
 
 
@@ -114,11 +176,22 @@ class JsonBulbRepository:
     def load_bulbs(self) -> list[Bulb]:
         """Recupera los focos guardados descartando entradas malformadas sin abortar la carga."""
         records = _safe_read_json_list(self._file_path)
+        if len(records) > MAX_BULB_RECORDS:
+            _LOGGER.warning(
+                "Bulb repository %s has %d records; truncating to %d.",
+                self._file_path,
+                len(records),
+                MAX_BULB_RECORDS,
+            )
+            records = records[:MAX_BULB_RECORDS]
         bulbs: list[Bulb] = []
         for record in records:
             try:
-                bulbs.append(Bulb.from_dict(record))
-            except (KeyError, TypeError, ValueError):
+                bulb = Bulb.from_dict(record)
+                validate_local_endpoint(bulb.ip)
+                bulbs.append(bulb)
+            except (KeyError, TypeError, ValueError, OverflowError):
+                _LOGGER.warning("Skipping invalid bulb record in %s.", self._file_path)
                 continue
         return bulbs
 
@@ -143,11 +216,20 @@ class JsonSceneRepository:
     def load_scenes(self) -> list[CustomScene]:
         """Recupera las escenas personalizadas validando sus rangos de dominio al cargar."""
         records = _safe_read_json_list(self._file_path)
+        if len(records) > MAX_SCENE_RECORDS:
+            _LOGGER.warning(
+                "Scene repository %s has %d records; truncating to %d.",
+                self._file_path,
+                len(records),
+                MAX_SCENE_RECORDS,
+            )
+            records = records[:MAX_SCENE_RECORDS]
         scenes: list[CustomScene] = []
         for record in records:
             try:
                 scenes.append(CustomScene.from_dict(record))
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError, OverflowError):
+                _LOGGER.warning("Skipping invalid scene record in %s.", self._file_path)
                 continue
         return scenes
 
@@ -183,15 +265,12 @@ class JsonSettingsRepository:
         retorna los valores por defecto (`en` y `architectural-stone`) para garantizar un arranque
         seguro.
         """
-        if not self._file_path.is_file():
-            return dict(DEFAULT_SETTINGS)
-        try:
-            raw_text = self._file_path.read_text(encoding="utf-8")
-            parsed = json.loads(raw_text)
-        except (OSError, json.JSONDecodeError, ValueError):
+        parsed = _read_json_document(self._file_path)
+        if parsed is _MISSING:
             return dict(DEFAULT_SETTINGS)
 
         if not isinstance(parsed, dict):
+            _quarantine_corrupt_file(self._file_path, "expected JSON object")
             return dict(DEFAULT_SETTINGS)
 
         language = normalize_language(parsed.get("language", DEFAULT_LANGUAGE))

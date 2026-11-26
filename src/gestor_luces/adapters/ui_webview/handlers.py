@@ -10,22 +10,96 @@ disfrace de error de validacion.
 
 from __future__ import annotations
 
+import logging
+import math
 from typing import Any
 
+_LOGGER = logging.getLogger(__name__)
 
-def _opt_int(value: Any) -> int | None:
-    """Convierte un argumento opcional de JavaScript a entero."""
-    return int(value) if value is not None else None
+
+def _req_int(value: Any, *, field: str) -> int:
+    """Validate and convert a required integer argument from JavaScript."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be an integer.")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer():
+            raise ValueError(f"{field} must be a finite integer.")
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            raise ValueError(f"{field} must be an integer.")
+        try:
+            return int(text)
+        except ValueError as exc:
+            raise ValueError(f"{field} must be an integer.") from exc
+    raise ValueError(f"{field} must be an integer.")
+
+
+def _opt_int(value: Any, *, field: str) -> int | None:
+    """Validate and convert an optional integer argument from JavaScript."""
+    return _req_int(value, field=field) if value is not None else None
+
+
+def _req_float(value: Any, *, field: str) -> float:
+    """Validate and convert a required finite float argument from JavaScript."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be a finite number.")
+    if isinstance(value, (int, float)):
+        try:
+            parsed = float(value)
+        except OverflowError as exc:
+            raise ValueError(f"{field} must be a finite number.") from exc
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            raise ValueError(f"{field} must be a finite number.")
+        try:
+            parsed = float(text)
+        except (ValueError, OverflowError) as exc:
+            raise ValueError(f"{field} must be a finite number.") from exc
+    else:
+        raise ValueError(f"{field} must be a finite number.")
+    if not math.isfinite(parsed):
+        raise ValueError(f"{field} must be a finite number.")
+    return parsed
+
+
+def _req_bool(value: Any, *, field: str) -> bool:
+    """Validate a required boolean argument from JavaScript."""
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be a boolean.")
+    return value
+
+
+def _req_str(value: Any, *, field: str) -> str:
+    """Validate a required string argument from JavaScript."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string.")
+    return value
+
+
+def _opt_str(value: Any, *, field: str) -> str:
+    """Validate an optional string argument, defaulting `None` to an empty string."""
+    return "" if value is None else _req_str(value, field=field)
 
 
 def _opt_ips(ips: Any) -> list[str] | None:
     """Normaliza la lista opcional de IPs objetivo que envia la vista."""
-    return [str(ip) for ip in ips] if isinstance(ips, list) else None
+    if ips is None:
+        return None
+    if not isinstance(ips, list) or any(not isinstance(ip, str) for ip in ips):
+        raise ValueError("ips must be a list of strings.")
+    return list(ips)
 
 
-def _opt_stripped(value: Any) -> str | None:
+def _opt_stripped(value: Any, *, field: str) -> str | None:
     """Recorta un argumento de texto opcional, o devuelve `None` si viene vacio."""
-    return str(value).strip() if value else None
+    if value is None:
+        return None
+    return _req_str(value, field=field).strip() or None
 
 
 class BridgeHandlers:
@@ -54,11 +128,21 @@ class BridgeHandlers:
 
     def add_manual_bulb(self, ip: str, name: str = "") -> dict[str, Any]:
         """Agrega un foco por direccion IP explicita y verifica su disponibilidad UDP."""
-        return self._call(lambda: self._service.add_manual_bulb(ip=str(ip), name=str(name)))
+        return self._call(
+            lambda: self._service.add_manual_bulb(
+                ip=_req_str(ip, field="ip"),
+                name=_opt_str(name, field="name"),
+            )
+        )
 
     def rename_bulb(self, ip: str, new_name: str) -> dict[str, Any]:
         """Actualiza el nombre descriptivo de un foco registrado."""
-        return self._call(lambda: self._service.rename_bulb(ip=str(ip), new_name=str(new_name)))
+        return self._call(
+            lambda: self._service.rename_bulb(
+                ip=_req_str(ip, field="ip"),
+                new_name=_req_str(new_name, field="new_name"),
+            )
+        )
 
     def select_targets(self, ips: list[str]) -> dict[str, Any]:
         """Actualiza la seleccion de focos activos para control individual o grupal."""
@@ -85,7 +169,9 @@ class BridgeHandlers:
         """Conmuta el encendido/apagado de los focos seleccionados o indicados."""
         return self._call(
             lambda: self._service.set_power(
-                is_on=bool(is_on), brightness=_opt_int(brightness), ips=_opt_ips(ips)
+                is_on=_req_bool(is_on, field="is_on"),
+                brightness=_opt_int(brightness, field="brightness"),
+                ips=_opt_ips(ips),
             )
         )
 
@@ -116,7 +202,10 @@ class BridgeHandlers:
     def set_brightness(self, brightness: int, ips: list[str] | None = None) -> dict[str, Any]:
         """Ajusta el nivel de brillo (10-100%) de los focos objetivo."""
         return self._call(
-            lambda: self._service.set_brightness(brightness=int(brightness), ips=_opt_ips(ips))
+            lambda: self._service.set_brightness(
+                brightness=_req_int(brightness, field="brightness"),
+                ips=_opt_ips(ips),
+            )
         )
 
     def set_color(
@@ -130,7 +219,11 @@ class BridgeHandlers:
         """Aplica un color RGB (0-255 por canal) a los focos objetivo."""
         return self._call(
             lambda: self._service.set_color(
-                r=int(r), g=int(g), b=int(b), brightness=_opt_int(brightness), ips=_opt_ips(ips)
+                r=_req_int(r, field="r"),
+                g=_req_int(g, field="g"),
+                b=_req_int(b, field="b"),
+                brightness=_opt_int(brightness, field="brightness"),
+                ips=_opt_ips(ips),
             )
         )
 
@@ -143,7 +236,9 @@ class BridgeHandlers:
         """Aplica una temperatura de blanco (2200K-6500K) a los focos objetivo."""
         return self._call(
             lambda: self._service.set_temperature(
-                kelvin=int(kelvin), brightness=_opt_int(brightness), ips=_opt_ips(ips)
+                kelvin=_req_int(kelvin, field="kelvin"),
+                brightness=_opt_int(brightness, field="brightness"),
+                ips=_opt_ips(ips),
             )
         )
 
@@ -157,9 +252,9 @@ class BridgeHandlers:
         """Activa una escena nativa de WiZ (ID 1-36) con velocidad y brillo opcionales."""
         return self._call(
             lambda: self._service.set_builtin_scene(
-                scene_id=int(scene_id),
-                speed=_opt_int(speed),
-                brightness=_opt_int(brightness),
+                scene_id=_req_int(scene_id, field="scene_id"),
+                speed=_opt_int(speed, field="speed"),
+                brightness=_opt_int(brightness, field="brightness"),
                 ips=_opt_ips(ips),
             )
         )
@@ -170,7 +265,8 @@ class BridgeHandlers:
         """Guarda el estado luminico actual como un nuevo preset personalizado en JSON."""
         return self._call(
             lambda: self._service.save_custom_scene_from_current(
-                name=str(name), source_ip=_opt_stripped(source_ip)
+                name=_req_str(name, field="name"),
+                source_ip=_opt_stripped(source_ip, field="source_ip"),
             )
         )
 
@@ -183,9 +279,9 @@ class BridgeHandlers:
         """Renombra un preset personalizado y opcionalmente sobreescribe su estado luminico."""
 
         def _apply() -> Any:
-            cleaned_id = str(scene_id).strip()
-            cleaned_name = str(name).strip()
-            if capture_current:
+            cleaned_id = _req_str(scene_id, field="scene_id").strip()
+            cleaned_name = _req_str(name, field="name").strip()
+            if _req_bool(capture_current, field="capture_current"):
                 return self._service.save_custom_scene_from_current(
                     name=cleaned_name, scene_id=cleaned_id
                 )
@@ -195,13 +291,18 @@ class BridgeHandlers:
 
     def delete_custom_scene(self, scene_id: str) -> dict[str, Any]:
         """Elimina una escena personalizada guardada."""
-        return self._call(lambda: self._service.delete_custom_scene(scene_id=str(scene_id).strip()))
+        return self._call(
+            lambda: self._service.delete_custom_scene(
+                scene_id=_req_str(scene_id, field="scene_id").strip()
+            )
+        )
 
     def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> dict[str, Any]:
         """Agrega o quita un preset personalizado del submenu de favoritos de la bandeja."""
         return self._call(
             lambda: self._service.set_custom_scene_favorite(
-                scene_id=str(scene_id).strip(), is_favorite=bool(is_favorite)
+                scene_id=_req_str(scene_id, field="scene_id").strip(),
+                is_favorite=_req_bool(is_favorite, field="is_favorite"),
             )
         )
 
@@ -209,7 +310,8 @@ class BridgeHandlers:
         """Aplica una escena personalizada a los focos seleccionados o indicados."""
         return self._call(
             lambda: self._service.apply_custom_scene(
-                scene_id=str(scene_id).strip(), ips=_opt_ips(ips)
+                scene_id=_req_str(scene_id, field="scene_id").strip(),
+                ips=_opt_ips(ips),
             )
         )
 
@@ -228,13 +330,13 @@ class BridgeHandlers:
         """Inicia la sincronizacion Ambilight de pantalla en el bucle de eventos asincrono."""
         return self._call(
             lambda: self._service.start_ambilight(
-                monitor_index=int(monitor_index),
-                color_mode=str(color_mode),
-                auto_brightness=bool(auto_brightness),
-                brightness=int(brightness),
-                smoothing_alpha=float(smoothing_alpha),
+                monitor_index=_req_int(monitor_index, field="monitor_index"),
+                color_mode=_req_str(color_mode, field="color_mode"),
+                auto_brightness=_req_bool(auto_brightness, field="auto_brightness"),
+                brightness=_req_int(brightness, field="brightness"),
+                smoothing_alpha=_req_float(smoothing_alpha, field="smoothing_alpha"),
                 ips=_opt_ips(ips),
-                min_brightness=int(min_brightness),
+                min_brightness=_req_int(min_brightness, field="min_brightness"),
             )
         )
 
@@ -260,12 +362,12 @@ class BridgeHandlers:
         """Inicia la sincronizacion musical WASAPI Loopback en el bucle asincrono."""
         return self._call(
             lambda: self._service.start_music_sync(
-                palette_mode=str(palette_mode),
-                sensitivity=float(sensitivity),
-                smoothing_alpha=float(smoothing_alpha),
-                audio_brightness=bool(audio_brightness),
-                brightness=int(brightness),
-                device_index=_opt_int(device_index),
+                palette_mode=_req_str(palette_mode, field="palette_mode"),
+                sensitivity=_req_float(sensitivity, field="sensitivity"),
+                smoothing_alpha=_req_float(smoothing_alpha, field="smoothing_alpha"),
+                audio_brightness=_req_bool(audio_brightness, field="audio_brightness"),
+                brightness=_req_int(brightness, field="brightness"),
+                device_index=_opt_int(device_index, field="device_index"),
                 ips=_opt_ips(ips),
             )
         )
@@ -287,19 +389,27 @@ class BridgeHandlers:
             return {"ok": False, "error": "Autostart is not available.", "enabled": False}
         try:
             return {"ok": True, "enabled": bool(self._autostart.is_enabled())}
-        except OSError as exc:
-            return {"ok": False, "error": str(exc), "enabled": False}
+        except OSError:
+            _LOGGER.warning("Unable to read autostart setting.", exc_info=True)
+            return {"ok": False, "error": "Unable to read autostart setting.", "enabled": False}
 
     def set_autostart(self, enabled: bool) -> dict[str, Any]:
         """Enable or disable starting with the operating system (always minimized to the tray)."""
+        if not isinstance(enabled, bool):
+            return {"ok": False, "error": "enabled must be a boolean.", "enabled": False}
         if self._autostart is None:
             return {"ok": False, "error": "Autostart is not available.", "enabled": False}
         try:
-            if bool(enabled):
+            if enabled:
                 self._autostart.enable()
             else:
                 self._autostart.disable()
             self._notify_state_changed()
             return {"ok": True, "enabled": bool(self._autostart.is_enabled())}
-        except OSError as exc:
-            return {"ok": False, "error": str(exc), "enabled": False}
+        except OSError:
+            _LOGGER.warning("Unable to update autostart setting.", exc_info=True)
+            return {
+                "ok": False,
+                "error": "Unable to update autostart setting.",
+                "enabled": False,
+            }

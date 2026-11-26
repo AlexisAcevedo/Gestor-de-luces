@@ -9,12 +9,17 @@ cache heuristica sobre `127.0.0.1:42001` y sigue sirviendo versiones viejas de
 
 from __future__ import annotations
 
-import json
 import os
+import secrets
+import socket
 import threading
 from typing import Any
 
 from webview import http as webview_http
+
+LOOPBACK_HOST = "127.0.0.1"
+HTTP_SERVER_THREAD_NAME = "GestorLucesHttpServer"
+MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 NO_CACHE_HEADERS: dict[str, str] = {
     "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -27,14 +32,52 @@ HTML_NO_CACHE_HEADERS: dict[str, str] = {
     "Clear-Site-Data": '"cache"',
 }
 
+SECURITY_HEADERS: dict[str, str] = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Resource-Policy": "same-origin",
+}
+
+HTML_CSP_HEADER = (
+    "default-src 'none'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'none'; "
+    "frame-ancestors 'none'"
+)
+
+ASSET_HEADERS: dict[str, str] = {**NO_CACHE_HEADERS, **SECURITY_HEADERS}
+HTML_ASSET_HEADERS: dict[str, str] = {
+    **HTML_NO_CACHE_HEADERS,
+    **SECURITY_HEADERS,
+    "Content-Security-Policy": HTML_CSP_HEADER,
+}
+
 
 def _strip_url_suffixes(url: str) -> str:
     """Elimina fragmento `#...` y query `?v=...` al calcular la raiz estatica."""
     return url.split("#", 1)[0].split("?", 1)[0]
 
 
+def _get_loopback_port() -> int:
+    """Bind an ephemeral TCP port explicitly on IPv4 loopback."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((LOOPBACK_HOST, 0))
+        return int(sock.getsockname()[1])
+
+
 class NoCacheBottleServer(webview_http.BottleServer):
-    """Variante de `BottleServer` que adjunta cabeceras no-cache reales a cada activo."""
+    """Variante endurecida de `BottleServer` solo-loopback y sin cache."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.uid = secrets.token_urlsafe(24)
 
     @classmethod
     def start_server(
@@ -49,6 +92,10 @@ class NoCacheBottleServer(webview_http.BottleServer):
         apps = [u for u in urls if webview_http.is_app(u)]
         server = cls()
         bottle = webview_http.bottle
+        server.port = http_port or _get_loopback_port()
+        protocol = "https" if keyfile and certfile else "http"
+        expected_host = f"{LOOPBACK_HOST}:{server.port}"
+        expected_origin = f"{protocol}://{expected_host}"
 
         if apps:
             app = apps[0]
@@ -63,22 +110,31 @@ class NoCacheBottleServer(webview_http.BottleServer):
             )
             app = bottle.Bottle()
 
-            @app.post(f"/js_api/{server.uid}")
-            def js_api() -> str:
-                bottle.response.headers["Access-Control-Allow-Origin"] = "*"
-                bottle.response.headers["Access-Control-Allow-Methods"] = (
-                    "PUT, GET, POST, DELETE, OPTIONS"
-                )
-                bottle.response.headers["Access-Control-Allow-Headers"] = (
-                    "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
-                )
-                body = json.loads(bottle.request.body.read().decode("utf-8"))
-                if body["uid"] in server.js_callback:
-                    return json.dumps(server.js_callback[body["uid"]](body))
-                webview_http.logger.error(
-                    f"JS callback function is not set for window {body['uid']}"
-                )
-                return ""
+            @app.hook("before_request")
+            def enforce_local_request() -> None:
+                if bottle.request.method not in ("GET", "HEAD"):
+                    bottle.abort(405, "Method Not Allowed")
+                host_header = (bottle.request.get_header("Host") or "").strip()
+                if host_header != expected_host:
+                    bottle.abort(403, "Forbidden")
+                origin_header = bottle.request.get_header("Origin")
+                if origin_header is not None and origin_header.strip() != expected_origin:
+                    bottle.abort(403, "Forbidden")
+                content_length = bottle.request.get_header("Content-Length")
+                if content_length is not None and content_length.strip() != "":
+                    try:
+                        length = int(content_length)
+                    except ValueError:
+                        bottle.abort(400, "Bad Request")
+                    if length < 0:
+                        bottle.abort(400, "Bad Request")
+                    if length > MAX_REQUEST_BODY_BYTES:
+                        bottle.abort(413, "Payload Too Large")
+
+            @app.hook("after_request")
+            def attach_security_headers() -> None:
+                for header_name, header_value in SECURITY_HEADERS.items():
+                    bottle.response.set_header(header_name, header_value)
 
             @app.route("/")
             @app.route("/<file:path>")
@@ -86,16 +142,16 @@ class NoCacheBottleServer(webview_http.BottleServer):
                 if not server.root_path:
                     return ""
                 headers = (
-                    HTML_NO_CACHE_HEADERS
+                    HTML_ASSET_HEADERS
                     if file.lower().endswith((".html", ".htm"))
-                    else NO_CACHE_HEADERS
+                    else ASSET_HEADERS
                 )
                 return bottle.static_file(file, root=server.root_path, headers=headers)
 
         server.root_path = webview_http.abspath(common_path) if common_path is not None else None
-        server.port = http_port or webview_http._get_random_port()
         if keyfile and certfile:
             server_adapter: Any = webview_http.SSLWSGIRefServer()
+            server_adapter.host = LOOPBACK_HOST
             server_adapter.port = server.port
             server_adapter.pywebview_keyfile = keyfile
             server_adapter.pywebview_certfile = certfile
@@ -106,17 +162,18 @@ class NoCacheBottleServer(webview_http.BottleServer):
             target=lambda: bottle.run(
                 app=app,
                 server=server_adapter,
+                host=LOOPBACK_HOST,
                 port=server.port,
                 quiet=not _state["debug"],
             ),
+            name=HTTP_SERVER_THREAD_NAME,
             daemon=True,
         )
         server.thread.start()
 
         server.running = True
-        protocol = "https" if keyfile and certfile else "http"
-        server.address = f"{protocol}://127.0.0.1:{server.port}/"
+        server.address = f"{protocol}://{LOOPBACK_HOST}:{server.port}/"
         cls.common_path = common_path
-        server.js_api_endpoint = f"{server.address}js_api/{server.uid}"
+        server.js_api_endpoint = None
 
         return server.address, common_path, server

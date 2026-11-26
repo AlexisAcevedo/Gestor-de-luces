@@ -13,8 +13,10 @@ from gestor_luces.adapters.storage.json_repositories import _atomic_write_json
 from gestor_luces.adapters.ui_webview.bridge import (
     JS_API_DISPATCH,
     JS_API_EXCLUDED,
+    BlockedJsApi,
     JsApi,
     WebviewBridge,
+    build_exposed_functions,
 )
 from gestor_luces.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
 from gestor_luces.adapters.wiz import udp_controller as udp_controller_module
@@ -140,6 +142,56 @@ def test_js_api_binds_every_exposed_method_to_the_bridge_instance() -> None:
     api = JsApi(bridge)
     for name in JS_API_DISPATCH:
         assert getattr(api, name).__self__ is bridge
+
+
+def test_blocked_js_api_blocks_all_getattr_and_dir_traversal() -> None:
+    """`BlockedJsApi` oculta todo atributo para impedir traversal por puntos en pywebview."""
+    blocked = BlockedJsApi()
+    assert dir(blocked) == []
+    for attr in ("_bridge", "_fit_window", "__class__", "__dict__", "__mro__", "set_power"):
+        assert getattr(blocked, attr, None) is None
+
+
+def test_window_expose_registers_only_allowlisted_functions_and_blocks_traversal() -> None:
+    """`Window.expose` publica solo los 30 callables planos y bloquea traversal via `js_api`."""
+    import inspect
+
+    import webview.util
+    import webview.window
+
+    bridge = MagicMock()
+    bridge._call.return_value = {"ok": True}
+    api = JsApi(bridge, fit_window=lambda _px: True)
+    window = webview.window.Window(
+        uid="test-sec",
+        title="Security Test",
+        url=None,
+        js_api=BlockedJsApi(),
+    )
+    window.expose(*build_exposed_functions(api))
+
+    assert set(window._functions) == _JS_API_SURFACE
+    for name, fn in window._functions.items():
+        assert inspect.getfullargspec(fn).args == [], f"{name} leaked signature parameters"
+
+    assert window._functions["set_power"](True, 50) == {"ok": True}
+    bridge._call.assert_called_once()
+    assert window._functions["fit_window_height"](600) == {"ok": True}
+
+    eval_calls: list[str] = []
+    window.evaluate_js = lambda script: eval_calls.append(script)  # type: ignore[method-assign]
+    for dangerous in (
+        "_bridge.shutdown",
+        "_bridge._service",
+        "__class__.__base__.__subclasses__",
+        "set_power.__closure__",
+        "shutdown",
+        "get_tray_snapshot",
+    ):
+        webview.util.js_bridge_call(window, dangerous, [], "req-1")
+
+    bridge.shutdown.assert_not_called()
+    assert eval_calls == []
 
 
 def test_bridge_narrows_service_errors_to_the_declared_tuple() -> None:

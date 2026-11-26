@@ -21,6 +21,7 @@ import threading
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from gestor_luces.adapters.ui_webview.handlers import _opt_ips, _req_float, _req_str
 from gestor_luces.domain.scenes import list_builtin_scenes
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,10 +40,36 @@ _SERVICE_CALL_ERRORS: tuple[type[BaseException], ...] = (
     ValueError,  # validacion del servicio y conversiones int()/float() de argumentos JS
     KeyError,  # preset o foco inexistente
     TypeError,  # argumentos JS con la forma equivocada
+    OverflowError,  # numeros fuera de rango representable desde JS
     OSError,  # E/S de persistencia y de red
     RuntimeError,  # bucle asincrono detenido o fallo de plataforma
     TimeoutError,  # el servicio no respondio dentro del timeout del puente
 )
+
+
+def _sanitize_error(exc: BaseException) -> str:
+    """Return a safe user-facing error message without leaking internal paths or traces."""
+    if isinstance(exc, TimeoutError):
+        _LOGGER.warning("Bridge operation timed out.", exc_info=True)
+        return "Operation timed out."
+    if isinstance(exc, OSError):
+        _LOGGER.warning("Bridge I/O or network operation failed.", exc_info=True)
+        return "Network or system I/O error."
+    if isinstance(exc, OverflowError):
+        return "Numeric value is out of range."
+    if isinstance(exc, TypeError):
+        _LOGGER.debug("Bridge call received invalid argument type.", exc_info=True)
+        return "Invalid argument type."
+    if isinstance(exc, KeyError):
+        if len(exc.args) == 1 and isinstance(exc.args[0], str):
+            return exc.args[0]
+        return "Requested item was not found."
+    if isinstance(exc, RuntimeError):
+        if str(exc) == "Background asyncio event loop is not running.":
+            return str(exc)
+        _LOGGER.warning("Bridge runtime error.", exc_info=True)
+        return "Internal service error."
+    return str(exc) or "Invalid value."
 
 
 async def _await_action(action: Callable[[], Any]) -> None:
@@ -65,7 +92,7 @@ class BridgeLifecycle:
         try:
             self._run_async(_await_action(action), timeout=timeout)
         except _SERVICE_CALL_ERRORS as exc:
-            return self._build_response(ok=False, error=str(exc))
+            return self._build_response(ok=False, error=_sanitize_error(exc))
         return self._success_response()
 
     def refresh_tray_states(self) -> dict[str, Any]:
@@ -86,7 +113,7 @@ class BridgeLifecycle:
         try:
             self._run_async(_await_action(_refresh), timeout=6.0)
         except _SERVICE_CALL_ERRORS as exc:
-            return self._build_response(ok=False, error=str(exc))
+            return self._build_response(ok=False, error=_sanitize_error(exc))
         return {"ok": True}
 
     def _poll(self) -> dict[str, Any]:
@@ -94,7 +121,7 @@ class BridgeLifecycle:
         try:
             return self._build_response(ok=True)
         except _SERVICE_CALL_ERRORS as exc:
-            return self._build_response(ok=False, error=str(exc))
+            return self._build_response(ok=False, error=_sanitize_error(exc))
 
     def _start_async_loop(self) -> None:
         """Arranca el hilo demonio que ejecuta el bucle de eventos del puente."""
@@ -269,8 +296,8 @@ class BridgeLifecycle:
         """Inicia el temporizador de apagado con atenuacion progresiva en el bucle asincrono."""
         return self._call(
             lambda: self._service.start_sleep_timer(
-                minutes=float(minutes),
-                ips=[str(ip) for ip in ips] if isinstance(ips, list) else None,
+                minutes=_req_float(minutes, field="minutes"),
+                ips=_opt_ips(ips),
             )
         )
 
@@ -287,7 +314,7 @@ class BridgeLifecycle:
 
     def set_language(self, language: str) -> dict[str, Any]:
         """Cambia y persiste el idioma activo (`en` o `es`), refrescando tambien la bandeja."""
-        return self._call(lambda: self._service.set_language(str(language)))
+        return self._call(lambda: self._service.set_language(_req_str(language, field="language")))
 
     def set_theme(self, theme: str) -> dict[str, Any]:
         """Cambia y persiste el tema visual activo (`architectural-stone` o `atmospheric-dark`)."""

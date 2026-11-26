@@ -312,6 +312,9 @@ class _FakeWindow:
         self.destroy_threads.append(threading.current_thread())
         self._on_destroy()
 
+    def expose(self, *functions: Callable[..., Any]) -> None:
+        return None
+
 
 class _FakeWebview:
     """Modulo `webview` falso: crea la ventana y bloquea `start` hasta el cierre."""
