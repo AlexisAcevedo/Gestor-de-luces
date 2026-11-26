@@ -15,6 +15,7 @@ las operaciones programadas de apagado.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import inspect
 import logging
 import threading
@@ -126,6 +127,7 @@ class BridgeLifecycle:
     def _start_async_loop(self) -> None:
         """Arranca el hilo demonio que ejecuta el bucle de eventos del puente."""
         self._shutdown_lock = threading.Lock()
+        self._loop_state_lock = threading.Lock()
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
         self._closed = False
@@ -148,7 +150,13 @@ class BridgeLifecycle:
         # `run_forever` ya esta iterando, asi que "listo" significa "corriendo" y no "a punto
         # de correr". Marcarla antes dejaba una ventana en la que un llamado desde PyWebView
         # veia `is_running()` en False y recibia "Background asyncio event loop is not running".
-        self._loop.call_soon(self._ready.set)
+        with self._loop_state_lock:
+            if self._closed:
+                self._ready.set()
+                if not self._loop.is_closed():
+                    self._loop.close()
+                return
+            self._loop.call_soon(self._ready.set)
         self._loop.run_forever()
 
         pending = asyncio.all_tasks(self._loop)
@@ -156,7 +164,9 @@ class BridgeLifecycle:
             task.cancel()
         if pending:
             self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        self._loop.close()
+        with self._loop_state_lock:
+            if not self._loop.is_closed():
+                self._loop.close()
 
     def _wait_until_running(self) -> bool:
         """Espera a que el bucle corra; False si el puente esta cerrado o nunca arranco."""
@@ -171,9 +181,28 @@ class BridgeLifecycle:
         if self._closed or not self._wait_until_running():
             coro.close()
             raise RuntimeError("Background asyncio event loop is not running.")
+        with self._loop_state_lock:
+            if self._closed or self._loop.is_closed() or not self._loop.is_running():
+                coro.close()
+                raise RuntimeError("Background asyncio event loop is not running.")
+            try:
+                future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+            except RuntimeError:
+                coro.close()
+                raise RuntimeError("Background asyncio event loop is not running.") from None
         effective_timeout = timeout if timeout is not None else self._default_timeout
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=effective_timeout)
+        try:
+            return future.result(timeout=effective_timeout)
+        except TimeoutError:
+            future.cancel()
+            raise
+        except concurrent.futures.CancelledError:
+            msg = (
+                "Background asyncio event loop is not running."
+                if self._closed
+                else "Background operation was cancelled."
+            )
+            raise RuntimeError(msg) from None
 
     def _collect_response_snapshot(
         self,
@@ -283,10 +312,17 @@ class BridgeLifecycle:
                 _LOGGER.debug(
                     "Ignoring error while cancelling streams during shutdown.", exc_info=True
                 )
-            self._closed = True
-            if self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
-            if self._thread.is_alive():
+            with self._loop_state_lock:
+                self._closed = True
+                if not self._loop.is_closed():
+                    try:
+                        self._loop.call_soon_threadsafe(self._loop.stop)
+                    except RuntimeError:
+                        _LOGGER.debug(
+                            "Bridge event loop already closed before stop callback.",
+                            exc_info=True,
+                        )
+            if self._thread.is_alive() and threading.current_thread() is not self._thread:
                 self._thread.join(timeout=2.0)
             self._service.close_all_resources()
 

@@ -29,7 +29,7 @@ from gestor_luces.application.ambilight_stream import AmbilightStreamManager
 from gestor_luces.application.rate_limiter import StreamRateLimiter
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import Color
-from gestor_luces.ports.interfaces import ScreenSampler
+from gestor_luces.ports.repositories import ScreenSampler
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 from tests.waits import wait_until_async
 

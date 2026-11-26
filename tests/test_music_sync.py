@@ -33,7 +33,7 @@ from gestor_luces.application.music_stream import MusicSyncStreamManager
 from gestor_luces.application.rate_limiter import StreamRateLimiter
 from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import Color
-from gestor_luces.ports.interfaces import AudioSampler
+from gestor_luces.ports.repositories import AudioSampler
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 from tests.waits import wait_for, wait_until_async
 

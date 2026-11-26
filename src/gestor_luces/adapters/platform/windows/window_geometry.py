@@ -29,6 +29,52 @@ WINDOW_FALLBACK_SIZE = WINDOW_DEFAULT_SIZE
 WINDOW_FIT_COMFORT_RATIO = 0.72
 
 
+def _extract_screen_area(screen: Any) -> tuple[int, int, int, int] | None:
+    """Extrae `(origin_x, origin_y, width, height)` logicos de una pantalla pywebview.
+
+    Prefiere `screen.frame` (`WorkingArea`) cuando expone dimensiones validas para
+    respetar la barra de tareas; si no, usa `(screen.x, screen.y, screen.width, screen.height)`.
+    """
+    try:
+        frame = getattr(screen, "frame", None)
+        if frame is not None:
+            area_w = int(getattr(frame, "Width", 0))
+            area_h = int(getattr(frame, "Height", 0))
+            if area_w > 0 and area_h > 0:
+                area_x = int(getattr(frame, "X", getattr(screen, "x", 0) or 0))
+                area_y = int(getattr(frame, "Y", getattr(screen, "y", 0) or 0))
+                return area_x, area_y, area_w, area_h
+        screen_w = int(screen.width)
+        screen_h = int(screen.height)
+        origin_x = int(getattr(screen, "x", 0) or 0)
+        origin_y = int(getattr(screen, "y", 0) or 0)
+    except (AttributeError, LookupError, TypeError, ValueError, OverflowError):
+        return None
+    if screen_w <= 0 or screen_h <= 0:
+        return None
+    return origin_x, origin_y, screen_w, screen_h
+
+
+def _select_primary_screen(screens: Any) -> Any:
+    """Devuelve la pantalla principal (`(x, y) == (0, 0)`) o `screens[0]` como respaldo."""
+    try:
+        screen_list = list(screens)
+    except TypeError:
+        return None
+    if not screen_list:
+        return None
+    for candidate in screen_list:
+        try:
+            if (
+                int(getattr(candidate, "x", 0) or 0) == 0
+                and int(getattr(candidate, "y", 0) or 0) == 0
+            ):
+                return candidate
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return screen_list[0]
+
+
 def _compute_initial_window_geometry(
     webview_module: object,
 ) -> tuple[int, int, int | None, int | None]:
@@ -38,17 +84,13 @@ def _compute_initial_window_geometry(
     Falls back to WINDOW_DEFAULT_SIZE (OS-centered) when screen info is unavailable.
     """
     screens = getattr(webview_module, "screens", None)
-    if not screens:
+    primary = _select_primary_screen(screens) if screens else None
+    if primary is None:
         return (*WINDOW_DEFAULT_SIZE, None, None)
-    try:
-        screen = screens[0]
-        screen_w, screen_h = int(screen.width), int(screen.height)
-    except (AttributeError, LookupError, TypeError, ValueError, OverflowError):
-        # pywebview reporta las pantallas como objetos planos: un objeto sin `width`/
-        # `height` o un valor que no se puede convertir es "sin informacion de pantalla".
+    area = _extract_screen_area(primary)
+    if area is None:
         return (*WINDOW_DEFAULT_SIZE, None, None)
-    if screen_w <= 0 or screen_h <= 0:
-        return (*WINDOW_DEFAULT_SIZE, None, None)
+    origin_x, origin_y, screen_w, screen_h = area
 
     width = min(WINDOW_DEFAULT_SIZE[0], screen_w)
     if screen_w >= WINDOW_MIN_SIZE[0]:
@@ -58,8 +100,8 @@ def _compute_initial_window_geometry(
     if screen_h >= WINDOW_MIN_SIZE[1]:
         height = max(WINDOW_MIN_SIZE[1], height)
 
-    x = max(0, (screen_w - width) // 2)
-    y = max(0, (screen_h - height) // 2)
+    x = origin_x + max(0, (screen_w - width) // 2)
+    y = origin_y + max(0, (screen_h - height) // 2)
     return width, height, x, y
 
 
@@ -107,14 +149,18 @@ def _fit_native_window_height(
     native_form = getattr(window, "native", None)
     if native_form is None:
         return False
-    if bool(getattr(native_form, "IsDisposed", False)) or not bool(
-        getattr(native_form, "IsHandleCreated", True)
+    if (
+        bool(getattr(native_form, "IsDisposed", False))
+        or bool(getattr(native_form, "Disposing", False))
+        or not bool(getattr(native_form, "IsHandleCreated", True))
     ):
         return False
 
     def _execute() -> bool:
-        if bool(getattr(native_form, "IsDisposed", False)) or not bool(
-            getattr(native_form, "IsHandleCreated", True)
+        if (
+            bool(getattr(native_form, "IsDisposed", False))
+            or bool(getattr(native_form, "Disposing", False))
+            or not bool(getattr(native_form, "IsHandleCreated", True))
         ):
             return False
         import ctypes
@@ -195,7 +241,8 @@ def _fit_native_window_height(
             return False
 
         try:
-            dpi = int(target_user32.GetDpiForWindow(hwnd)) or 96
+            raw_dpi = int(target_user32.GetDpiForWindow(hwnd))
+            dpi = raw_dpi if raw_dpi > 0 else 96
         except NATIVE_CALL_ERRORS:
             # `GetDpiForWindow` no existe antes de Windows 10 1607: se asume 96 dpi.
             _LOGGER.debug("DPI query failed; assuming 96 dpi.", exc_info=True)
@@ -211,9 +258,11 @@ def _fit_native_window_height(
         outer_h = outer.bottom - outer.top
         chrome_phys = outer_h - (client.bottom - client.top)
         try:
-            for control in getattr(native_form, "Controls", ()):
-                if control.GetType().Name == "MenuStrip" and getattr(control, "Visible", True):
-                    chrome_phys += int(control.Height)
+            controls = getattr(native_form, "Controls", None)
+            if controls is not None:
+                for control in list(controls):
+                    if control.GetType().Name == "MenuStrip" and getattr(control, "Visible", True):
+                        chrome_phys += int(control.Height)
         except (AttributeError, TypeError, ValueError):
             # Un control sin `GetType`/`Height` utilizable deja el chrome medido hasta aca;
             # una excepcion de pythonnet fuera de esta tupla la atrapa la frontera de abajo,
@@ -237,18 +286,24 @@ def _fit_native_window_height(
                 return False
             work_top, work_bottom = outer.top, outer.top + int(effective_fallback * scale)
 
+        work_height_phys = work_bottom - work_top
+        if work_height_phys <= 0:
+            return False
+
         target_logical = _compute_fit_height(
             content_px,
             chrome_phys / scale,
             min_height,
-            _fit_max_height(int((work_bottom - work_top) / scale)),
+            _fit_max_height(int(work_height_phys / scale)),
         )
         target_phys = int(round(target_logical * scale))
-        if target_phys == outer_h:
-            return True
         new_top = outer.top
         if new_top + target_phys > work_bottom:
             new_top = max(work_top, work_bottom - target_phys)
+        elif new_top < work_top:
+            new_top = work_top
+        if target_phys == outer_h and new_top == outer.top:
+            return True
         # SWP_NOZORDER | SWP_NOACTIVATE
         return bool(
             target_user32.SetWindowPos(

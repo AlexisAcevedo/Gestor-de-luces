@@ -276,28 +276,37 @@ def main(argv: list[str] | None = None) -> int:
                 "(Pass --multi-instance to launch a side-by-side window.)"
             )
             guard.signal_existing_instance()
+            guard.release()
             return 0
 
     autostart = _default_autostart()
-    service, bridge = build_application(autostart=autostart)
+    bridge: WebviewBridge | None = None
+    try:
+        service, bridge = build_application(autostart=autostart)
 
-    if args.smoke_test:
-        return _run_smoke_test(bridge)
+        if args.smoke_test:
+            return _run_smoke_test(bridge)
 
-    app = DesktopApplication(
-        service=service,
-        bridge=bridge,
-        index_path=index_path,
-        icon_path=icon_path,
-        ui_dir=ui_dir,
-        debug=args.debug,
-        minimized=args.minimized,
-        multi_instance=getattr(args, "multi_instance", False),
-        guard=guard,
-        autostart=autostart,
-    )
-    apply_app_user_model_id()
-    app.create_window()
+        app = DesktopApplication(
+            service=service,
+            bridge=bridge,
+            index_path=index_path,
+            icon_path=icon_path,
+            ui_dir=ui_dir,
+            debug=args.debug,
+            minimized=args.minimized,
+            multi_instance=getattr(args, "multi_instance", False),
+            guard=guard,
+            autostart=autostart,
+        )
+        apply_app_user_model_id()
+        app.create_window()
+    except BaseException:
+        if bridge is not None:
+            bridge.shutdown()
+        if guard is not None:
+            guard.release()
+        raise
     win_width, win_height = app.window_size
     _LOGGER.info("Opening UI window (%sx%s) -> %s", win_width, win_height, index_path)
     app.start()
