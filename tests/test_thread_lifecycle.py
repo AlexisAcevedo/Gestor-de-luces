@@ -238,7 +238,7 @@ class _FakeLightControlService:
     def cancel_sleep_timer(self) -> None:
         return None
 
-    def close_audio_sampler(self) -> None:
+    def close_all_resources(self) -> None:
         self.closed_audio = True
 
 

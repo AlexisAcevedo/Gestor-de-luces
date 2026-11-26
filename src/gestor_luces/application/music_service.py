@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from gestor_luces.application.music_stream import VALID_MUSIC_PALETTES
 from gestor_luces.application.service_context import ServiceContext
-from gestor_luces.application.sleep_timer import AwaitableStatusDict
-from gestor_luces.domain.value_objects import Color
+from gestor_luces.application.sleep_timer import (
+    AwaitableStatusDict,
+    require_finite_float,
+    require_int_value,
+)
+from gestor_luces.domain.value_objects import Brightness, Color
 
 
 class MusicService:
@@ -49,13 +55,28 @@ class MusicService:
         ips: list[str] | None = None,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion acustica WASAPI Loopback hacia los focos objetivo."""
+        normalized_palette = str(palette_mode).strip().lower()
+        if normalized_palette not in VALID_MUSIC_PALETTES:
+            raise ValueError(
+                f"Invalid music palette '{palette_mode}'. Expected one of {VALID_MUSIC_PALETTES}."
+            )
+        parsed_sensitivity = require_finite_float(sensitivity, "sensitivity")
+        if not (0.3 <= parsed_sensitivity <= 3.0):
+            raise ValueError("Music sensitivity must be between 0.3 and 3.0.")
+        raw_alpha = require_finite_float(smoothing_alpha, "smoothing_alpha")
+        parsed_alpha = max(0.05, min(1.0, raw_alpha))
+        validated_brightness = Brightness(require_int_value(brightness, "brightness")).percent
+        parsed_device = (
+            require_int_value(device_index, "device_index") if device_index is not None else None
+        )
+        target_ips = self._ctx.get_target_ips(ips)
+        asyncio.get_running_loop()
+
         # Exclusion mutua: iniciar el modo Musica detiene automaticamente el flujo Ambilight.
         self._stop_ambilight()
         sampler = self._ctx.ensure_audio_sampler()
-        parsed_alpha = max(0.05, min(1.0, float(smoothing_alpha)))
         self._ctx.rate_limiter.set_alpha(parsed_alpha)
         self._ctx.rate_limiter.reset()
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _on_frame(
             frame_color: Color, frame_brightness: int, frame_ips: list[str]
@@ -70,12 +91,12 @@ class MusicService:
             sampler=sampler,
             target_ips=target_ips,
             on_frame=_on_frame,
-            palette_mode=str(palette_mode),
-            sensitivity=float(sensitivity),
+            palette_mode=normalized_palette,
+            sensitivity=parsed_sensitivity,
             smoothing_alpha=parsed_alpha,
             audio_brightness=bool(audio_brightness),
-            brightness=int(brightness),
-            device_index=device_index,
+            brightness=validated_brightness,
+            device_index=parsed_device,
         )
 
     def stop_music_sync(self, close_sampler: bool = False) -> AwaitableStatusDict:

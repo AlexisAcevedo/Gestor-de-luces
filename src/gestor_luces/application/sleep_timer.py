@@ -15,6 +15,49 @@ from collections.abc import Awaitable, Callable, Generator
 from typing import Any
 
 
+def require_finite_float(value: object, name: str) -> float:
+    """Parse a numeric value into a finite float, rejecting bool, NaN, and Inf."""
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a finite number, got bool.")
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a finite number, got {value!r}.") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be a finite number, got {value!r}.")
+    return parsed
+
+
+def require_int_value(value: object, name: str) -> int:
+    """Parse an integer value while rejecting booleans and non-finite floats."""
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be an integer, got bool.")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite integer, got {value!r}.")
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {value!r}.") from exc
+
+
+def finite_metric(value: object) -> float:
+    """Return a finite float metric or 0.0 when NaN, Inf, or non-numeric."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        parsed = float(value)
+        if math.isfinite(parsed):
+            return parsed
+    return 0.0
+
+
+def sanitize_brightness(value: object, fallback: int) -> int:
+    """Clamp finite numeric brightness to [10, 100], falling back on NaN/Inf/bool."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        parsed = float(value)
+        if math.isfinite(parsed):
+            return max(10, min(100, int(round(parsed))))
+    return fallback
+
+
 class AwaitableStatusDict(dict[str, Any]):
     """Diccionario de estado compatible tanto con llamadas sincronas como con `await`.
 
@@ -38,6 +81,7 @@ class SleepTimerManager:
         self._task: asyncio.Task[None] | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._active: bool = False
+        self._generation: int = 0
         self._total_seconds: float = 0.0
         self._deadline: float = 0.0
         self._target_ips: list[str] = []
@@ -51,21 +95,25 @@ class SleepTimerManager:
         on_expire_power_off: Callable[[list[str]], Awaitable[Any]],
     ) -> AwaitableStatusDict:
         """Inicia una nueva cuenta regresiva cancelando cualquier temporizador previo."""
-        if duration_seconds <= 0:
+        parsed_duration = require_finite_float(duration_seconds, "Sleep timer duration")
+        if parsed_duration <= 0:
             raise ValueError("Sleep timer duration must be greater than zero seconds.")
+        start_b = max(10, min(100, require_int_value(initial_brightness, "initial_brightness")))
+        loop = asyncio.get_running_loop()
 
         self.cancel()
 
-        loop = asyncio.get_running_loop()
+        self._generation += 1
+        run_id = self._generation
         self._loop = loop
         self._active = True
-        self._total_seconds = float(duration_seconds)
+        self._total_seconds = parsed_duration
         self._deadline = loop.time() + self._total_seconds
         self._target_ips = list(target_ips)
 
-        start_b = max(10, min(100, int(initial_brightness)))
         self._task = loop.create_task(
             self._run_countdown(
+                run_id=run_id,
                 duration_seconds=self._total_seconds,
                 target_ips=list(self._target_ips),
                 initial_brightness=start_b,
@@ -78,6 +126,7 @@ class SleepTimerManager:
 
     def cancel(self) -> AwaitableStatusDict:
         """Cancela inmediatamente el temporizador activo sin apagar los focos."""
+        self._generation += 1
         if self._task is not None and not self._task.done():
             self._task.cancel()
         self._task = None
@@ -123,6 +172,7 @@ class SleepTimerManager:
 
     async def _run_countdown(
         self,
+        run_id: int,
         duration_seconds: float,
         target_ips: list[str],
         initial_brightness: int,
@@ -143,18 +193,24 @@ class SleepTimerManager:
             span = max(0, initial_brightness - 10)
             step_ratios = (0.65, 0.35, 0.0)
             for ratio in step_ratios:
+                if self._generation != run_id:
+                    return
                 target_b = max(10, min(100, round(10 + span * ratio)))
                 if target_ips:
                     await on_step_brightness(target_b, list(target_ips))
                 if step_interval > 0:
                     await asyncio.sleep(step_interval)
 
+            if self._generation != run_id:
+                return
             if target_ips:
                 await on_expire_power_off(list(target_ips))
         except asyncio.CancelledError:
             raise
         finally:
-            self._active = False
-            self._total_seconds = 0.0
-            self._deadline = 0.0
-            self._target_ips = []
+            if self._generation == run_id:
+                self._task = None
+                self._active = False
+                self._total_seconds = 0.0
+                self._deadline = 0.0
+                self._target_ips = []

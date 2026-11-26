@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from gestor_luces.application.rate_limiter import StreamRateLimiter
 from gestor_luces.domain.value_objects import Color
 
@@ -81,3 +83,48 @@ def test_rate_limiter_applies_ema_smoothing() -> None:
     clock.advance(0.2)
     smoothed = limiter.prepare_frame("192.168.1.38", Color(200, 100, 50), 100)
     assert smoothed == (Color(100, 50, 25), 60)
+
+
+def test_rate_limiter_small_alpha_does_not_stall_in_deadband() -> None:
+    """Con alpha chico y deadband activo, el EMA interno avanza sin estancarse."""
+    clock = FakeClock()
+    limiter = StreamRateLimiter(
+        max_hz=10.0,
+        alpha=0.05,
+        min_color_delta=3,
+        min_brightness_delta=3,
+        clock=clock,
+    )
+
+    assert limiter.prepare_frame("192.168.1.38", Color(0, 0, 0), 20) == (Color(0, 0, 0), 20)
+
+    emitted: list[tuple[Color, int]] = []
+    for _ in range(120):
+        clock.advance(0.15)
+        res = limiter.prepare_frame("192.168.1.38", Color(40, 0, 0), 50)
+        if res is not None:
+            emitted.append(res)
+
+    assert len(emitted) >= 3
+    last_color, last_brightness = emitted[-1]
+    assert last_color.r >= 38
+    assert last_brightness >= 48
+
+
+@pytest.mark.parametrize("bad_float", [float("nan"), float("inf"), float("-inf"), True, False])
+def test_rate_limiter_rejects_non_finite_and_bool_params(bad_float: object) -> None:
+    """Rechaza NaN, Inf y booleanos en max_hz, alpha y umbrales."""
+    with pytest.raises(ValueError):
+        StreamRateLimiter(max_hz=bad_float)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        StreamRateLimiter(alpha=bad_float)  # type: ignore[arg-type]
+
+    limiter = StreamRateLimiter()
+    with pytest.raises(ValueError):
+        limiter.set_alpha(bad_float)  # type: ignore[arg-type]
+
+    if isinstance(bad_float, bool):
+        with pytest.raises(ValueError):
+            StreamRateLimiter(min_color_delta=bad_float)
+        with pytest.raises(ValueError):
+            StreamRateLimiter(min_brightness_delta=bad_float)
