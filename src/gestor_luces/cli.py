@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import sys
 
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.domain.models import LightState
-from gestor_luces.domain.value_objects import Color
+from gestor_luces.domain.value_objects import Color, validate_local_endpoint
 
 
 def _format_state(state: LightState) -> str:
@@ -73,8 +74,8 @@ async def _resolve_target_ip(
     explicit_ip: str | None,
 ) -> str | None:
     """Resuelve la IP del foco a partir de --ip o descubre el primero en la red."""
-    if explicit_ip:
-        return explicit_ip
+    if explicit_ip is not None:
+        return validate_local_endpoint(explicit_ip)
 
     bulbs = await controller.discover(wait_time=2.0)
     if bulbs:
@@ -87,7 +88,11 @@ async def run_command(controller: WizUdpController, args: argparse.Namespace) ->
     if args.command == "discover":
         return await run_discover(controller, args.wait)
 
-    target_ip = await _resolve_target_ip(controller, args.ip)
+    try:
+        target_ip = await _resolve_target_ip(controller, args.ip)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
     if not target_ip:
         print("Error: Could not find a WiZ bulb automatically. Pass --ip <BULB_IP>.")
         return 1
@@ -158,6 +163,27 @@ def restricted_int(min_val: int, max_val: int):
     return validator
 
 
+def _local_endpoint_arg(raw: str) -> str:
+    """Validate `--ip` CLI argument as a local IPv4 bulb endpoint."""
+    try:
+        return validate_local_endpoint(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _positive_wait_seconds(raw: str) -> float:
+    """Validate `discover --wait` as a finite duration in [0.1, 30.0] seconds."""
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise argparse.ArgumentTypeError(f"Expected number, got '{raw}'.") from exc
+    if not math.isfinite(value) or not (0.1 <= value <= 30.0):
+        raise argparse.ArgumentTypeError(
+            f"Wait time must be between 0.1 and 30.0 seconds, got {raw}."
+        )
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construye el parser de argumentos CLI."""
     parser = argparse.ArgumentParser(
@@ -173,7 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     discover_parser.add_argument(
         "--wait",
-        type=float,
+        type=_positive_wait_seconds,
         default=3.0,
         help="Seconds to wait for broadcast replies (default: 3.0).",
     )
@@ -182,6 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
     ip_parent = argparse.ArgumentParser(add_help=False)
     ip_parent.add_argument(
         "--ip",
+        type=_local_endpoint_arg,
         default=None,
         help="Target bulb IPv4 address (auto-discovers first bulb if omitted).",
     )

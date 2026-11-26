@@ -238,7 +238,7 @@ class _FakeLightControlService:
     def cancel_sleep_timer(self) -> None:
         return None
 
-    def close_audio_sampler(self) -> None:
+    def close_all_resources(self) -> None:
         self.closed_audio = True
 
 
@@ -311,6 +311,9 @@ class _FakeWindow:
     def destroy(self) -> None:
         self.destroy_threads.append(threading.current_thread())
         self._on_destroy()
+
+    def expose(self, *functions: Callable[..., Any]) -> None:
+        return None
 
 
 class _FakeWebview:

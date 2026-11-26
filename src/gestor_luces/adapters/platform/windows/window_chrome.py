@@ -10,9 +10,13 @@ import ctypes
 import logging
 import os
 import sys
+import threading
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
+_WINDOW_ICON_LOCK = threading.Lock()
+# Maps (hwnd, kind) -> (icon_path, hicon_handle, user32_id)
+_APPLIED_WINDOW_ICONS: dict[tuple[int, int], tuple[str, int, int]] = {}
 
 #: Unica politica de errores para las llamadas `ctypes` a una DLL de Win32 del paquete.
 #:
@@ -175,15 +179,50 @@ def apply_app_user_model_id(
         return False
     try:
         import ctypes
+        from ctypes import wintypes
 
         target_shell32 = ctypes.windll.shell32 if shell32 is None else shell32
         setter = getattr(target_shell32, "SetCurrentProcessExplicitAppUserModelID", None)
         if setter is None:
             return False
+        _configure_fn_signature(setter, [wintypes.LPCWSTR], ctypes.c_long)
         return int(setter(str(app_id))) == 0
     except NATIVE_CALL_ERRORS:
         _LOGGER.debug("Explicit AppUserModelID skipped.", exc_info=True)
         return False
+
+
+def _configure_icon_user32(target_user32: Any) -> tuple[Any, Any, Any, Any] | None:
+    """Resolve and configure 64-bit Win32 signatures for window icon helpers."""
+    import ctypes
+    from ctypes import wintypes
+
+    load = getattr(target_user32, "LoadImageW", None)
+    send = getattr(target_user32, "SendMessageW", None)
+    if load is None or send is None:
+        return None
+    metric = getattr(target_user32, "GetSystemMetrics", None)
+    destroy = getattr(target_user32, "DestroyIcon", None)
+    _configure_fn_signature(
+        load,
+        [
+            wintypes.HINSTANCE,
+            wintypes.LPCWSTR,
+            wintypes.UINT,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        ],
+        wintypes.HANDLE,
+    )
+    _configure_fn_signature(
+        send,
+        [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
+        ctypes.c_ssize_t,
+    )
+    _configure_fn_signature(metric, [ctypes.c_int], ctypes.c_int)
+    _configure_fn_signature(destroy, [wintypes.HICON], wintypes.BOOL)
+    return load, send, metric, destroy
 
 
 def apply_window_icon(
@@ -197,9 +236,10 @@ def apply_window_icon(
 
     `WM_SETICON` es lo que usan la barra de tareas, el conmutador alt+tab y el globo del
     icono: se aplican los dos tamanos (grande del sistema y chico de la barra) porque
-    Windows los pide por separado y un fallo de uno no debe dejar al otro sin icono. No
-    destruye el icono anterior: puede pertenecer al objeto manejado del formulario.
-    Nunca lanza; sin archivo, sin handle o fuera de Windows devuelve `False`.
+    Windows los pide por separado y un fallo de uno no debe dejar al otro sin icono. Cachea
+    los `HICON` aplicados por `(hwnd, tipo)` para no filtrar handles en llamadas repetidas
+    y destruye el handle previo solo cuando se reemplaza por otro archivo. Nunca lanza; sin
+    archivo, sin handle o fuera de Windows devuelve `False`.
     """
     if platform != "win32":
         return False
@@ -207,22 +247,29 @@ def apply_window_icon(
     try:
         if not os.path.isfile(path):
             return False
-        hwnd = _resolve_native_hwnd(window)
+        native_form = getattr(window, "native", None)
+        hwnd = _resolve_native_hwnd(native_form if native_form is not None else window)
         if hwnd is None:
             return False
         import ctypes
 
         target_user32 = ctypes.windll.user32 if user32 is None else user32
-        load = getattr(target_user32, "LoadImageW", None)
-        send = getattr(target_user32, "SendMessageW", None)
-        if load is None or send is None:
+        fns = _configure_icon_user32(target_user32)
+        if fns is None:
             return False
-        metric = getattr(target_user32, "GetSystemMetrics", None)
+        load, send, metric, destroy = fns
+        user32_id = id(target_user32)
         applied = False
         for kind, (cx_index, cy_index) in (
             (WIN_ICON_BIG, (SM_CXICON, SM_CYICON)),
             (WIN_ICON_SMALL, (SM_CXSMICON, SM_CYSMICON)),
         ):
+            with _WINDOW_ICON_LOCK:
+                cached = _APPLIED_WINDOW_ICONS.get((hwnd, kind))
+            if cached is not None and cached[0] == path and cached[2] == user32_id and cached[1]:
+                send(hwnd, WM_SETICON, kind, cached[1])
+                applied = True
+                continue
             width = int(metric(cx_index)) if metric is not None else 0
             height = int(metric(cy_index)) if metric is not None else 0
             handle = load(None, path, IMAGE_ICON, width, height, LR_LOADFROMFILE)
@@ -231,14 +278,61 @@ def apply_window_icon(
                 handle = load(None, path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE)
             if not handle:
                 continue
+            handle_int = int(handle)
             # `SendMessageW` devuelve el icono previo (0 la primera vez), asi que no sirve
             # como senal de exito: el icono quedo aplicado si el archivo cargo.
-            send(hwnd, WM_SETICON, kind, handle)
+            send(hwnd, WM_SETICON, kind, handle_int)
+            with _WINDOW_ICON_LOCK:
+                previous = _APPLIED_WINDOW_ICONS.get((hwnd, kind))
+                _APPLIED_WINDOW_ICONS[(hwnd, kind)] = (path, handle_int, user32_id)
+            if (
+                previous is not None
+                and destroy is not None
+                and previous[2] == user32_id
+                and previous[1]
+                and previous[1] != handle_int
+            ):
+                destroy(previous[1])
             applied = True
         return applied
     except NATIVE_CALL_ERRORS:
         _LOGGER.debug("Window icon skipped.", exc_info=True)
         return False
+
+
+def release_window_icons(
+    window: Any,
+    *,
+    platform: str = sys.platform,
+    user32: Any = None,
+) -> None:
+    """Destruye los `HICON` cacheados asociados a la ventana al cerrarla."""
+    if platform != "win32":
+        return
+    try:
+        native_form = getattr(window, "native", None)
+        hwnd = _resolve_native_hwnd(native_form if native_form is not None else window)
+        if hwnd is None:
+            return
+        import ctypes
+        from ctypes import wintypes
+
+        target_user32 = ctypes.windll.user32 if user32 is None else user32
+        destroy = getattr(target_user32, "DestroyIcon", None)
+        if destroy is None:
+            return
+        _configure_fn_signature(destroy, [wintypes.HICON], wintypes.BOOL)
+        user32_id = id(target_user32)
+        with _WINDOW_ICON_LOCK:
+            entries = [
+                _APPLIED_WINDOW_ICONS.pop((hwnd, kind), None)
+                for kind in (WIN_ICON_BIG, WIN_ICON_SMALL)
+            ]
+        for entry in entries:
+            if entry is not None and entry[2] == user32_id and entry[1]:
+                destroy(entry[1])
+    except NATIVE_CALL_ERRORS:
+        _LOGGER.debug("Window icon release skipped.", exc_info=True)
 
 
 def _set_windows_dark_titlebar_attribute(

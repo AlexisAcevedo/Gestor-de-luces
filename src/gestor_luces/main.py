@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -75,10 +76,12 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+LOG_MAX_BYTES = 2 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
 
 
 def _configure_logging() -> None:
-    """Configura el logger raiz con salida a archivo y a stderr.
+    """Configura el logger raiz con salida a archivo rotativo y a stderr.
 
     Escribe en `<data_dir>/gestor_luces.log` (resuelto con `resolve_default_data_dir`) y
     refleja todo en stderr, para que los mensajes de arranque y de error queden
@@ -92,7 +95,12 @@ def _configure_logging() -> None:
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler = RotatingFileHandler(
+        log_path,
+        maxBytes=LOG_MAX_BYTES,
+        backupCount=LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
     file_handler.setFormatter(formatter)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
@@ -268,28 +276,37 @@ def main(argv: list[str] | None = None) -> int:
                 "(Pass --multi-instance to launch a side-by-side window.)"
             )
             guard.signal_existing_instance()
+            guard.release()
             return 0
 
     autostart = _default_autostart()
-    service, bridge = build_application(autostart=autostart)
+    bridge: WebviewBridge | None = None
+    try:
+        service, bridge = build_application(autostart=autostart)
 
-    if args.smoke_test:
-        return _run_smoke_test(bridge)
+        if args.smoke_test:
+            return _run_smoke_test(bridge)
 
-    app = DesktopApplication(
-        service=service,
-        bridge=bridge,
-        index_path=index_path,
-        icon_path=icon_path,
-        ui_dir=ui_dir,
-        debug=args.debug,
-        minimized=args.minimized,
-        multi_instance=getattr(args, "multi_instance", False),
-        guard=guard,
-        autostart=autostart,
-    )
-    apply_app_user_model_id()
-    app.create_window()
+        app = DesktopApplication(
+            service=service,
+            bridge=bridge,
+            index_path=index_path,
+            icon_path=icon_path,
+            ui_dir=ui_dir,
+            debug=args.debug,
+            minimized=args.minimized,
+            multi_instance=getattr(args, "multi_instance", False),
+            guard=guard,
+            autostart=autostart,
+        )
+        apply_app_user_model_id()
+        app.create_window()
+    except BaseException:
+        if bridge is not None:
+            bridge.shutdown()
+        if guard is not None:
+            guard.release()
+        raise
     win_width, win_height = app.window_size
     _LOGGER.info("Opening UI window (%sx%s) -> %s", win_width, win_height, index_path)
     app.start()

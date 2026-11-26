@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from gestor_luces.application.ambilight_stream import VALID_AMBILIGHT_MODES
 from gestor_luces.application.service_context import ServiceContext
-from gestor_luces.application.sleep_timer import AwaitableStatusDict
-from gestor_luces.domain.value_objects import Color
+from gestor_luces.application.sleep_timer import (
+    AwaitableStatusDict,
+    require_finite_float,
+    require_int_value,
+)
+from gestor_luces.domain.value_objects import Brightness, Color
 
 
 class AmbilightService:
@@ -40,13 +46,27 @@ class AmbilightService:
         min_brightness: int = 10,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
+        parsed_monitor = require_int_value(monitor_index, "monitor_index")
+        if parsed_monitor < 0:
+            raise ValueError("Monitor index must be zero or positive.")
+        normalized_mode = str(color_mode).strip().lower()
+        if normalized_mode not in VALID_AMBILIGHT_MODES:
+            raise ValueError(
+                f"Invalid Ambilight color mode '{color_mode}'. "
+                f"Expected one of {VALID_AMBILIGHT_MODES}."
+            )
+        validated_brightness = Brightness(require_int_value(brightness, "brightness")).percent
+        parsed_min_brightness = require_int_value(min_brightness, "min_brightness")
+        raw_alpha = require_finite_float(smoothing_alpha, "smoothing_alpha")
+        parsed_alpha = max(0.05, min(1.0, raw_alpha))
+        target_ips = self._ctx.get_target_ips(ips)
+        asyncio.get_running_loop()
+
         # Exclusion mutua: iniciar Ambilight detiene automaticamente la sincronizacion musical.
         self._stop_music_sync()
         sampler = self._ctx.ensure_screen_sampler()
-        parsed_alpha = max(0.05, min(1.0, float(smoothing_alpha)))
         self._ctx.rate_limiter.set_alpha(parsed_alpha)
         self._ctx.rate_limiter.reset()
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _on_frame(
             frame_color: Color, frame_brightness: int, frame_ips: list[str]
@@ -61,12 +81,12 @@ class AmbilightService:
             sampler=sampler,
             target_ips=target_ips,
             on_frame=_on_frame,
-            monitor_index=int(monitor_index),
-            color_mode=str(color_mode),
+            monitor_index=parsed_monitor,
+            color_mode=normalized_mode,
             auto_brightness=bool(auto_brightness),
-            brightness=int(brightness),
+            brightness=validated_brightness,
             smoothing_alpha=parsed_alpha,
-            min_brightness=int(min_brightness),
+            min_brightness=parsed_min_brightness,
         )
 
     def stop_ambilight(self) -> AwaitableStatusDict:

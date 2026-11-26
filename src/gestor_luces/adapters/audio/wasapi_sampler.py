@@ -23,7 +23,10 @@ from gestor_luces.adapters.audio.wasapi_capture import (
     analyze_pcm_audio_frame,
 )
 from gestor_luces.adapters.audio.wasapi_devices import enumerate_loopback_devices
-from gestor_luces.adapters.audio.wasapi_session import WasapiLoopbackStreamSession
+from gestor_luces.adapters.audio.wasapi_session import (
+    DEFAULT_DEVICE_CHECK_INTERVAL,
+    WasapiLoopbackStreamSession,
+)
 from gestor_luces.domain.value_objects import Color
 
 __all__ = [
@@ -43,6 +46,7 @@ class WasapiLoopbackSampler:
         frames_per_buffer: int = 2048,
         silence_timeout: float = SILENCE_TIMEOUT_SECONDS,
         pyaudio_factory: Callable[[], Any] | None = None,
+        default_device_check_interval: float = DEFAULT_DEVICE_CHECK_INTERVAL,
     ) -> None:
         self._frames_per_buffer = max(256, int(frames_per_buffer))
         self._silence_timeout = max(0.05, float(silence_timeout))
@@ -51,15 +55,17 @@ class WasapiLoopbackSampler:
         self._session = WasapiLoopbackStreamSession(
             frames_per_buffer=self._frames_per_buffer,
             pyaudio_factory=pyaudio_factory,
+            default_device_check_interval=default_device_check_interval,
         )
 
     def list_audio_devices(self, refresh: bool = False) -> list[dict[str, Any]]:
         """Enumera los dispositivos de salida con soporte WASAPI Loopback disponibles en Windows."""
-        if self._cached_devices is not None and not refresh:
-            return list(self._cached_devices)
+        cached = self._cached_devices
+        if cached is not None and not refresh:
+            return [dict(dev) for dev in cached]
         devices = enumerate_loopback_devices(self._session.create_pyaudio)
-        self._cached_devices = list(devices)
-        return devices
+        self._cached_devices = [dict(dev) for dev in devices]
+        return [dict(dev) for dev in self._cached_devices]
 
     def _ensure_stream(self, requested_device_index: int | None) -> bool:
         """Abre o reconfigura el stream no bloqueante de captura WASAPI Loopback."""
@@ -114,4 +120,5 @@ class WasapiLoopbackSampler:
 
     def close(self) -> None:
         """Cierra de forma segura el stream de captura y libera la sesion WASAPI."""
+        self._cached_devices = None
         self._session.close()

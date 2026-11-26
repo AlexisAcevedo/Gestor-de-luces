@@ -17,8 +17,10 @@ from gestor_luces.adapters.ui_webview.dispatch import (
     FIT_WINDOW_MIN_PX,
     JS_API_DISPATCH,
     JS_API_EXCLUDED,
+    BlockedJsApi,
     JsApi,
     WindowFitHandlers,
+    build_exposed_functions,
 )
 from gestor_luces.adapters.ui_webview.handlers import BridgeHandlers
 from gestor_luces.adapters.ui_webview.lifecycle import _SERVICE_CALL_ERRORS, BridgeLifecycle
@@ -27,6 +29,7 @@ from gestor_luces.ports.autostart import AutostartManager
 from gestor_luces.ports.light_control import LightControlServicePort
 
 __all__ = [
+    "BlockedJsApi",
     "FIT_WINDOW_MAX_PX",
     "FIT_WINDOW_MIN_PX",
     "JS_API_DISPATCH",
@@ -35,6 +38,7 @@ __all__ = [
     "WebviewBridge",
     "WindowFitHandlers",
     "_SERVICE_CALL_ERRORS",
+    "build_exposed_functions",
 ]
 
 

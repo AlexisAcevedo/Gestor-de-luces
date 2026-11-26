@@ -133,8 +133,10 @@ class TrayController:
         self._executor = executor or _default_executor
         self._poll_interval = poll_interval
         self._lock = threading.Lock()
+        self._refresh_cond = threading.Condition(self._lock)
+        self._refresh_pending = False
+        self._starting = False
         self._stopped = threading.Event()
-        self._refresh_requested = threading.Event()
         self._spec: list[TrayMenuEntry] = build_tray_menu_spec(
             is_on=False,
             brightness=100,
@@ -189,13 +191,24 @@ class TrayController:
 
     def start(self) -> None:
         """Crea la vista y lanza su bombeo de mensajes y el refresco en hilos demonio."""
-        if self._view is not None or self._stopped.is_set():
-            return
+        with self._refresh_cond:
+            if self._view is not None or self._starting or self._stopped.is_set():
+                return
+            self._starting = True
         view = self._view_factory(self.dispatch)
-        if view is None:
-            _LOGGER.warning("No tray view is available; the tray icon stays hidden.")
+        stop_created_view = False
+        with self._refresh_cond:
+            self._starting = False
+            if view is None:
+                _LOGGER.warning("No tray view is available; the tray icon stays hidden.")
+                return
+            if self._stopped.is_set():
+                stop_created_view = True
+            else:
+                self._view = view
+        if stop_created_view:
+            self._call_view(view.stop, "Failed to stop the tray view.")
             return
-        self._view = view
         # El refresco trae el estado real al icono antes de que arranque el bombeo; el
         # `_push_state` posterior es el respaldo cuando el snapshot falla y la vista no
         # recibio nada (la vista descarta un estado identico al vigente).
@@ -206,11 +219,12 @@ class TrayController:
 
     def stop(self) -> None:
         """Retira el icono de la bandeja; seguro de invocar varias veces y desde cualquier hilo."""
-        if self._stopped.is_set():
-            return
-        self._stopped.set()
-        self._refresh_requested.set()
-        view = self._view
+        with self._refresh_cond:
+            if self._stopped.is_set():
+                return
+            self._stopped.set()
+            self._refresh_cond.notify_all()
+            view = self._view
         if view is None:
             return
         self._call_view(view.stop, "Failed to stop the tray view.")
@@ -231,7 +245,9 @@ class TrayController:
 
     def request_refresh(self) -> None:
         """Solicita un refresco asincrono sin bloquear al llamador (p. ej. el hilo GUI)."""
-        self._refresh_requested.set()
+        with self._refresh_cond:
+            self._refresh_pending = True
+            self._refresh_cond.notify()
 
     def refresh(self) -> None:
         """Recalcula menu, tooltip e imagen y entrega el estado a la vista."""
@@ -333,11 +349,14 @@ class TrayController:
         periodico refresca el cache desde la red (`_sync_live_states`).
         """
         timeout = self._poll_interval if self._poll_interval > 0 else None
-        while not self._stopped.is_set():
-            requested = self._refresh_requested.wait(timeout=timeout)
-            if self._stopped.is_set():
-                break
-            self._refresh_requested.clear()
+        while True:
+            with self._refresh_cond:
+                if not self._refresh_pending and not self._stopped.is_set():
+                    self._refresh_cond.wait(timeout=timeout)
+                if self._stopped.is_set():
+                    break
+                requested = self._refresh_pending
+                self._refresh_pending = False
             if not requested:
                 self._sync_live_states()
             self.refresh()

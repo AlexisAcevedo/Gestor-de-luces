@@ -15,12 +15,14 @@ las operaciones programadas de apagado.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import inspect
 import logging
 import threading
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from gestor_luces.adapters.ui_webview.handlers import _opt_ips, _req_float, _req_str
 from gestor_luces.domain.scenes import list_builtin_scenes
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,10 +41,36 @@ _SERVICE_CALL_ERRORS: tuple[type[BaseException], ...] = (
     ValueError,  # validacion del servicio y conversiones int()/float() de argumentos JS
     KeyError,  # preset o foco inexistente
     TypeError,  # argumentos JS con la forma equivocada
+    OverflowError,  # numeros fuera de rango representable desde JS
     OSError,  # E/S de persistencia y de red
     RuntimeError,  # bucle asincrono detenido o fallo de plataforma
     TimeoutError,  # el servicio no respondio dentro del timeout del puente
 )
+
+
+def _sanitize_error(exc: BaseException) -> str:
+    """Return a safe user-facing error message without leaking internal paths or traces."""
+    if isinstance(exc, TimeoutError):
+        _LOGGER.warning("Bridge operation timed out.", exc_info=True)
+        return "Operation timed out."
+    if isinstance(exc, OSError):
+        _LOGGER.warning("Bridge I/O or network operation failed.", exc_info=True)
+        return "Network or system I/O error."
+    if isinstance(exc, OverflowError):
+        return "Numeric value is out of range."
+    if isinstance(exc, TypeError):
+        _LOGGER.debug("Bridge call received invalid argument type.", exc_info=True)
+        return "Invalid argument type."
+    if isinstance(exc, KeyError):
+        if len(exc.args) == 1 and isinstance(exc.args[0], str):
+            return exc.args[0]
+        return "Requested item was not found."
+    if isinstance(exc, RuntimeError):
+        if str(exc) == "Background asyncio event loop is not running.":
+            return str(exc)
+        _LOGGER.warning("Bridge runtime error.", exc_info=True)
+        return "Internal service error."
+    return str(exc) or "Invalid value."
 
 
 async def _await_action(action: Callable[[], Any]) -> None:
@@ -65,7 +93,7 @@ class BridgeLifecycle:
         try:
             self._run_async(_await_action(action), timeout=timeout)
         except _SERVICE_CALL_ERRORS as exc:
-            return self._build_response(ok=False, error=str(exc))
+            return self._build_response(ok=False, error=_sanitize_error(exc))
         return self._success_response()
 
     def refresh_tray_states(self) -> dict[str, Any]:
@@ -86,7 +114,7 @@ class BridgeLifecycle:
         try:
             self._run_async(_await_action(_refresh), timeout=6.0)
         except _SERVICE_CALL_ERRORS as exc:
-            return self._build_response(ok=False, error=str(exc))
+            return self._build_response(ok=False, error=_sanitize_error(exc))
         return {"ok": True}
 
     def _poll(self) -> dict[str, Any]:
@@ -94,11 +122,12 @@ class BridgeLifecycle:
         try:
             return self._build_response(ok=True)
         except _SERVICE_CALL_ERRORS as exc:
-            return self._build_response(ok=False, error=str(exc))
+            return self._build_response(ok=False, error=_sanitize_error(exc))
 
     def _start_async_loop(self) -> None:
         """Arranca el hilo demonio que ejecuta el bucle de eventos del puente."""
         self._shutdown_lock = threading.Lock()
+        self._loop_state_lock = threading.Lock()
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
         self._closed = False
@@ -121,7 +150,13 @@ class BridgeLifecycle:
         # `run_forever` ya esta iterando, asi que "listo" significa "corriendo" y no "a punto
         # de correr". Marcarla antes dejaba una ventana en la que un llamado desde PyWebView
         # veia `is_running()` en False y recibia "Background asyncio event loop is not running".
-        self._loop.call_soon(self._ready.set)
+        with self._loop_state_lock:
+            if self._closed:
+                self._ready.set()
+                if not self._loop.is_closed():
+                    self._loop.close()
+                return
+            self._loop.call_soon(self._ready.set)
         self._loop.run_forever()
 
         pending = asyncio.all_tasks(self._loop)
@@ -129,7 +164,9 @@ class BridgeLifecycle:
             task.cancel()
         if pending:
             self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        self._loop.close()
+        with self._loop_state_lock:
+            if not self._loop.is_closed():
+                self._loop.close()
 
     def _wait_until_running(self) -> bool:
         """Espera a que el bucle corra; False si el puente esta cerrado o nunca arranco."""
@@ -144,9 +181,28 @@ class BridgeLifecycle:
         if self._closed or not self._wait_until_running():
             coro.close()
             raise RuntimeError("Background asyncio event loop is not running.")
+        with self._loop_state_lock:
+            if self._closed or self._loop.is_closed() or not self._loop.is_running():
+                coro.close()
+                raise RuntimeError("Background asyncio event loop is not running.")
+            try:
+                future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+            except RuntimeError:
+                coro.close()
+                raise RuntimeError("Background asyncio event loop is not running.") from None
         effective_timeout = timeout if timeout is not None else self._default_timeout
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=effective_timeout)
+        try:
+            return future.result(timeout=effective_timeout)
+        except TimeoutError:
+            future.cancel()
+            raise
+        except concurrent.futures.CancelledError:
+            msg = (
+                "Background asyncio event loop is not running."
+                if self._closed
+                else "Background operation was cancelled."
+            )
+            raise RuntimeError(msg) from None
 
     def _collect_response_snapshot(
         self,
@@ -245,12 +301,10 @@ class BridgeLifecycle:
 
                     async def _cancel() -> None:
                         self._service.stop_ambilight()
-                        self._service.stop_music_sync(close_sampler=True)
+                        self._service.stop_music_sync(close_sampler=False)
                         self._service.cancel_sleep_timer()
 
                     self._run_async(_cancel(), timeout=1.5)
-                else:
-                    self._service.close_audio_sampler()
             # FRONTERA: `shutdown` corre en el cierre de la app y es idempotente; cancelar
             # los flujos cruza al muestreador nativo de audio. Una excepcion aqui dejaria
             # el bucle y el hilo sin liberar, que es peor que no haber cancelado nada.
@@ -258,11 +312,19 @@ class BridgeLifecycle:
                 _LOGGER.debug(
                     "Ignoring error while cancelling streams during shutdown.", exc_info=True
                 )
-            self._closed = True
-            if self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
-            if self._thread.is_alive():
+            with self._loop_state_lock:
+                self._closed = True
+                if not self._loop.is_closed():
+                    try:
+                        self._loop.call_soon_threadsafe(self._loop.stop)
+                    except RuntimeError:
+                        _LOGGER.debug(
+                            "Bridge event loop already closed before stop callback.",
+                            exc_info=True,
+                        )
+            if self._thread.is_alive() and threading.current_thread() is not self._thread:
                 self._thread.join(timeout=2.0)
+            self._service.close_all_resources()
 
     # --- Temporizador de apagado programado -----------------------------------------
 
@@ -270,8 +332,8 @@ class BridgeLifecycle:
         """Inicia el temporizador de apagado con atenuacion progresiva en el bucle asincrono."""
         return self._call(
             lambda: self._service.start_sleep_timer(
-                minutes=float(minutes),
-                ips=[str(ip) for ip in ips] if isinstance(ips, list) else None,
+                minutes=_req_float(minutes, field="minutes"),
+                ips=_opt_ips(ips),
             )
         )
 
@@ -288,7 +350,7 @@ class BridgeLifecycle:
 
     def set_language(self, language: str) -> dict[str, Any]:
         """Cambia y persiste el idioma activo (`en` o `es`), refrescando tambien la bandeja."""
-        return self._call(lambda: self._service.set_language(str(language)))
+        return self._call(lambda: self._service.set_language(_req_str(language, field="language")))
 
     def set_theme(self, theme: str) -> dict[str, Any]:
         """Cambia y persiste el tema visual activo (`architectural-stone` o `atmospheric-dark`)."""

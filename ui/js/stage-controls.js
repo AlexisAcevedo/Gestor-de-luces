@@ -4,21 +4,12 @@
 
 import { getBackendApi, invokeApi } from "./bridge-client.js";
 import {
-  SCENE_CATEGORY_COLORS,
-  SCENE_CHROMATIC_MAP,
-  appState,
-  clampInt,
-  formatSceneDisplayName,
-  getPrimaryBulb,
-  hsvToRgb,
-  kelvinToCssColor,
-  parseHexToRgb,
-  rgbToHex,
-  rgbToHsv,
-  t,
-  updateAllSlidersFill,
-  updateSliderFill
+  SCENE_CATEGORY_COLORS, SCENE_CHROMATIC_MAP, appState, clampInt, formatSceneDisplayName,
+  getPrimaryBulb, hsvToRgb, kelvinToCssColor, parseHexToRgb, rgbToHex, rgbToHsv, t,
+  updateAllSlidersFill, updateSliderFill
 } from "./store.js";
+
+const isFocused = (el) => Boolean(el && document.activeElement === el);
 
 /* Renderiza la rueda cromatica HSV en el elemento <canvas> */
 export function drawColorWheel() {
@@ -127,7 +118,7 @@ export function renderStageHeaderAndControls() {
     masterPowerBtn.setAttribute("aria-pressed", String(isOn));
     masterPowerLabel.textContent = isOn ? t("stage.turnOff") : t("stage.turnOn");
   }
-  if (brightnessSlider && brightnessOutput) {
+  if (brightnessSlider && brightnessOutput && !isFocused(brightnessSlider)) {
     brightnessSlider.value = String(st.brightness);
     brightnessOutput.textContent = `${st.brightness}%`;
     updateSliderFill(brightnessSlider);
@@ -171,17 +162,19 @@ export function renderStageHeaderAndControls() {
     const gIn = document.getElementById("input-g");
     const bIn = document.getElementById("input-b");
     const hexIn = document.getElementById("input-hex");
-    if (rIn) rIn.value = String(st.color.r);
-    if (gIn) gIn.value = String(st.color.g);
-    if (bIn) bIn.value = String(st.color.b);
-    if (hexIn) hexIn.value = st.color.hex || rgbToHex(st.color.r, st.color.g, st.color.b);
-    positionReticleFromRgb(st.color.r, st.color.g, st.color.b);
+    if (![rIn, gIn, bIn, hexIn].some(isFocused)) {
+      if (rIn) rIn.value = String(st.color.r);
+      if (gIn) gIn.value = String(st.color.g);
+      if (bIn) bIn.value = String(st.color.b);
+      if (hexIn) hexIn.value = st.color.hex || rgbToHex(st.color.r, st.color.g, st.color.b);
+      positionReticleFromRgb(st.color.r, st.color.g, st.color.b);
+    }
   }
 
   const activeKelvin = st.temperature || 4200;
   const kelvinSlider = document.getElementById("kelvin-slider");
   const kelvinOutput = document.getElementById("kelvin-output");
-  if (kelvinSlider && kelvinOutput) {
+  if (kelvinSlider && kelvinOutput && !isFocused(kelvinSlider)) {
     kelvinSlider.value = String(activeKelvin);
     kelvinOutput.textContent = `${activeKelvin} K`;
     updateSliderFill(kelvinSlider);
@@ -199,10 +192,12 @@ export function renderStageHeaderAndControls() {
   );
   if (speedContainer) speedContainer.classList.toggle("is-disabled", !isDynamicSpeedSupported);
   if (speedSlider && speedOutput) {
-    speedSlider.value = String(st.speed || 100);
-    speedOutput.textContent = String(st.speed || 100);
     speedSlider.disabled = !isDynamicSpeedSupported;
-    updateSliderFill(speedSlider);
+    if (!isFocused(speedSlider)) {
+      speedSlider.value = String(st.speed || 100);
+      speedOutput.textContent = String(st.speed || 100);
+      updateSliderFill(speedSlider);
+    }
   }
 }
 

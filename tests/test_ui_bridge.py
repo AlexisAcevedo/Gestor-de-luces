@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
@@ -253,3 +254,97 @@ async def test_bridge_call_survives_a_loop_thread_that_starts_late(monkeypatch) 
             assert len(initial["bulbs"]) == 1
         finally:
             bridge.shutdown()
+
+
+def test_bridge_rejects_non_finite_overflow_and_wrong_typed_js_inputs() -> None:
+    """Reject NaN, Inf, OverflowError, booleans-as-int, and non-list/non-string arguments."""
+    from unittest.mock import MagicMock
+
+    service = LightControlService(controller=WizUdpController(probe_candidates=[]))
+    autostart = MagicMock()
+    bridge = WebviewBridge(service=service, autostart=autostart)
+    try:
+        invalid_calls = [
+            bridge.set_brightness(True),  # type: ignore[arg-type]
+            bridge.set_brightness(float("nan")),  # type: ignore[arg-type]
+            bridge.set_brightness(float("inf")),  # type: ignore[arg-type]
+            bridge.set_color(True, 0, 0),  # type: ignore[arg-type]
+            bridge.set_temperature(float("nan")),  # type: ignore[arg-type]
+            bridge.set_builtin_scene(1.5),  # type: ignore[arg-type]
+            bridge.set_power(1),  # type: ignore[arg-type]
+            bridge.select_targets("192.168.1.1"),  # type: ignore[arg-type]
+            bridge.select_targets([123]),  # type: ignore[list-item]
+            bridge.rename_bulb(123, "Lamp"),  # type: ignore[arg-type]
+            bridge.start_ambilight(smoothing_alpha=float("nan")),
+            bridge.start_music_sync(sensitivity=float("inf")),
+            bridge.start_sleep_timer(float("nan")),
+            bridge.start_sleep_timer(10**400),
+            bridge.start_sleep_timer(True),  # type: ignore[arg-type]
+            bridge.set_autostart("yes"),  # type: ignore[arg-type]
+        ]
+        for resp in invalid_calls:
+            assert resp["ok"] is False
+            assert isinstance(resp["error"], str) and resp["error"]
+        autostart.enable.assert_not_called()
+        autostart.disable.assert_not_called()
+    finally:
+        bridge.shutdown()
+
+
+def test_bridge_sanitizes_internal_errors_from_js() -> None:
+    """Internal OS, runtime, timeout, and native callback exceptions never leak paths or traces."""
+    from unittest.mock import MagicMock
+
+    from gestor_luces.adapters.ui_webview.bridge import JsApi
+
+    class FailingService(LightControlService):
+        def __init__(self) -> None:
+            super().__init__(controller=WizUdpController(probe_candidates=[]))
+            self.exc: BaseException = OSError(r"C:\secret\bulbs.json")
+
+        async def set_power(
+            self,
+            is_on: bool,
+            brightness: int | None = None,
+            ips: list[str] | None = None,
+        ) -> list[Any]:
+            raise self.exc
+
+    service = FailingService()
+    autostart = MagicMock()
+    autostart.is_enabled.side_effect = OSError(r"HKCU\secret\key")
+    autostart.enable.side_effect = OSError(r"HKCU\secret\key")
+    bridge = WebviewBridge(service=service, autostart=autostart)
+    try:
+        for exc in (
+            OSError(r"C:\secret\bulbs.json"),
+            RuntimeError("internal secret stack state"),
+            TimeoutError("secret socket timeout"),
+            OverflowError("secret numeric overflow"),
+        ):
+            service.exc = exc
+            resp = bridge.set_power(True)
+            assert resp["ok"] is False
+            assert "secret" not in resp["error"].lower()
+            assert "c:\\" not in resp["error"].lower()
+
+        get_auto = bridge.get_autostart()
+        assert get_auto["ok"] is False
+        assert "secret" not in get_auto["error"].lower()
+        assert "hkcu" not in get_auto["error"].lower()
+
+        set_auto = bridge.set_autostart(True)
+        assert set_auto["ok"] is False
+        assert "secret" not in set_auto["error"].lower()
+        assert "hkcu" not in set_auto["error"].lower()
+    finally:
+        bridge.shutdown()
+
+    api = JsApi(
+        MagicMock(),
+        fit_window=lambda _px: (_ for _ in ()).throw(RuntimeError(r"C:\secret\hwnd")),
+    )
+    fit_resp = api.fit_window_height(640)
+    assert fit_resp["ok"] is False
+    assert "secret" not in fit_resp["error"].lower()
+    assert "c:\\" not in fit_resp["error"].lower()

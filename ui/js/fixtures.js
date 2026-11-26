@@ -56,8 +56,6 @@ export function renderFixtureList() {
       appState.bulbs.length > 0 && appState.bulbs.every((b) => appState.selectedIps.includes(b.ip));
   }
 
-  container.replaceChildren();
-
   if (appState.bulbs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-fixtures-state";
@@ -66,11 +64,11 @@ export function renderFixtureList() {
     const p2 = document.createElement("p");
     p2.textContent = t("rail.emptySubtitle");
     empty.append(p1, p2);
-    container.appendChild(empty);
+    container.replaceChildren(empty);
     return;
   }
 
-  appState.bulbs.forEach((bulb) => {
+  const cards = appState.bulbs.map((bulb) => {
     const isSelected = appState.selectedIps.includes(bulb.ip);
     const card = document.createElement("article");
     card.className = `fixture-card${isSelected ? " is-selected" : ""}`;
@@ -158,8 +156,9 @@ export function renderFixtureList() {
     actionsDiv.appendChild(powerBtn);
     bottomRow.append(statusSpan, actionsDiv);
     card.append(topRow, bottomRow);
-    container.appendChild(card);
+    return card;
   });
+  container.replaceChildren(...cards);
 }
 
 /* Activa o detiene el sondeo cada 1s mientras el temporizador de apagado este corriendo */
@@ -168,7 +167,11 @@ export function syncSleepTimerPolling() {
   if (isActive && !appState.sleepPollTimer) {
     appState.sleepPollTimer = setInterval(() => {
       if (document.hidden) return;
-      invokeApi(() => getBackendApi().get_sleep_timer_status(), null);
+      invokeApi(() => getBackendApi().get_sleep_timer_status(), null, {
+        silent: true,
+        poll: true,
+        dedupeKey: "poll:sleep"
+      });
     }, 1000);
   } else if (!isActive && appState.sleepPollTimer) {
     clearInterval(appState.sleepPollTimer);
@@ -301,7 +304,11 @@ export function bindFixtureEvents() {
       if (autoSyncToggle.checked) {
         appState.autoSyncTimer = setInterval(() => {
           if (document.hidden) return;
-          invokeApi(() => getBackendApi().refresh_states(), () => t("status.autoSyncStep"));
+          invokeApi(() => getBackendApi().refresh_states(), () => t("status.autoSyncStep"), {
+            silent: true,
+            poll: true,
+            dedupeKey: "poll:autosync"
+          });
         }, 3000);
         setStatusMessage(t("status.autoSyncEnabled"));
       } else {

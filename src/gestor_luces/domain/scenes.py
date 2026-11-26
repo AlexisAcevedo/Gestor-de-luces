@@ -16,6 +16,7 @@ from gestor_luces.domain.value_objects import (
     ColorTemperature,
     LightMode,
     SceneSpeed,
+    parse_strict_int,
 )
 
 
@@ -110,16 +111,25 @@ class CustomScene:
     is_favorite: bool = False
 
     def __post_init__(self) -> None:
-        if not self.id or not self.id.strip():
+        if not isinstance(self.id, str) or not self.id.strip():
             raise ValueError("CustomScene id cannot be empty.")
-        if not self.name or not self.name.strip():
+        if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("CustomScene name cannot be empty.")
+        if not isinstance(self.mode, LightMode):
+            raise ValueError(f"Invalid custom scene mode: {self.mode!r}")
+        if self.color is not None and not isinstance(self.color, Color):
+            raise ValueError(f"Invalid custom scene color: {self.color!r}")
         Brightness(self.brightness)
         SceneSpeed(self.speed)
         if self.temperature is not None:
             ColorTemperature(self.temperature)
-        if self.built_in_scene_id is not None and get_builtin_scene(self.built_in_scene_id) is None:
-            raise ValueError(f"Unknown built-in scene ID: {self.built_in_scene_id}.")
+        if self.built_in_scene_id is not None:
+            if isinstance(self.built_in_scene_id, bool) or not isinstance(
+                self.built_in_scene_id, int
+            ):
+                raise ValueError(f"Invalid built-in scene ID: {self.built_in_scene_id!r}.")
+            if get_builtin_scene(self.built_in_scene_id) is None:
+                raise ValueError(f"Unknown built-in scene ID: {self.built_in_scene_id}.")
 
     def to_dict(self) -> dict[str, Any]:
         """Convierte la escena personalizada a un diccionario serializable en JSON."""
@@ -138,25 +148,39 @@ class CustomScene:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CustomScene:
         """Reconstruye una escena personalizada desde un diccionario JSON."""
+        raw_id = data["id"]
+        raw_name = data["name"]
+        if not isinstance(raw_id, str):
+            raise ValueError("CustomScene id must be a string.")
+        if not isinstance(raw_name, str):
+            raise ValueError("CustomScene name must be a string.")
         raw_color = data.get("color")
         color = (
-            Color(r=int(raw_color["r"]), g=int(raw_color["g"]), b=int(raw_color["b"]))
+            Color(
+                r=parse_strict_int(raw_color["r"], field="color.r"),
+                g=parse_strict_int(raw_color["g"], field="color.g"),
+                b=parse_strict_int(raw_color["b"], field="color.b"),
+            )
             if isinstance(raw_color, dict)
             else None
         )
         return cls(
-            id=str(data["id"]),
-            name=str(data["name"]),
+            id=raw_id,
+            name=raw_name,
             mode=LightMode(data["mode"]),
-            brightness=int(data.get("brightness", 100)),
+            brightness=parse_strict_int(data.get("brightness", 100), field="brightness"),
             color=color,
-            temperature=int(data["temperature"]) if data.get("temperature") is not None else None,
+            temperature=(
+                parse_strict_int(data["temperature"], field="temperature")
+                if data.get("temperature") is not None
+                else None
+            ),
             built_in_scene_id=(
-                int(data["built_in_scene_id"])
+                parse_strict_int(data["built_in_scene_id"], field="built_in_scene_id")
                 if data.get("built_in_scene_id") is not None
                 else None
             ),
-            speed=int(data.get("speed", 100)),
+            speed=parse_strict_int(data.get("speed", 100), field="speed"),
             # Los archivos guardados antes de existir la bandeja no incluyen la clave;
             # se asume False para que sigan cargando sin migracion explicita.
             is_favorite=bool(data.get("is_favorite", False)),

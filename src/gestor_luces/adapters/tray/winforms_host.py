@@ -22,6 +22,7 @@ from typing import Any
 
 from gestor_luces.adapters.platform.windows.window_chrome import (
     NATIVE_CALL_ERRORS,
+    _configure_fn_signature,
     apply_tool_window_style,
 )
 from gestor_luces.adapters.tray.tray_view import ICON_NAME, Dispatch, TrayView
@@ -137,7 +138,9 @@ def _load_winforms() -> _WinFormsApi | None:
 def _co_initialize_apartment() -> None:
     """Inicializa el hilo de la vista como STA, requisito de COM/WinForms."""
     try:
-        ctypes.windll.ole32.CoInitializeEx(None, _COINIT_APARTMENTTHREADED)
+        co_init = ctypes.windll.ole32.CoInitializeEx
+        _configure_fn_signature(co_init, [ctypes.c_void_p, ctypes.c_uint32], ctypes.c_long)
+        co_init(None, _COINIT_APARTMENTTHREADED)
     # Una llamada `ctypes` a ole32 solo falla con `NATIVE_CALL_ERRORS`; sin STA el bombeo
     # arranca igual (WinForms lo exige para COM, no para existir).
     except NATIVE_CALL_ERRORS:
@@ -198,8 +201,15 @@ def invoke_on_ui_thread(api: _WinFormsApi, form: Any, action: Callable[[], None]
     defecto de Python fuera de `clr_errors` sube a quien invoco (el guardia de la vista o
     el bucle de la bandeja) en vez de perderse.
     """
+    if form is None:
+        return
     try:
-        if form.IsHandleCreated and form.InvokeRequired:
+        if bool(getattr(form, "IsDisposed", False)) or bool(getattr(form, "Disposing", False)):
+            return
+        if not bool(getattr(form, "IsHandleCreated", False)):
+            _LOGGER.debug("Skipping WinForms UI invocation because the handle is not created.")
+            return
+        if form.InvokeRequired:
             form.Invoke(api.action(action))
             return
         action()

@@ -24,6 +24,11 @@ from gestor_luces.adapters.platform.windows import (
     _to_webview_menus,
     apply_window_icon,
     show_message_box,
+    window_chrome,
+)
+from gestor_luces.adapters.platform.windows.window_geometry import (
+    _extract_screen_area,
+    _select_primary_screen,
 )
 from gestor_luces.adapters.storage.json_repositories import resolve_default_data_dir
 from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
@@ -40,11 +45,16 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     build_about_title,
     build_app_menu,
 )
-from gestor_luces.adapters.ui_webview.bridge import JsApi, WebviewBridge
+from gestor_luces.adapters.ui_webview.bridge import (
+    BlockedJsApi,
+    JsApi,
+    WebviewBridge,
+    build_exposed_functions,
+)
 from gestor_luces.adapters.ui_webview.http_server import NoCacheBottleServer
-from gestor_luces.application.service import LightControlService
 from gestor_luces.domain.value_objects import DEFAULT_THEME, normalize_theme
 from gestor_luces.ports.autostart import AutostartManager
+from gestor_luces.ports.light_control import LightControlServicePort
 from gestor_luces.resources import resolve_app_version
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,7 +101,7 @@ class DesktopApplication:
     def __init__(
         self,
         *,
-        service: LightControlService,
+        service: LightControlServicePort,
         bridge: WebviewBridge,
         index_path: Path,
         icon_path: Path,
@@ -118,11 +128,16 @@ class DesktopApplication:
         self._webview: Any = None
         self._window: Any = None
         self._tray: TrayController | None = None
-        self._initial_menu: list[AppMenu] = []
         self._window_size: tuple[int, int] = (0, 0)
-        self._menu_sync_requested = threading.Event()
-        self.is_window_visible = not minimized
-        self.is_quitting = False
+        self._state_lock = threading.Lock()
+        self._menu_sync_cond = threading.Condition(self._state_lock)
+        self._menu_sync_pending = False
+        self._menu_sync_thread: threading.Thread | None = None
+        self._is_window_visible = not minimized
+        self._is_quitting = False
+        self._visibility_generation = 0
+        self._last_titlebar_theme: str | None = None
+        self._last_menu_language = str(service.get_language() or "en")
 
         self._menu_handlers: dict[str, Callable[[], None]] = {
             ACTION_TOGGLE_WINDOW: self.toggle_window,
@@ -131,6 +146,30 @@ class DesktopApplication:
             ACTION_SHOW_SHORTCUTS: self.show_shortcuts,
             ACTION_SHOW_ABOUT: self.show_about,
         }
+
+    @property
+    def is_window_visible(self) -> bool:
+        """Indica si la ventana principal esta visible fuera de la bandeja."""
+        with self._state_lock:
+            return self._is_window_visible
+
+    @is_window_visible.setter
+    def is_window_visible(self, value: bool) -> None:
+        with self._state_lock:
+            self._is_window_visible = bool(value)
+
+    @property
+    def is_quitting(self) -> bool:
+        """Indica si la aplicacion ya inicio su secuencia de cierre definitivo."""
+        with self._state_lock:
+            return self._is_quitting
+
+    @is_quitting.setter
+    def is_quitting(self, value: bool) -> None:
+        with self._menu_sync_cond:
+            self._is_quitting = bool(value)
+            if self._is_quitting:
+                self._menu_sync_cond.notify_all()
 
     @property
     def window(self) -> Any:
@@ -168,6 +207,7 @@ class DesktopApplication:
 
         initial_theme = normalize_theme(self._service.get_theme())
         initial_chrome = THEME_WINDOW_CHROME.get(initial_theme, THEME_WINDOW_CHROME[DEFAULT_THEME])
+        js_api = JsApi(self._bridge, fit_window=self.fit_window)
         self._window = webview.create_window(
             title=WINDOW_TITLE,
             url=_build_initial_ui_url(
@@ -175,15 +215,19 @@ class DesktopApplication:
                 initial_theme,
                 cache_bust=uuid.uuid4().hex[:8],
             ),
-            js_api=JsApi(self._bridge, fit_window=self.fit_window),
+            js_api=BlockedJsApi(),
             width=win_width,
             height=win_height,
             x=win_x,
             y=win_y,
-            min_size=(WINDOW_MIN_SIZE[0], WINDOW_MIN_SIZE[1]),
+            min_size=(
+                min(WINDOW_MIN_SIZE[0], win_width),
+                min(WINDOW_MIN_SIZE[1], win_height),
+            ),
             background_color=str(initial_chrome["background_color"]),
             hidden=self._minimized,
         )
+        self._window.expose(*build_exposed_functions(js_api))
         self._tray = TrayController(
             self._bridge,
             show_window=self.show_window,
@@ -203,11 +247,12 @@ class DesktopApplication:
     def start(self) -> None:
         """Arranca bandeja, hilos de soporte y el bucle nativo (bloqueante)."""
         webview = self._resolve_webview()
-        threading.Thread(
+        self._menu_sync_thread = threading.Thread(
             target=self._menu_sync_worker,
             name=MENU_SYNC_THREAD_NAME,
             daemon=True,
-        ).start()
+        )
+        self._menu_sync_thread.start()
         if self._guard is not None:
             self._guard.listen(self.show_window)
         if self._tray is not None:
@@ -216,31 +261,48 @@ class DesktopApplication:
             # private_mode=False + storage_path make localStorage (UI prefs, favorite scenes)
             # persist across launches; WebView2 defaults to an ephemeral profile otherwise.
             webview_storage = self._webview_storage_path()
-            self._initial_menu = self.current_menu_spec()
+            initial_menu = self.current_menu_spec()
             webview.start(
                 http_server=True,
                 server=NoCacheBottleServer,
                 debug=self._debug,
                 private_mode=False,
                 storage_path=str(webview_storage),
-                menu=_to_webview_menus(self._initial_menu, self.on_menu_action),
+                menu=_to_webview_menus(initial_menu, self.on_menu_action),
                 icon=str(self._icon_path) if self._icon_path.is_file() else None,
             )
         finally:
             self.cleanup()
 
+    def _release_window_icons(self) -> None:
+        """Libera los HICON cacheados para la ventana nativa cuando la capa Win32 los expone."""
+        if self._window is None:
+            return
+        release_fn = getattr(window_chrome, "release_window_icons", None)
+        if callable(release_fn):
+            release_fn(self._window)
+
     def cleanup(self) -> None:
         """Libera la instancia unica, la bandeja y el bucle asincrono del puente."""
-        # El hilo que reaplica el menu nativo queda aparcado en su Event: marcarlo como
+        # El hilo que reaplica el menu nativo queda aparcado en su Condition: marcarlo como
         # cierre y despertarlo es lo que lo saca del wait y lo hace salir del bucle. Sin
         # esto sobrevive al cierre y solo muere porque es demonio.
-        self.is_quitting = True
-        self.request_menu_sync()
+        with self._menu_sync_cond:
+            self._is_quitting = True
+            self._menu_sync_cond.notify_all()
+        self._release_window_icons()
         if self._guard is not None:
             self._guard.release()
         if self._tray is not None:
             self._tray.stop()
         self._bridge.shutdown()
+        menu_thread = self._menu_sync_thread
+        if (
+            menu_thread is not None
+            and menu_thread.is_alive()
+            and threading.current_thread() is not menu_thread
+        ):
+            menu_thread.join(timeout=1.0)
 
     def _webview_storage_path(self) -> Path:
         """Perfil WebView2 persistente (aislado cuando se corre en modo multi-instancia)."""
@@ -265,7 +327,9 @@ class DesktopApplication:
         """Ajusta la altura nativa de la ventana para que el alto util coincida con el de la UI."""
         try:
             screens = getattr(self._webview, "screens", None)
-            fallback = int(screens[0].height) if screens else None
+            primary = _select_primary_screen(screens) if screens else None
+            area = _extract_screen_area(primary) if primary is not None else None
+            fallback = area[3] if area is not None else None
             resized = _fit_native_window_height(self._window, content_px, fallback)
             # Una linea por ajuste pedido: si la medicion oscila, el log lo muestra.
             _LOGGER.info("Window fit requested: content=%spx applied=%s", content_px, resized)
@@ -277,18 +341,30 @@ class DesktopApplication:
             _LOGGER.debug("Window fit skipped.", exc_info=True)
             return False
 
-    def sync_theme_titlebar(self) -> None:
+    def sync_theme_titlebar(self, *, force: bool = False) -> None:
         """Sincroniza el atributo DWM de la barra de titulo segun el tema activo."""
-        current_theme = self._service.get_theme()
+        if self._window is None:
+            return
+        current_theme = normalize_theme(self._service.get_theme())
+        with self._state_lock:
+            if not force and self._last_titlebar_theme == current_theme:
+                return
         chrome = THEME_WINDOW_CHROME.get(current_theme, THEME_WINDOW_CHROME[DEFAULT_THEME])
-        _set_windows_dark_titlebar_attribute(
+        applied = _set_windows_dark_titlebar_attribute(
             self._window,
             enabled=bool(chrome["dark_titlebar"]),
         )
+        if applied:
+            with self._state_lock:
+                self._last_titlebar_theme = current_theme
 
     def show_window(self) -> None:
         """Restaura la ventana desde la bandeja y la trae al frente en Windows."""
-        self.is_window_visible = True
+        with self._state_lock:
+            if self._is_quitting or self._window is None:
+                return
+            self._is_window_visible = True
+            self._visibility_generation += 1
         self._window.show()
         try:
             self._window.restore()
@@ -297,23 +373,47 @@ class DesktopApplication:
         # ocurrio, asi que el resultado deseado se mantiene.
         except Exception:
             _LOGGER.debug("Window restore skipped because window was not minimized.", exc_info=True)
-        self.sync_theme_titlebar()
+        self.sync_theme_titlebar(force=True)
         self.request_menu_sync()
         _activate_window_foreground(self._window)
         if self._tray is not None:
             self._tray.request_refresh()
 
-    def hide_window(self) -> None:
-        """Oculta la ventana en la bandeja manteniendo vivos el bucle UDP y los temporizadores."""
-        self.is_window_visible = False
+    def _apply_hide(self) -> None:
+        """Ejecuta el ocultamiento nativo y notifica menu y bandeja."""
         self._window.hide()
         self.request_menu_sync()
         if self._tray is not None:
             self._tray.request_refresh()
 
+    def hide_window(self) -> None:
+        """Oculta la ventana en la bandeja manteniendo vivos el bucle UDP y los temporizadores."""
+        with self._state_lock:
+            if self._is_quitting or self._window is None:
+                return
+            self._is_window_visible = False
+            self._visibility_generation += 1
+        self._apply_hide()
+
+    def _hide_if_generation(self, generation: int) -> None:
+        """Oculta la ventana solo si ninguna transicion posterior invalido la solicitud."""
+        with self._state_lock:
+            if (
+                self._is_quitting
+                or self._window is None
+                or self._visibility_generation != generation
+            ):
+                return
+            self._is_window_visible = False
+            self._visibility_generation += 1
+        self._apply_hide()
+
     def notify_ui(self) -> None:
         """Avisa a la vista web que una accion de la bandeja modifico el estado luminico."""
-        if not self.is_window_visible or self.is_quitting:
+        with self._state_lock:
+            visible = self._is_window_visible
+            quitting = self._is_quitting
+        if not visible or quitting:
             return
         self._evaluate_js_quietly(
             "window.onTrayStateChanged && window.onTrayStateChanged()",
@@ -342,15 +442,18 @@ class DesktopApplication:
         reaplica el menu deja el proceso a medio cerrar. Al destruir la ventana,
         `webview.start()` retorna y `cleanup()` libera todo en el orden correcto.
         """
-        self.is_quitting = True
-        try:
-            self._window.destroy()
-            return
-        # FRONTERA: `destroy` se marshalea a WinForms con pythonnet durante el cierre. Si
-        # falla, la liberacion de bandeja y bucle asincrono debe ocurrir igual, asi que se
-        # cae explicitamente a `cleanup()`.
-        except Exception:
-            _LOGGER.exception("Window destroy failed while quitting; releasing resources.")
+        with self._menu_sync_cond:
+            self._is_quitting = True
+            self._menu_sync_cond.notify_all()
+        if self._window is not None:
+            try:
+                self._window.destroy()
+                return
+            # FRONTERA: `destroy` se marshalea a WinForms con pythonnet durante el cierre. Si
+            # falla, la liberacion de bandeja y bucle asincrono debe ocurrir igual, asi que se
+            # cae explicitamente a `cleanup()`.
+            except Exception:
+                _LOGGER.exception("Window destroy failed while quitting; releasing resources.")
         self.cleanup()
 
     def on_closing(self) -> bool:
@@ -362,26 +465,37 @@ class DesktopApplication:
         con `self.Invoke(self.Hide)`. Por eso despachamos `hide_window` en un hilo corto
         apenas `on_closing` devuelve `False` (`args.Cancel = True`).
         """
-        if not self.is_quitting:
-            threading.Thread(
-                target=self.hide_window,
-                name=HIDE_ON_CLOSE_THREAD_NAME,
-                daemon=True,
-            ).start()
-            return False
-        return True
+        with self._state_lock:
+            if self._is_quitting:
+                return True
+            generation = self._visibility_generation
+        threading.Thread(
+            target=self._hide_if_generation,
+            args=(generation,),
+            name=HIDE_ON_CLOSE_THREAD_NAME,
+            daemon=True,
+        ).start()
+        return False
 
     def on_minimized(self) -> None:
         """Cuando el usuario minimiza la ventana con [_], la enviamos a la bandeja."""
-        if not self.is_quitting and self.is_window_visible:
-            threading.Thread(
-                target=self.hide_window,
-                name=HIDE_ON_MINIMIZE_THREAD_NAME,
-                daemon=True,
-            ).start()
+        with self._state_lock:
+            if self._is_quitting or not self._is_window_visible:
+                return
+            generation = self._visibility_generation
+        threading.Thread(
+            target=self._hide_if_generation,
+            args=(generation,),
+            name=HIDE_ON_MINIMIZE_THREAD_NAME,
+            daemon=True,
+        ).start()
 
     def on_closed(self) -> None:
         """Garantiza la liberacion de recursos si el sistema operativo cierra la ventana."""
+        with self._menu_sync_cond:
+            self._is_quitting = True
+            self._menu_sync_cond.notify_all()
+        self._release_window_icons()
         if self._tray is not None:
             self._tray.stop()
         self._bridge.shutdown()
@@ -389,19 +503,25 @@ class DesktopApplication:
     def current_menu_spec(self) -> list[AppMenu]:
         """Construye el modelo de menu nativo a partir del estado actual del puente."""
         snapshot = self._bridge.get_tray_snapshot()
+        language = str(snapshot.get("language") or "en")
+        with self._state_lock:
+            self._last_menu_language = language
+            visible = self._is_window_visible
         return build_app_menu(
-            language=str(snapshot.get("language") or "en"),
-            window_visible=self.is_window_visible,
+            language=language,
+            window_visible=visible,
             autostart_enabled=bool(self._bridge.get_autostart().get("enabled")),
         )
 
     def _menu_sync_worker(self) -> None:
         """Serialize menu updates off the GUI and bridge-loop threads."""
-        while not self.is_quitting:
-            self._menu_sync_requested.wait()
-            self._menu_sync_requested.clear()
-            if self.is_quitting:
-                break
+        while True:
+            with self._menu_sync_cond:
+                while not self._menu_sync_pending and not self._is_quitting:
+                    self._menu_sync_cond.wait()
+                if self._is_quitting:
+                    break
+                self._menu_sync_pending = False
             try:
                 _sync_native_menu(self._window, self.current_menu_spec())
             # FRONTERA: este es el bucle que serializa los refrescos del menu nativo y cruza
@@ -412,11 +532,17 @@ class DesktopApplication:
 
     def request_menu_sync(self) -> None:
         """Solicita al hilo serializador que reaplique el menu nativo."""
-        self._menu_sync_requested.set()
+        with self._menu_sync_cond:
+            self._menu_sync_pending = True
+            self._menu_sync_cond.notify()
 
     def toggle_window(self) -> None:
         """Alterna entre mostrar y ocultar la ventana segun el estado real."""
-        if self.is_window_visible:
+        with self._state_lock:
+            if self._is_quitting:
+                return
+            visible = self._is_window_visible
+        if visible:
             self.hide_window()
         else:
             self.show_window()
@@ -461,15 +587,21 @@ class DesktopApplication:
             self.request_menu_sync()
 
     def on_state_changed(self) -> None:
-        """Reacciona a una mutacion hecha desde la UI: titulo, bandeja y menu."""
+        """Reacciona a una mutacion hecha desde la UI: titulo, bandeja y menu si cambio idioma."""
         self.sync_theme_titlebar()
         if self._tray is not None:
             self._tray.request_refresh()
-        self.request_menu_sync()
+        current_language = str(self._service.get_language() or "en")
+        with self._state_lock:
+            language_changed = current_language != self._last_menu_language
+            if language_changed:
+                self._last_menu_language = current_language
+        if language_changed:
+            self.request_menu_sync()
 
     def on_window_shown(self) -> None:
         """Sincroniza el cromado nativo y el menu cuando la ventana vuelve a mostrarse."""
-        self.sync_theme_titlebar()
+        self.sync_theme_titlebar(force=True)
         # La barra de tareas y alt+tab piden el icono a la ventana: se fija en cada muestra
         # (es idempotente) para no depender del orden interno de pywebview.
         apply_window_icon(self._window, self._icon_path)

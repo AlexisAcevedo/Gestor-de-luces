@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 
 from gestor_luces.application.service_context import ServiceContext
-from gestor_luces.application.sleep_timer import AwaitableStatusDict
+from gestor_luces.application.sleep_timer import AwaitableStatusDict, require_int_value
 from gestor_luces.domain.models import Bulb
 from gestor_luces.domain.scenes import get_builtin_scene
 from gestor_luces.domain.value_objects import (
@@ -38,14 +38,18 @@ class BulbControlService:
         ips: list[str] | None = None,
     ) -> list[Bulb]:
         """Enciende o apaga uno o varios focos en paralelo."""
+        validated_brightness = (
+            Brightness(require_int_value(brightness, "brightness")).percent
+            if brightness is not None
+            else None
+        )
+        target_ips = self._ctx.get_target_ips(ips)
         if not is_on:
             # Si el usuario apaga manualmente o expira el Sleep Timer, detenemos Ambilight
             # y la sincronizacion musical para que un fotograma rezagado no vuelva a encender el
             # foco.
             self._stop_ambilight()
             self._stop_music_sync()
-        validated_brightness = Brightness(brightness).percent if brightness is not None else None
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)
@@ -68,10 +72,10 @@ class BulbControlService:
         ips: list[str] | None = None,
     ) -> list[Bulb]:
         """Ajusta el brillo (10-100%) en todos los focos objetivo."""
-        validated = Brightness(brightness).percent
+        validated = Brightness(require_int_value(brightness, "brightness")).percent
+        target_ips = self._ctx.get_target_ips(ips)
         self._ctx.ambilight.update_fixed_brightness(validated)
         self._ctx.music_sync.update_fixed_brightness(validated)
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)
@@ -95,11 +99,15 @@ class BulbControlService:
     ) -> list[Bulb]:
         """Aplica un color RGB validado a uno o multiples focos."""
         color = Color(r=r, g=g, b=b)
-        validated_brightness = Brightness(brightness).percent if brightness is not None else None
+        validated_brightness = (
+            Brightness(require_int_value(brightness, "brightness")).percent
+            if brightness is not None
+            else None
+        )
+        target_ips = self._ctx.get_target_ips(ips)
         # Cualquier cambio manual de color toma precedencia y detiene los flujos continuos.
         self._stop_ambilight()
         self._stop_music_sync()
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)
@@ -131,10 +139,14 @@ class BulbControlService:
     ) -> list[Bulb]:
         """Aplica una temperatura de color blanco (2200K-6500K) a los focos objetivo."""
         validated_temp = ColorTemperature(kelvin).kelvin
-        validated_brightness = Brightness(brightness).percent if brightness is not None else None
+        validated_brightness = (
+            Brightness(require_int_value(brightness, "brightness")).percent
+            if brightness is not None
+            else None
+        )
+        target_ips = self._ctx.get_target_ips(ips)
         self._stop_ambilight()
         self._stop_music_sync()
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)
@@ -173,10 +185,14 @@ class BulbControlService:
         validated_speed = (
             SceneSpeed(speed).value if (speed is not None and scene.supports_speed) else None
         )
-        validated_brightness = Brightness(brightness).percent if brightness is not None else None
+        validated_brightness = (
+            Brightness(require_int_value(brightness, "brightness")).percent
+            if brightness is not None
+            else None
+        )
+        target_ips = self._ctx.get_target_ips(ips)
         self._stop_ambilight()
         self._stop_music_sync()
-        target_ips = self._ctx.get_target_ips(ips)
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)

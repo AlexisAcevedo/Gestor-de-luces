@@ -13,7 +13,7 @@ compartidos entre flujos.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
+import logging
 from collections.abc import Callable
 
 from gestor_luces.application.ambilight_stream import AmbilightStreamManager
@@ -29,6 +29,7 @@ from gestor_luces.domain.value_objects import (
     LightMode,
     normalize_language,
     normalize_theme,
+    validate_local_endpoint,
 )
 from gestor_luces.ports.repositories import (
     AudioSampler,
@@ -39,8 +40,25 @@ from gestor_luces.ports.repositories import (
     SettingsRepository,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 MAX_EXPLICIT_TARGETS = 64
 MAX_DISPLAY_NAME_LEN = 80
+
+
+def _safe_close(resource: object | None, label: str) -> None:
+    """Close a sampler or controller defensively so one failure does not leak peers."""
+    if resource is None:
+        return
+    close_fn = getattr(resource, "close", None)
+    if not callable(close_fn):
+        return
+    try:
+        close_fn()
+    # FRONTERA: el cierre cruza a recursos nativos (WASAPI/PortAudio, mss/GDI o sockets UDP);
+    # un fallo al liberar un recurso no debe impedir liberar los restantes al salir.
+    except Exception:
+        _LOGGER.warning("Failed to close %s cleanly.", label, exc_info=True)
 
 
 def validate_display_name(raw_name: str, kind: str) -> str:
@@ -51,24 +69,6 @@ def validate_display_name(raw_name: str, kind: str) -> str:
     if len(cleaned) > MAX_DISPLAY_NAME_LEN:
         raise ValueError(f"{kind} name is too long (max {MAX_DISPLAY_NAME_LEN} chars).")
     return cleaned
-
-
-def validate_local_endpoint(value: str) -> str:
-    """Valida que el destino sea una IPv4 local (privada, loopback o link-local).
-
-    Acepta 'a.b.c.d' o 'a.b.c.d:puerto'. Evita que el puente de la UI dirija
-    trafico UDP hacia hosts publicos o nombres DNS arbitrarios.
-    """
-    host, sep, raw_port = value.strip().partition(":")
-    try:
-        address = ipaddress.IPv4Address(host)
-    except ValueError as exc:
-        raise ValueError(f"Invalid bulb IPv4 address: {value!r}") from exc
-    if not (address.is_private or address.is_loopback or address.is_link_local):
-        raise ValueError(f"Bulb address must be on the local network: {value!r}")
-    if sep and not (raw_port.isdigit() and 1 <= int(raw_port) <= 65535):
-        raise ValueError(f"Invalid bulb port: {value!r}")
-    return value.strip()
 
 
 class ServiceContext:
@@ -109,6 +109,14 @@ class ServiceContext:
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
+                try:
+                    validate_local_endpoint(saved_bulb.ip)
+                except ValueError:
+                    _LOGGER.warning(
+                        "Skipping persisted bulb with invalid endpoint: %r",
+                        saved_bulb.ip,
+                    )
+                    continue
                 self.bulbs[saved_bulb.ip] = saved_bulb
             self.selected_ips = list(self.bulbs.keys())
 
@@ -252,15 +260,28 @@ class ServiceContext:
         return True
 
     def close_audio_sampler(self) -> None:
-        """Libera de forma segura los recursos de los muestreadores y del controlador UDP."""
-        if self.audio_sampler is not None:
-            close_fn = getattr(self.audio_sampler, "close", None)
-            if callable(close_fn):
-                close_fn()
-        if self.screen_sampler is not None:
-            screen_close = getattr(self.screen_sampler, "close", None)
-            if callable(screen_close):
-                screen_close()
-        ctrl_close = getattr(self.controller, "close", None)
-        if callable(ctrl_close):
-            ctrl_close()
+        """Detiene Music Sync, espera capturas en curso y cierra solo el sampler de audio."""
+        self.music_sync.stop()
+        with self.music_sync.hold_sampler_lock(timeout=1.0):
+            sampler = self.audio_sampler
+            self.audio_sampler = None
+            self.music_sync.set_sampler(None)
+            _safe_close(sampler, "audio sampler")
+
+    def close_screen_sampler(self) -> None:
+        """Detiene Ambilight, espera cualquier captura en curso y cierra el sampler de pantalla."""
+        self.ambilight.stop()
+        with self.ambilight.hold_sampler_lock(timeout=1.0):
+            sampler = self.screen_sampler
+            self.screen_sampler = None
+            self.ambilight.set_sampler(None)
+            _safe_close(sampler, "screen sampler")
+
+    def close_all_resources(self) -> None:
+        """Detiene todos los flujos activos y libera audio, pantalla y controlador UDP."""
+        self.ambilight.stop()
+        self.music_sync.stop()
+        self.sleep_timer.cancel()
+        self.close_audio_sampler()
+        self.close_screen_sampler()
+        _safe_close(self.controller, "light controller")

@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 import pytest
 import webview.util
 
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
+from gestor_luces.adapters.ui_webview.bridge import BlockedJsApi, WebviewBridge
 from gestor_luces.adapters.ui_webview.http_server import NoCacheBottleServer
 from gestor_luces.adapters.wiz.udp_controller import WizUdpController
 from gestor_luces.application.service import LightControlService
@@ -39,10 +39,15 @@ class _FakeWebviewModule:
     def __init__(self) -> None:
         self.screens = [SimpleNamespace(width=1920, height=1080)]
         self.create_window_calls: list[dict[str, Any]] = []
+        self.exposed_functions: list[tuple[Any, ...]] = []
 
     def create_window(self, **kwargs: Any) -> SimpleNamespace:
         self.create_window_calls.append(kwargs)
-        return SimpleNamespace(events=_FakeWindowEvents())
+        exposed_store = self.exposed_functions
+        return SimpleNamespace(
+            events=_FakeWindowEvents(),
+            expose=lambda *funcs: exposed_store.append(funcs),
+        )
 
 
 class _StaticThemeService(LightControlService):
@@ -107,6 +112,9 @@ def test_create_window_passes_theme_fragment_and_background_color(
     assert call["url"].startswith(f"{index_path}?v=")
     assert call["url"].endswith(f"#theme={theme}")
     assert call["background_color"] == expected_bg
+    assert isinstance(call["js_api"], BlockedJsApi)
+    assert len(fake_webview.exposed_functions) == 1
+    assert len(fake_webview.exposed_functions[0]) == 30
 
 
 def test_desktop_application_start_uses_no_cache_http_server(
@@ -174,6 +182,79 @@ def test_no_cache_bottle_server_emits_real_cache_headers_and_blocks_traversal() 
         assert traversal_resp.status in (403, 404)
     finally:
         conn.close()
+
+
+def test_no_cache_bottle_server_hardens_loopback_and_headers() -> None:
+    import uuid
+
+    ui_dir = resolve_ui_directory()
+    initial_url = _build_initial_ui_url(
+        ui_dir / "index.html",
+        "atmospheric-dark",
+        cache_bust="boot123",
+    )
+    addr, _common_path, srv = NoCacheBottleServer.start_server([initial_url], http_port=None)
+    assert addr.startswith("http://127.0.0.1:")
+    assert srv.js_api_endpoint is None
+    with pytest.raises(ValueError):
+        uuid.UUID(srv.uid)
+
+    expected_origin = f"http://127.0.0.1:{srv.port}"
+
+    def request(
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+    ) -> http.client.HTTPResponse:
+        conn = http.client.HTTPConnection("127.0.0.1", srv.port, timeout=3)
+        try:
+            conn.request(method, path, headers=headers or {})
+            resp = conn.getresponse()
+            resp.read()
+            return resp
+        finally:
+            conn.close()
+
+    html_resp = request("GET", "/index.html?v=boot123", headers={"Origin": expected_origin})
+    assert html_resp.status == 200
+    assert html_resp.getheader("X-Content-Type-Options") == "nosniff"
+    assert html_resp.getheader("X-Frame-Options") == "DENY"
+    assert html_resp.getheader("Referrer-Policy") == "no-referrer"
+    assert html_resp.getheader("Cross-Origin-Resource-Policy") == "same-origin"
+    assert html_resp.getheader("Access-Control-Allow-Origin") is None
+    csp = html_resp.getheader("Content-Security-Policy") or ""
+    assert "frame-ancestors 'none'" in csp
+
+    js_resp = request("GET", "/i18n.js")
+    assert js_resp.status == 200
+    assert js_resp.getheader("X-Content-Type-Options") == "nosniff"
+    assert js_resp.getheader("X-Frame-Options") == "DENY"
+    assert js_resp.getheader("Access-Control-Allow-Origin") is None
+
+    for bad_host in ("evil.example", "127.0.0.1:1"):
+        host_resp = request("GET", "/index.html", headers={"Host": bad_host})
+        assert host_resp.status == 403
+        assert host_resp.getheader("X-Content-Type-Options") == "nosniff"
+
+    origin_resp = request("GET", "/index.html", headers={"Origin": "https://evil.example"})
+    assert origin_resp.status == 403
+    assert origin_resp.getheader("Access-Control-Allow-Origin") is None
+
+    for method, path in (("POST", f"/js_api/{srv.uid}"), ("OPTIONS", "/index.html")):
+        method_resp = request(method, path)
+        assert method_resp.status == 405
+        assert method_resp.getheader("Access-Control-Allow-Origin") is None
+
+    large_resp = request("GET", "/index.html", headers={"Content-Length": str(128 * 1024)})
+    assert large_resp.status == 413
+
+    for bad_len in ("not-a-number", "-1"):
+        bad_len_resp = request("GET", "/index.html", headers={"Content-Length": bad_len})
+        assert bad_len_resp.status == 400
+
+    missing_resp = request("GET", "/does-not-exist.js")
+    assert missing_resp.status == 404
+    assert missing_resp.getheader("X-Content-Type-Options") == "nosniff"
 
 
 def test_initial_ui_url_preserves_fragment_through_pywebview_url_resolution() -> None:
