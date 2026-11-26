@@ -46,35 +46,45 @@ def extract_color_and_brightness_from_bgra(
     if width <= 0 or height <= 0:
         return Color(0, 0, 0), 10
 
+    expected_bytes = int(width) * int(height) * 4
+    raw_view = memoryview(bgra).cast("B")
+    if len(raw_view) < expected_bytes:
+        return Color(0, 0, 0), 10
+
     step = max(1, int(stride))
-    arr = np.frombuffer(bgra, dtype=np.uint8).reshape((height, width, 4))[::step, ::step]
+    arr = np.frombuffer(raw_view[:expected_bytes], dtype=np.uint8).reshape((height, width, 4))[
+        ::step, ::step
+    ]
     if arr.size == 0:
         return Color(0, 0, 0), 10
 
     # mss entrega los pixeles en orden BGRA (canal 0 = Azul, canal 1 = Verde, canal 2 = Rojo).
-    b = arr[:, :, 0].astype(np.float32)
-    g = arr[:, :, 1].astype(np.float32)
-    r = arr[:, :, 2].astype(np.float32)
-
-    # Luminancia relativa ITU-R BT.709 para derivar un nivel de brillo proporcional a la escena.
-    luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
-    mean_lum = float(np.mean(luminance))
+    # Luminancia relativa ITU-R BT.709 derivada de las medias por canal sin copias float32.
+    mean_b = float(np.mean(arr[:, :, 0], dtype=np.float64))
+    mean_g = float(np.mean(arr[:, :, 1], dtype=np.float64))
+    mean_r = float(np.mean(arr[:, :, 2], dtype=np.float64))
+    mean_lum = (0.2126 * mean_r + 0.7152 * mean_g + 0.0722 * mean_b) / 255.0
     suggested_brightness = max(10, min(100, round(10.0 + mean_lum * 90.0)))
 
     normalized_mode = mode.strip().lower() if isinstance(mode, str) else "average"
     if normalized_mode == "vibrant":
-        max_c = np.maximum(np.maximum(r, g), b)
-        min_c = np.minimum(np.minimum(r, g), b)
-        chroma = max_c - min_c
+        b = arr[:, :, 0].astype(np.float32)
+        g = arr[:, :, 1].astype(np.float32)
+        r = arr[:, :, 2].astype(np.float32)
+        max_c = np.maximum(r, g)
+        np.maximum(max_c, b, out=max_c)
+        min_c = np.minimum(r, g)
+        np.minimum(min_c, b, out=min_c)
 
         # Ponderamos cada pixel por su saturacion cromatica (+16 de base para evitar divisiones
-        # por cero en pantallas completamente grises o negras) de modo que los elementos vivos
-        # de videojuegos o peliculas prevalezcan sobre los fondos neutros de la interfaz.
-        weights = chroma + 16.0
+        # por cero en pantallas completamente grises o negras) usando producto punto en C.
+        weights = max_c
+        weights -= min_c
+        weights += 16.0
         weight_sum = float(np.sum(weights))
-        raw_r = float(np.sum(r * weights)) / weight_sum
-        raw_g = float(np.sum(g * weights)) / weight_sum
-        raw_b = float(np.sum(b * weights)) / weight_sum
+        raw_r = float(np.vdot(r, weights)) / weight_sum
+        raw_g = float(np.vdot(g, weights)) / weight_sum
+        raw_b = float(np.vdot(b, weights)) / weight_sum
 
         # Realzamos ligeramente la saturacion respecto a la media acromatica para que el LED
         # fisico reproduzca matices intensos en lugar de tonos apastelados.
@@ -84,9 +94,9 @@ def extract_color_and_brightness_from_bgra(
         out_g = round(avg_channel + (raw_g - avg_channel) * boost)
         out_b = round(avg_channel + (raw_b - avg_channel) * boost)
     else:
-        out_r = round(float(np.mean(r)))
-        out_g = round(float(np.mean(g)))
-        out_b = round(float(np.mean(b)))
+        out_r = round(mean_r)
+        out_g = round(mean_g)
+        out_b = round(mean_b)
 
     clamped_r = max(0, min(255, int(out_r)))
     clamped_g = max(0, min(255, int(out_g)))
@@ -109,8 +119,9 @@ class MssScreenSampler:
 
     def list_monitors(self, refresh: bool = False) -> list[dict[str, Any]]:
         """Enumera los monitores activos devolviendo etiquetas legibles para la interfaz."""
-        if self._cached_monitors is not None and not refresh:
-            return list(self._cached_monitors)
+        cached = self._cached_monitors
+        if cached is not None and not refresh:
+            return [dict(mon) for mon in cached]
 
         try:
             with self._sct_factory() as sct:
@@ -168,8 +179,8 @@ class MssScreenSampler:
                 }
             )
 
-        self._cached_monitors = list(descriptors)
-        return descriptors
+        self._cached_monitors = [dict(mon) for mon in descriptors]
+        return [dict(mon) for mon in self._cached_monitors]
 
     def sample_frame(
         self,
@@ -177,23 +188,30 @@ class MssScreenSampler:
         mode: str = "vibrant",
     ) -> tuple[Color, int]:
         """Captura el monitor solicitado y devuelve `(Color, brillo_sugerido_10_a_100)`."""
-        with self._sct_factory() as sct:
-            monitors = list(sct.monitors)
-            if not monitors:
-                return Color(0, 0, 0), 10
+        try:
+            with self._sct_factory() as sct:
+                monitors = list(sct.monitors)
+                if not monitors:
+                    return Color(0, 0, 0), 10
 
-            idx = int(monitor_index)
-            if idx < 0 or idx >= len(monitors):
-                idx = 1 if len(monitors) > 1 else 0
+                idx = int(monitor_index)
+                if idx < 0 or idx >= len(monitors):
+                    idx = 1 if len(monitors) > 1 else 0
 
-            shot = sct.grab(monitors[idx])
-            return extract_color_and_brightness_from_bgra(
-                bgra=shot.bgra,
-                width=int(shot.width),
-                height=int(shot.height),
-                mode=mode,
-                stride=self._stride,
-            )
+                shot = sct.grab(monitors[idx])
+                return extract_color_and_brightness_from_bgra(
+                    bgra=shot.bgra,
+                    width=int(shot.width),
+                    height=int(shot.height),
+                    mode=mode,
+                    stride=self._stride,
+                )
+        except (OSError, mss.exception.ScreenShotError):
+            # Captura fallida por bloqueo de escritorio, UAC o cambio de topologia GDI:
+            # invalidamos la cache de monitores y devolvemos reposo sin cruzar la frontera.
+            _LOGGER.debug("Screen capture failed; returning standby frame.", exc_info=True)
+            self._cached_monitors = None
+            return Color(0, 0, 0), 10
 
     def sample_average_color(
         self,

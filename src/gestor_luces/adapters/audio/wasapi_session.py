@@ -21,6 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SAMPLE_RATE = 48000
 DEFAULT_CHANNELS = 2
+DEFAULT_DEVICE_CHECK_INTERVAL = 2.0
 
 #: Errores documentados de PortAudio/WASAPI al consultar o abrir un endpoint.
 #:
@@ -63,13 +64,19 @@ class WasapiLoopbackStreamSession:
         self,
         frames_per_buffer: int = 2048,
         pyaudio_factory: Callable[[], Any] | None = None,
+        default_device_check_interval: float = DEFAULT_DEVICE_CHECK_INTERVAL,
     ) -> None:
         self._frames_per_buffer = max(256, int(frames_per_buffer))
         self._pyaudio_factory = pyaudio_factory
+        self._default_device_check_interval = max(0.0, float(default_device_check_interval))
+        self._lifecycle_lock = threading.Lock()
         self._lock = threading.Lock()
         self._pa: Any | None = None
         self._stream: Any | None = None
         self._active_device_index: int | None = None
+        self._opened_device_index: int | None = None
+        self._opened_device_name: str = ""
+        self._last_device_probe_monotonic: float = 0.0
         self._sample_rate: int = DEFAULT_SAMPLE_RATE
         self._channels: int = DEFAULT_CHANNELS
         self._latest_pcm_bytes: bytes = b""
@@ -103,112 +110,180 @@ class WasapiLoopbackStreamSession:
                 self._channels,
             )
 
+    def _is_stream_healthy(
+        self,
+        stream: Any,
+        pa: Any,
+        normalized_req: int | None,
+    ) -> bool:
+        """Verifica que el stream siga activo y que el endpoint por defecto no haya cambiado."""
+        try:
+            is_active = getattr(stream, "is_active", None)
+            if callable(is_active) and not is_active():
+                return False
+            is_stopped = getattr(stream, "is_stopped", None)
+            if callable(is_stopped) and is_stopped():
+                return False
+            if normalized_req is None:
+                now = time.monotonic()
+                if (now - self._last_device_probe_monotonic) >= self._default_device_check_interval:
+                    self._last_device_probe_monotonic = now
+                    default_info = pa.get_default_wasapi_loopback()
+                    current_idx = int(default_info["index"])
+                    current_name = str(default_info.get("name", "")).strip()
+                    if current_idx != self._opened_device_index:
+                        return False
+                    if (
+                        current_name
+                        and self._opened_device_name
+                        and current_name != self._opened_device_name
+                    ):
+                        return False
+        except WASAPI_DEVICE_ERRORS:
+            _LOGGER.debug("WASAPI stream health check failed; reopening stream.", exc_info=True)
+            return False
+        return True
+
     def ensure_stream(self, requested_device_index: int | None) -> bool:
         """Abre o reconfigura el stream no bloqueante de captura WASAPI Loopback."""
         normalized_req = (
             int(requested_device_index)
-            if (requested_device_index is not None and int(requested_device_index) >= 0)
+            if (
+                requested_device_index is not None
+                and not isinstance(requested_device_index, bool)
+                and int(requested_device_index) >= 0
+            )
             else None
         )
-        if (
-            self._stream is not None
-            and self._pa is not None
-            and self._active_device_index == normalized_req
-        ):
-            return True
+        with self._lifecycle_lock:
+            if (
+                self._stream is not None
+                and self._pa is not None
+                and self._active_device_index == normalized_req
+                and self._is_stream_healthy(self._stream, self._pa, normalized_req)
+            ):
+                return True
 
-        self.close()
+            self._close_locked()
 
-        try:
-            import pyaudiowpatch as pyaudio
+            try:
+                import pyaudiowpatch as pyaudio
 
-            pa_float32 = getattr(pyaudio, "paFloat32", 1)
-            pa_continue = getattr(pyaudio, "paContinue", 0)
-        except ImportError:
-            # Sin `pyaudiowpatch` el modo Musica queda en silencio de reposo, no en error.
-            _LOGGER.debug("pyaudiowpatch is unavailable; using the default format.", exc_info=True)
-            pa_float32 = 1
-            pa_continue = 0
+                pa_float32 = getattr(pyaudio, "paFloat32", 1)
+                pa_continue = getattr(pyaudio, "paContinue", 0)
+            except ImportError:
+                # Sin `pyaudiowpatch` el modo Musica queda en silencio de reposo, no en error.
+                _LOGGER.debug(
+                    "pyaudiowpatch is unavailable; using the default format.", exc_info=True
+                )
+                pa_float32 = 1
+                pa_continue = 0
 
-        try:
-            pa = self.create_pyaudio()
-            device_info: dict[str, Any] | None = None
+            pa: Any | None = None
+            stream: Any | None = None
+            committed = False
+            try:
+                pa = self.create_pyaudio()
+                device_info: dict[str, Any] | None = None
 
-            if normalized_req is not None:
-                try:
-                    candidate = pa.get_device_info_by_index(normalized_req)
-                    if candidate and int(candidate.get("maxInputChannels", 0)) > 0:
-                        device_info = dict(candidate)
-                except WASAPI_DEVICE_ERRORS:
-                    # El indice pedido ya no existe (o dejo de ser de entrada): se cae al
-                    # loopback por defecto.
-                    _LOGGER.debug(
-                        "Requested loopback device %s is unavailable.",
-                        normalized_req,
-                        exc_info=True,
-                    )
-                    device_info = None
+                if normalized_req is not None:
+                    try:
+                        candidate = pa.get_device_info_by_index(normalized_req)
+                        if candidate and int(candidate.get("maxInputChannels", 0)) > 0:
+                            device_info = dict(candidate)
+                    except WASAPI_DEVICE_ERRORS:
+                        # El indice pedido ya no existe (o dejo de ser de entrada): se cae al
+                        # loopback por defecto.
+                        _LOGGER.debug(
+                            "Requested loopback device %s is unavailable.",
+                            normalized_req,
+                            exc_info=True,
+                        )
+                        device_info = None
 
-            if device_info is None:
-                device_info = dict(pa.get_default_wasapi_loopback())
+                if device_info is None:
+                    device_info = dict(pa.get_default_wasapi_loopback())
 
-            sample_rate = int(float(device_info.get("defaultSampleRate", 48000)))
-            channels = max(1, int(device_info.get("maxInputChannels", 2) or 2))
-            dev_idx = int(device_info["index"])
+                sample_rate = max(
+                    8000, int(float(device_info.get("defaultSampleRate", DEFAULT_SAMPLE_RATE)))
+                )
+                channels = max(1, int(device_info.get("maxInputChannels", DEFAULT_CHANNELS) or 2))
+                dev_idx = int(device_info["index"])
+                dev_name = str(device_info.get("name", "")).strip()
 
-            def _audio_callback(
-                in_data: bytes | None,
-                frame_count: int,
-                time_info: Any,
-                status_flags: int,
-            ) -> tuple[None, int]:
-                if in_data:
-                    with self._lock:
-                        self._latest_pcm_bytes = bytes(in_data)
-                        self._last_chunk_monotonic = time.monotonic()
-                return (None, pa_continue)
+                def _audio_callback(
+                    in_data: bytes | None,
+                    frame_count: int,
+                    time_info: Any,
+                    status_flags: int,
+                ) -> tuple[None, int]:
+                    if in_data:
+                        with self._lock:
+                            self._latest_pcm_bytes = bytes(in_data)
+                            self._last_chunk_monotonic = time.monotonic()
+                    return (None, pa_continue)
 
-            stream = pa.open(
-                format=pa_float32,
-                channels=channels,
-                rate=sample_rate,
-                frames_per_buffer=self._frames_per_buffer,
-                input=True,
-                input_device_index=dev_idx,
-                stream_callback=_audio_callback,
-            )
-            if hasattr(stream, "start_stream"):
-                stream.start_stream()
+                stream = pa.open(
+                    format=pa_float32,
+                    channels=channels,
+                    rate=sample_rate,
+                    frames_per_buffer=self._frames_per_buffer,
+                    input=True,
+                    input_device_index=dev_idx,
+                    stream_callback=_audio_callback,
+                )
+                if hasattr(stream, "start_stream"):
+                    stream.start_stream()
 
-            with self._lock:
-                self._pa = pa
-                self._stream = stream
-                self._active_device_index = normalized_req
-                self._sample_rate = sample_rate
-                self._channels = channels
-            return True
-        except WASAPI_DEVICE_ERRORS:
-            _LOGGER.debug(
-                "Could not open WASAPI loopback stream; returning standby silence.",
-                exc_info=True,
-            )
-            self.close()
-            return False
+                with self._lock:
+                    self._pa = pa
+                    self._stream = stream
+                    self._active_device_index = normalized_req
+                    self._opened_device_index = dev_idx
+                    self._opened_device_name = dev_name
+                    self._sample_rate = sample_rate
+                    self._channels = channels
+                    self._last_device_probe_monotonic = time.monotonic()
+                committed = True
+                return True
+            except WASAPI_DEVICE_ERRORS:
+                _LOGGER.debug(
+                    "Could not open WASAPI loopback stream; returning standby silence.",
+                    exc_info=True,
+                )
+                return False
+            finally:
+                if not committed:
+                    if stream is not None:
+                        _release_native_resource(
+                            stream, "stop_stream", "stopping the WASAPI stream"
+                        )
+                        _release_native_resource(stream, "close", "closing the WASAPI stream")
+                    if pa is not None:
+                        _release_native_resource(pa, "terminate", "terminating PyAudio")
 
-    def close(self) -> None:
-        """Cierra de forma segura el stream de captura y libera la sesion WASAPI."""
+    def _close_locked(self) -> None:
+        """Libera stream y PyAudio asumiendo que `_lifecycle_lock` ya esta tomado."""
         with self._lock:
             stream = self._stream
             pa = self._pa
             self._stream = None
             self._pa = None
             self._active_device_index = None
+            self._opened_device_index = None
+            self._opened_device_name = ""
             self._latest_pcm_bytes = b""
             self._last_chunk_monotonic = 0.0
 
+        # Nunca llamar a PortAudio con `_lock` tomado: el callback de audio usa `_lock`.
         if stream is not None:
             _release_native_resource(stream, "stop_stream", "stopping the WASAPI stream")
             _release_native_resource(stream, "close", "closing the WASAPI stream")
 
         if pa is not None:
             _release_native_resource(pa, "terminate", "terminating PyAudio")
+
+    def close(self) -> None:
+        """Cierra de forma segura el stream de captura y libera la sesion WASAPI."""
+        with self._lifecycle_lock:
+            self._close_locked()
