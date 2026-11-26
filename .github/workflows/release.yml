@@ -19,7 +19,7 @@ on:
         default: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   guard:
@@ -30,7 +30,7 @@ jobs:
       tag: ${{ steps.resolve.outputs.tag }}
       dry_run: ${{ steps.resolve.outputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # A manual run has no tag: GITHUB_REF_NAME is the branch, so the version has to come from
       # the input. A tag run gets it from the tag and is never a dry run.
@@ -89,9 +89,9 @@ jobs:
     needs: guard
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.14'
           cache: pip
@@ -105,7 +105,7 @@ jobs:
       # build.ps1 probes Program Files (x86), Program Files and %LOCALAPPDATA%; the Chocolatey
       # package installs into the first one, so the installer is always built on the runner.
       - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
+        run: choco install innosetup --version=6.7.1 -y --no-progress
 
       # No version argument: the script reads pyproject.toml, which `guard` already proved equals
       # the tag, so the artifact names cannot drift from the release they belong to.
@@ -114,7 +114,7 @@ jobs:
         run: ./scripts/build.ps1 -Python python
 
       - name: Upload dist/ for the verification and publish jobs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
@@ -128,7 +128,7 @@ jobs:
     needs: [guard, build]
     runs-on: windows-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dist
           path: dist
@@ -186,6 +186,8 @@ jobs:
     name: publish
     needs: [guard, verify]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # The release identity is the tag this job publishes, not the ref that started the workflow:
     # keying on `github.ref_name` gives a tag push and a manual dispatch two different groups for
     # the same release, and their upload and un-draft steps can then interleave.
@@ -198,9 +200,9 @@ jobs:
       VERSION: ${{ needs.guard.outputs.version }}
       DRY_RUN: ${{ needs.guard.outputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dist
           path: dist

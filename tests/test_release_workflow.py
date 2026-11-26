@@ -23,7 +23,34 @@ WORKFLOW = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="
 DECLARED_VERSION = (
     (ROOT / "pyproject.toml").read_text(encoding="utf-8").split('version = "')[1].split('"')[0]
 )
-BASH = shutil.which("bash")
+
+
+def _find_bash() -> str | None:
+    """Resolve Git Bash on Windows (skipping WSL/WindowsApps stubs) or `bash` on POSIX."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    candidates: list[Path] = []
+    git_exe = shutil.which("git")
+    if git_exe:
+        git_root = Path(git_exe).resolve().parent.parent
+        candidates.extend([git_root / "bin" / "bash.exe", git_root / "usr" / "bin" / "bash.exe"])
+    candidates.extend(
+        [
+            Path(r"C:\Program Files\Git\bin\bash.exe"),
+            Path(r"C:\Program Files\Git\usr\bin\bash.exe"),
+            Path(r"C:\Program Files (x86)\Git\bin\bash.exe"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    which_bash = shutil.which("bash")
+    if which_bash and not any(bad in which_bash.lower() for bad in ("system32", "windowsapps")):
+        return which_bash
+    return None
+
+
+BASH = _find_bash()
 needs_bash = pytest.mark.skipif(BASH is None, reason="bash is required to execute a workflow step")
 
 INDENT = 10  # `run: |` sits at 8 spaces, so the body of every shell step starts at 10
@@ -55,7 +82,7 @@ def _step_body(marker: str) -> str:
 def _run_step(tmp_path: Path, marker: str, extra_env: dict[str, str], gh_stub: str | None = None):
     """Execute one extracted step; returns (completed process, gh argument log)."""
     script = tmp_path / "step.sh"
-    script.write_text(_step_body(marker), encoding="utf-8")
+    script.write_text(_step_body(marker), encoding="utf-8", newline="\n")
     _, _, working_directory = _step_lines(marker)
     cwd = tmp_path / working_directory if working_directory else tmp_path
     env = dict(os.environ, GITHUB_RUN_NUMBER="7", GITHUB_SHA="c0ffee")
@@ -66,7 +93,7 @@ def _run_step(tmp_path: Path, marker: str, extra_env: dict[str, str], gh_stub: s
         binary_dir = tmp_path / "bin"
         binary_dir.mkdir()
         stub = binary_dir / "gh"
-        stub.write_text(gh_stub, encoding="utf-8")
+        stub.write_text(gh_stub, encoding="utf-8", newline="\n")
         stub.chmod(0o755)
         log = tmp_path / "gh.log"
         log.write_text("", encoding="utf-8")
@@ -266,8 +293,10 @@ def test_s6_notes_live_in_the_repository_and_are_required() -> None:
 
 
 def test_s7_only_the_default_token_can_write() -> None:
-    assert "permissions:\n  contents: write" in WORKFLOW
-    assert WORKFLOW.count("permissions:") == 1
+    assert "\npermissions:\n  contents: read\n" in WORKFLOW
+    publish = WORKFLOW.split("\n  publish:", 1)[1]
+    assert "\n    permissions:\n      contents: write\n" in publish
+    assert WORKFLOW.count("contents: write") == 1
     assert "${{ github.token }}" in WORKFLOW
     assert "secrets." not in WORKFLOW
 

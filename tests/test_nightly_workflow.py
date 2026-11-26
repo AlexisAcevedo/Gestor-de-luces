@@ -18,7 +18,34 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = (ROOT / ".github" / "workflows" / "nightly.yml").read_text(encoding="utf-8")
-BASH = shutil.which("bash")
+
+
+def _find_bash() -> str | None:
+    """Resolve Git Bash on Windows (skipping WSL/WindowsApps stubs) or `bash` on POSIX."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    candidates: list[Path] = []
+    git_exe = shutil.which("git")
+    if git_exe:
+        git_root = Path(git_exe).resolve().parent.parent
+        candidates.extend([git_root / "bin" / "bash.exe", git_root / "usr" / "bin" / "bash.exe"])
+    candidates.extend(
+        [
+            Path(r"C:\Program Files\Git\bin\bash.exe"),
+            Path(r"C:\Program Files\Git\usr\bin\bash.exe"),
+            Path(r"C:\Program Files (x86)\Git\bin\bash.exe"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    which_bash = shutil.which("bash")
+    if which_bash and not any(bad in which_bash.lower() for bad in ("system32", "windowsapps")):
+        return which_bash
+    return None
+
+
+BASH = _find_bash()
 needs_bash = pytest.mark.skipif(BASH is None, reason="bash is required to execute a workflow step")
 
 INDENT = 10  # `run: |` sits at 8 spaces, so the body of every shell step starts at 10
@@ -73,11 +100,12 @@ def _run_suite_step(
         f'if [ "$count" -eq {failing_pass or 0} ]; then exit 3; fi\n'
         "exit 0\n",
         encoding="utf-8",
+        newline="\n",
     )
     stub.chmod(0o755)
 
     script = tmp_path / "step.sh"
-    script.write_text(_step_body(SUITE_STEP), encoding="utf-8")
+    script.write_text(_step_body(SUITE_STEP), encoding="utf-8", newline="\n")
 
     env = dict(os.environ)
     env["COUNTER"] = str(counter)

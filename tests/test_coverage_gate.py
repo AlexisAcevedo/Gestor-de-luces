@@ -28,6 +28,7 @@ def _entry(covered: int, statements: int) -> dict[str, object]:
 def test_package_key_groups_by_package_and_falls_back_to_top_level() -> None:
     """Un archivo dentro de un paquete cuenta para ese paquete; uno suelto va a `(top-level)`."""
     assert package_key("D:\\wt\\src\\gestor_luces\\domain\\models.py") == "domain"
+    assert package_key("D:\\gestor_luces\\src\\gestor_luces\\domain\\models.py") == "domain"
     assert package_key("/wt/src/gestor_luces/adapters/tray/winforms_menu.py") == "adapters"
     assert package_key("src/gestor_luces/main.py") == TOP_LEVEL_KEY
     assert package_key("src/otro_paquete/x.py") == TOP_LEVEL_KEY
@@ -86,6 +87,10 @@ def test_main_fails_on_a_missing_report_and_on_a_package_below_its_floor(
     """El script devuelve 2 si no hay reporte, 1 si un paquete baja y 0 cuando todo pasa."""
     missing = tmp_path / "nope.json"
     assert main(["check_coverage.py", str(missing)]) == 2
+
+    malformed = tmp_path / "bad.json"
+    malformed.write_text("{not valid json", encoding="utf-8")
+    assert main(["check_coverage.py", str(malformed)]) == 2
 
     failing = tmp_path / "failing.json"
     failing.write_text(

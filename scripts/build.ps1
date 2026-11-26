@@ -23,6 +23,17 @@ $pyproject = Get-Content (Join-Path $Root "pyproject.toml") -Raw
 if ($pyproject -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw "Version not found in pyproject.toml" }
 $Version = $Matches[1]
 
+function Invoke-CodeSign {
+  param([Parameter(Mandatory = $true)][string]$TargetPath)
+  $signtool = Get-Command signtool -ErrorAction SilentlyContinue
+  if (-not ($signtool -and $env:SIGN_CERT_SHA1 -and (Test-Path $TargetPath))) {
+    return
+  }
+  Write-Host "==> Authenticode signing $TargetPath (cert SHA1: $($env:SIGN_CERT_SHA1))"
+  & $signtool.Source sign /sha1 $env:SIGN_CERT_SHA1 /fd SHA256 /tr "https://timestamp.digicert.com" /td SHA256 $TargetPath
+  if ($LASTEXITCODE -ne 0) { throw "signtool failed for $TargetPath" }
+}
+
 Write-Host "==> Generating icon"
 & $Python assets\icon\make_icon.py
 if ($LASTEXITCODE -ne 0) { throw "Icon generation failed" }
@@ -30,6 +41,10 @@ if ($LASTEXITCODE -ne 0) { throw "Icon generation failed" }
 Write-Host "==> PyInstaller"
 & $Python -m PyInstaller packaging\gestor_luces.spec --noconfirm --clean
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
+
+# Sign the frozen executable BEFORE packaging the portable zip and Inno Setup installer
+# so every distributed copy carries the Authenticode signature.
+Invoke-CodeSign -TargetPath (Join-Path $Root "dist\GestorDeLuces\GestorDeLuces.exe")
 
 Write-Host "==> Portable zip"
 $zip = Join-Path $Root "dist\GestorDeLuces-portable-$Version.zip"
@@ -46,49 +61,24 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
 }
 Write-Host "Created $zip (requires the Microsoft Edge WebView2 Runtime)"
 
-if ($SkipInstaller) {
-  Write-Host "==> Generating SHA256SUMS.txt"
-  $sumsFile = Join-Path $Root "dist\SHA256SUMS.txt"
-  $artifacts = Get-ChildItem (Join-Path $Root "dist") -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" }
-  $lines = foreach ($item in $artifacts) {
-    $hash = (Get-FileHash -Path $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    "$hash  $($item.Name)"
+if (-not $SkipInstaller) {
+  $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+  if (-not $iscc) {
+    $candidates = @(
+      "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+      "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+      "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+    )
+    $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($found) { $iscc = [pscustomobject]@{ Source = $found } }
   }
-  # LF sin BOM: `Set-Content -Encoding UTF8` escribe BOM + CRLF, y en Linux/macOS
-  # `sha256sum -c` toma el CR como parte del nombre ("FAILED open or read").
-  [System.IO.File]::WriteAllText($sumsFile, (($lines -join "`n") + "`n"),
-    (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host "Wrote $sumsFile"
-  return
-}
-
-$iscc = Get-Command iscc -ErrorAction SilentlyContinue
-if (-not $iscc) {
-  $candidates = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
-  )
-  $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-  if ($found) { $iscc = [pscustomobject]@{ Source = $found } }
-}
-if ($iscc) {
-  Write-Host "==> Inno Setup"
-  & $iscc.Source "/DAppVersion=$Version" packaging\installer.iss
-  if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-} else {
-  Write-Warning "Inno Setup (ISCC.exe) not found; installer skipped."
-}
-
-$signtool = Get-Command signtool -ErrorAction SilentlyContinue
-if ($signtool -and $env:SIGN_CERT_SHA1) {
-  Write-Host "==> Authenticode signing (cert SHA1: $($env:SIGN_CERT_SHA1))"
-  $targets = @(Join-Path $Root "dist\GestorDeLuces\GestorDeLuces.exe")
-  $setupExe = Join-Path $Root "dist\GestorDeLuces-Setup-$Version.exe"
-  if (Test-Path $setupExe) { $targets += $setupExe }
-  foreach ($bin in $targets) {
-    & $signtool.Source sign /sha1 $env:SIGN_CERT_SHA1 /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $bin
-    if ($LASTEXITCODE -ne 0) { throw "signtool failed for $bin" }
+  if ($iscc) {
+    Write-Host "==> Inno Setup"
+    & $iscc.Source "/DAppVersion=$Version" packaging\installer.iss
+    if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+    Invoke-CodeSign -TargetPath (Join-Path $Root "dist\GestorDeLuces-Setup-$Version.exe")
+  } else {
+    Write-Warning "Inno Setup (ISCC.exe) not found; installer skipped."
   }
 }
 
