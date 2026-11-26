@@ -16,6 +16,8 @@ la descomposicion espectral.
 
 from __future__ import annotations
 
+import math
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -25,6 +27,40 @@ from gestor_luces.domain.value_objects import Color
 VALID_MUSIC_PALETTES = ("spectrum", "club", "chill")
 SILENCE_TIMEOUT_SECONDS = 0.16
 STANDBY_BRIGHTNESS_FLOOR = 12
+
+
+@lru_cache(maxsize=32)
+def _fft_plan(
+    num_samples: int,
+    sample_rate: int,
+) -> tuple[np.ndarray, float, slice, slice, slice]:
+    """Precalcula ventana de Hann de solo lectura y slices de banda para `(N, sample_rate)`."""
+    window = np.hanning(num_samples).astype(np.float32)
+    window.setflags(write=False)
+    window_sum = float(np.sum(window)) or 1.0
+    scale = 2.0 / window_sum
+    freqs = np.fft.rfftfreq(num_samples, d=1.0 / float(sample_rate))
+    bass = slice(
+        int(np.searchsorted(freqs, 20.0, side="left")),
+        int(np.searchsorted(freqs, 250.0, side="left")),
+    )
+    mid = slice(
+        int(np.searchsorted(freqs, 250.0, side="left")),
+        int(np.searchsorted(freqs, 2000.0, side="left")),
+    )
+    treble = slice(
+        int(np.searchsorted(freqs, 2000.0, side="left")),
+        int(np.searchsorted(freqs, 12000.0, side="right")),
+    )
+    return window, scale, bass, mid, treble
+
+
+def _band_rms(spectrum: np.ndarray, band: slice) -> float:
+    """Calcula energia RMS de una banda espectral usando un slice contiguo."""
+    segment = spectrum[band]
+    if segment.size == 0:
+        return 0.0
+    return float(np.sqrt(np.dot(segment, segment)))
 
 
 def _standby_color_for_palette(palette_mode: str) -> Color:
@@ -119,15 +155,22 @@ def analyze_pcm_audio_frame(
       para senales reales (`np.fft.rfft`), integrando la energia en tres bandas perceptuales:
       Graves (`20-250 Hz`), Medios (`250-2000 Hz`) y Agudos (`2000-12000 Hz`).
     """
-    clamped_sensitivity = max(0.2, min(4.0, float(sensitivity)))
+    if isinstance(sensitivity, bool):
+        raw_sensitivity = 1.0
+    else:
+        raw_sensitivity = float(sensitivity)
+        if not math.isfinite(raw_sensitivity):
+            raw_sensitivity = 1.0
+    clamped_sensitivity = max(0.2, min(4.0, raw_sensitivity))
     num_channels = max(1, int(channels))
     effective_rate = max(8000, int(sample_rate))
 
     if isinstance(samples, (bytes, bytearray, memoryview)):
-        if len(samples) == 0:
-            arr = np.empty(0, dtype=np.float32)
-        else:
-            arr = np.frombuffer(samples, dtype=np.float32)
+        raw_bytes = memoryview(samples).cast("B")
+        aligned_len = (len(raw_bytes) // 4) * 4
+        if aligned_len == 0:
+            return _silence_metrics(palette_mode)
+        arr = np.frombuffer(raw_bytes[:aligned_len], dtype=np.float32)
     else:
         arr = np.asarray(samples)
 
@@ -174,24 +217,14 @@ def analyze_pcm_audio_frame(
         ),
     )
 
-    # Aplicamos una ventana de Hann antes de la RFFT para evitar discontinuidades en los bordes
-    # del bloque que contaminarian las bandas vecinas con armonicos artificiales.
-    window = np.hanning(mono.size).astype(np.float32)
-    window_sum = float(np.sum(window)) or 1.0
-    spectrum = (2.0 * np.abs(np.fft.rfft(mono * window))) / window_sum
-    freqs = np.fft.rfftfreq(mono.size, d=1.0 / float(effective_rate))
+    # Aplicamos la ventana de Hann cacheada y los slices contiguos de frecuencia para evitar
+    # recomputar `hanning`, `rfftfreq` y mascaras booleanas en cada iteracion.
+    window, scale, bass_slice, mid_slice, treble_slice = _fft_plan(mono.size, effective_rate)
+    spectrum = np.abs(np.fft.rfft(mono * window)) * scale
 
-    bass_mask = (freqs >= 20.0) & (freqs < 250.0)
-    mid_mask = (freqs >= 250.0) & (freqs < 2000.0)
-    treble_mask = (freqs >= 2000.0) & (freqs <= 12000.0)
-
-    bass_energy = (
-        float(np.sqrt(np.sum(np.square(spectrum[bass_mask])))) if np.any(bass_mask) else 0.0
-    )
-    mid_energy = float(np.sqrt(np.sum(np.square(spectrum[mid_mask])))) if np.any(mid_mask) else 0.0
-    treble_energy = (
-        float(np.sqrt(np.sum(np.square(spectrum[treble_mask])))) if np.any(treble_mask) else 0.0
-    )
+    bass_energy = _band_rms(spectrum, bass_slice)
+    mid_energy = _band_rms(spectrum, mid_slice)
+    treble_energy = _band_rms(spectrum, treble_slice)
 
     bass_norm = min(1.0, bass_energy * 1.65 * clamped_sensitivity)
     mid_norm = min(1.0, mid_energy * 1.50 * clamped_sensitivity)
