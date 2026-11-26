@@ -51,23 +51,25 @@ The core principle behind this project is **strict isolation of business invaria
 ### Layer Separation
 
 1. **Domain Layer (`gestor_luces.domain`)**:
-   - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), and global UI preference invariants in `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`), and `DEFAULT_THEME` (`"architectural-stone"`)).
+   - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), endpoint validation (`validate_local_endpoint`), and global UI preference invariants in `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`), and `DEFAULT_THEME` (`"architectural-stone"`)).
    - Completely devoid of dependencies on external packages, operating system APIs, network libraries, or serialization frameworks.
-   - Enforces business validation rules (e.g., RGB integers between 0 and 255, Kelvin bounds between 2,200K and 6,500K, bulb identification constraints, and supported language/theme tokens).
+   - Enforces business validation rules (e.g., RGB integers between 0 and 255, Kelvin bounds between 2,200K and 6,500K, local unicast IPv4 endpoint checks rejecting unspecified/broadcast/multicast addresses, and supported language/theme tokens).
 
 2. **Ports Layer (`gestor_luces.ports`)**:
-   - Defines structural typing contracts using Python's `typing.Protocol` with `@runtime_checkable`.
-   - Driven ports specify external requirements without binding to specific drivers:
-     - `LightController`: Defines network primitives (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
+   - Defines structural typing contracts using Python's `typing.Protocol` with `@runtime_checkable` across `light_control.py`, `repositories.py`, and `autostart.py`.
+   - Driving and driven contracts decouple the desktop shell and infrastructure drivers without a monolithic `interfaces.py` barrel:
+     - `LightControlServicePort` (`ports/light_control.py`): Desktop-facing application service contract injected into `DesktopApplication`.
+     - `LightController` (`ports/repositories.py`): Defines network primitives (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
      - `BulbRepository`, `SceneRepository`, `SettingsRepository`: Contract for loading and storing application state.
      - `ScreenSampler`: Contract for capturing monitor pixels and computing dominant color (`sample_frame`, `sample_average_color`, `list_monitors`, `close`).
      - `AudioSampler`: Contract for sampling system audio energy and frequency spectrum (`sample_frame`, `sample_audio_metrics`, `list_audio_devices`, `close`).
+     - `AutostartManager` (`ports/autostart.py`): Registry autostart contract.
 
 3. **Application Layer (`gestor_luces.application`)**:
-   - Coordinates business workflows through `LightControlService`.
+   - Coordinates business workflows through `LightControlService` (`service.py`), delegating to bounded capability services (`bulb_control_service.py`, `bulb_inventory_service.py`, `scene_service.py`, `timer_service.py`, `ambilight_service.py`, `music_service.py`, `settings_service.py`) over a shared `service_context.py`.
    - Receives lazy sampler factories (`screen_sampler_factory`, `audio_sampler_factory`) injected from the composition root (`main.py`) so inner layers (`domain`, `ports`, `application`) never import `adapters` (enforced via AST static verification in `tests/test_security_hardening.py`).
-   - Manages asynchronous orchestration across single or multiple bulbs concurrently using `asyncio.gather`.
-   - Houses specialized domain services:
+   - Splits resource teardown between `close_audio_sampler()` (released while `BridgeLifecycle` closes active streams) and `close_all_resources()` during full shutdown, with rotating log files (`RotatingFileHandler`) and stream error backoff.
+   - Houses specialized streaming and pacing coordinators protected by monotonic generation/run-ID guards (`_generation` / `run_id`) to prevent restart races:
      - `StreamRateLimiter`: Enforces maximum transmission pacing (10 Hz) for high-frequency streams.
      - `SleepTimerManager`: Coordinates non-blocking countdown timers with progressive linear brightness fade-out.
      - `AmbilightStreamManager`: Runs dedicated screen-sampling streaming cycles.
@@ -77,18 +79,19 @@ The core principle behind this project is **strict isolation of business invaria
    - Implements ports with real-world infrastructure:
      - `adapters.wiz.udp_controller`: Manages UDP broadcast discovery and unicast JSON-RPC datagrams via `pywizlight`.
      - `adapters.storage.json_repositories`: Implements filesystem atomic persistence into `%LOCALAPPDATA%\GestorDeLuces`.
-     - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss`.
-     - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture and `numpy.fft.rfft`.
+     - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss` with `ScreenShotError` boundary recovery.
+     - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture (`wasapi_session.py`, `wasapi_devices.py`) with COM/session lifecycle locking, hot-unplug recovery, leak-free teardown, and cached FFT plans/buffers in `wasapi_capture.py`.
+     - `adapters.platform.windows`: Isolates Win32 DWM chrome and icon caching (`window_chrome.py`), multi-monitor `WorkingArea` and high-DPI window sizing (`window_geometry.py`), foreground activation (`foreground.py`), native menu state synchronization (`menu_sync.py`, `menu_state.py`), and dialogs (`message.py`).
      - `adapters.tray`: Implements Windows notification area integration behind a minimal `TrayView` contract:
-      - `tray_icon`: `TrayController` owns the menu model, handlers, executor and the single refresh thread; it never imports a GUI toolkit.
+      - `tray_icon`: `TrayController` owns the menu model, handlers, executor, and condition-variable-driven refresh thread (`_refresh_cond`); it never imports a GUI toolkit.
       - `tray_view`: `TrayView` protocol (`run`/`stop`/`apply`) plus the shared model-to-action mapping and icon rendering.
       - `winforms_tray`: Primary view entry point. `create_winforms_view` and `WinFormsTrayView` compose the pieces below and keep the apply policy (icon/tooltip always, menu rebuild deferred while the menu is visible); it re-exports the module surface importers used before the split.
-      - `winforms_host`: the STA host. Lazy pythonnet/WinForms resolution, `CoInitializeEx`, the hidden 0×0 `Form` — marked `WS_EX_TOOLWINDOW` on its freshly created handle, so a window that is visible, transparent and minimised never shows up as an alt+tab entry —, `Application.Run(form)` and `Control.Invoke` marshalling. No other module imports .NET on its own.
+      - `winforms_host`: the STA host. Lazy pythonnet/WinForms resolution, `CoInitializeEx`, the hidden 0×0 `Form` guarded with `IsHandleCreated` — marked `WS_EX_TOOLWINDOW` on its freshly created handle, so a window that is visible, transparent and minimised never shows up as an alt+tab entry —, `Application.Run(form)` and `Control.Invoke` marshalling. No other module imports .NET on its own.
       - `winforms_icon`: `NotifyIcon` plus a per-color `HICON` cache that destroys replaced handles, and the 63-character tooltip limit.
       - `winforms_menu`: builds the `ContextMenuStrip` and its submenus from the pure `TrayMenuEntry` model, owns the menu/state signatures, and attaches the window finish to every menu surface.
-      - `winforms_paint`: theme palettes, hex parsing, and every drawing operation (row painter, hover, check dot, submenu chevron, separators, DPI-scaled rounded-region geometry and the rounded `Region` cut).
+      - `winforms_paint`: theme palettes, hex parsing, prior `Region` disposal, and every drawing operation (row painter, hover, check dot, submenu chevron, separators, DPI-scaled rounded-region geometry and the rounded `Region` cut).
       - `pystray_tray`: Fallback view (classic Win32 menu) used when pythonnet/WinForms cannot load.
-     - `adapters.ui_webview.bridge`: Primary driver exposing a thread-safe JavaScript API inside Microsoft Edge WebView2 through a restricted public facade (`JsApi` whitelist) so internal methods and callbacks cannot be invoked from JavaScript. The adapter is split into `dispatch` (the explicit `JS_API_DISPATCH` table, `JsApi` and the window-fit contract), `handlers` (one handler per capability) and `lifecycle` (dedicated event loop, envelope sealing, state notifications, the tray-only non-notifying `refresh_tray_states` read, and shutdown); `bridge.py` keeps `WebviewBridge` and re-exports the whole surface, so importers are unaffected.
+     - `adapters.ui_webview.bridge`: Primary driver exposing an explicitly whitelisted set of top-level functions inside Microsoft Edge WebView2 (`BlockedJsApi` on `js_api` plus `window.expose(*build_exposed_functions(js_api))`), preventing dotted `getattr` traversal from JavaScript. The adapter is split into `dispatch` (`BlockedJsApi`, `build_exposed_functions`, `JsApi`, and the window-fit contract), `handlers` (capability handlers with strict finite/type input validation, sanitized error responses, and delta status polling for Ambilight/Music Sync), `http_server` (`NoCacheBottleServer`), and `lifecycle` (`BridgeLifecycle` behind `_loop_state_lock`, timed-out task cancellation, envelope sealing, state notifications, `refresh_tray_states`, and shutdown); `bridge.py` keeps `WebviewBridge` and re-exports the public surface.
 
 ---
 
@@ -128,11 +131,11 @@ Every call site passes an explicit `name=` and `daemon=True`: an omitted `stop()
 
 | Thread (`name=`) | Owner (module → creator) | Lifetime | How it is stopped |
 | --- | --- | --- | --- |
-| `GestorLucesAsyncLoop` (`ASYNC_LOOP_THREAD_NAME`) | `adapters/ui_webview/lifecycle.py` → `BridgeLifecycle._start_async_loop`, started by `WebviewBridge.__init__` | Long-lived: one per session, runs the bridge's private `asyncio` loop (`loop.run_forever()`) | `WebviewBridge.shutdown()` cancels the active streams, calls `loop.call_soon_threadsafe(loop.stop)` and `thread.join(timeout=2.0)`. Idempotent behind `_shutdown_lock`; invoked by `DesktopApplication.cleanup()` and by the window `closed` event. |
+| `GestorLucesAsyncLoop` (`ASYNC_LOOP_THREAD_NAME`) | `adapters/ui_webview/lifecycle.py` → `BridgeLifecycle._start_async_loop`, started by `WebviewBridge.__init__` | Long-lived: one per session, runs the bridge's private `asyncio` loop (`loop.run_forever()`) | `WebviewBridge.shutdown()` coordinates state under `_loop_state_lock`, cancels active streams and timed-out tasks, releases audio sampler resources, calls `loop.call_soon_threadsafe(loop.stop)` and `thread.join(timeout=2.0)`. Idempotent behind `_shutdown_lock`; invoked by `DesktopApplication.cleanup()` and by the window `closed` event. |
 | `GestorLucesTray` (`ICON_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start`, runs `TrayView.run` | Long-lived: the view's native message pump (WinForms `Application.Run` on an STA thread, or `pystray.Icon.run`) for the whole session | `TrayController.stop()` sets `_stopped` and calls `TrayView.stop()` (WinForms closes the hidden form, `pystray` stops the icon), so `run` returns. Safe to call repeatedly and from any thread. |
-| `GestorLucesTrayRefresh` (`REFRESH_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start` → `_refresh_worker` | Long-lived: waits on `_refresh_requested` with the `poll_interval` timeout (5 s) | Same `TrayController.stop()`: it sets `_stopped` and `_refresh_requested` and the worker exits on the flag. It is the single writer of native tray state (T-3.6). Only a timeout-driven (periodic) cycle asks the bridge for a live `getPilot` read through `refresh_tray_states`, which does not seal the success envelope; a refresh requested by an action keeps the cache that action just wrote. |
+| `GestorLucesTrayRefresh` (`REFRESH_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start` → `_refresh_worker` | Long-lived: waits on `_refresh_cond` with the `poll_interval` timeout (5 s) | Same `TrayController.stop()`: acquires `_refresh_cond`, sets `_stopped` and notifies, and the worker exits on the flag. It is the single writer of native tray state (T-3.6). Only a timeout-driven (periodic) cycle asks the bridge for a live `getPilot` read through `refresh_tray_states`, which does not seal the success envelope; a refresh requested by an action keeps the cache that action just wrote. |
 | `GestorLucesTrayAction` (literal in `_default_executor`) | `adapters/tray/tray_icon.py` → `TrayController.dispatch` → `_run_action` | Short-lived: one thread per dispatched menu action | Self-terminating; nothing joins it. `quit_app` deliberately does not tear the tray down from this thread — the teardown runs later in `cleanup()`. |
-| `GestorLucesMenuSync` (`MENU_SYNC_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.start` → `_menu_sync_worker` | Long-lived: waits on `_menu_sync_requested` and re-applies the live native `MenuStrip` (pywebview has no menu update API) | `DesktopApplication.cleanup()` sets `is_quitting` and calls `request_menu_sync()` once: the loop wakes, sees the flag and exits before re-applying. |
+| `GestorLucesMenuSync` (`MENU_SYNC_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.start` → `_menu_sync_worker` | Long-lived: waits on `_menu_sync_cond` (backed by `_state_lock`) and re-applies the live native `MenuStrip` (pywebview has no menu update API) | `DesktopApplication.cleanup()` sets `is_quitting` under `_state_lock`, notifies `_menu_sync_cond`, and the loop exits before re-applying. `DesktopApplication` also tracks `_visibility_generation` so overlapping hide/show events cannot clobber each other, and suppresses titlebar/menu sync churn during light-control drags. |
 | `GestorLucesHideOnClose` (`HIDE_ON_CLOSE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_closing` (window `closing` event) | Short-lived: calls `hide_window` and exits | Self-terminating. pywebview raises `closing` synchronously on the GUI thread with `should_lock`, so hiding from inside the handler could re-enter or deadlock; hence the thread. |
 | `GestorLucesHideOnMinimize` (`HIDE_ON_MINIMIZE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_minimized` (window `minimized` event) | Short-lived: calls `hide_window` and exits | Self-terminating, for the same reason as hide-on-close. |
 | `GestorLucesSingleInstance` (literal in `listen`) | `adapters/system/single_instance.py` → `SingleInstanceGuard.listen` | Long-lived: polls `WaitForSingleObject(handle, 500 ms)` for a second launch | `SingleInstanceGuard.release()` sets `self._stop`; the thread exits within one 500 ms poll. Called by `DesktopApplication.cleanup()`. |
@@ -229,35 +232,13 @@ WiZ light bulbs are powered by low-power ESP8266 / ESP32 microcontrollers. Sendi
 - Dropped UDP frames and visible stutters.
 - Network congestion on 2.4 GHz Wi-Fi channels.
 
-### The 10 Hz Leaky Pacing Mechanism
+### The 10 Hz Leaky Pacing Mechanism & EMA Smoothing
 
-To protect device integrity, `StreamRateLimiter` enforces a strict leaky-pacing window:
-
-$$\Delta t \ge 100\text{ ms} \quad (\text{Max rate } = 10\text{ Hz})$$
-
-```python
-class StreamRateLimiter:
-    def __init__(self, min_interval_seconds: float = 0.10) -> None:
-        self._min_interval = min_interval_seconds
-        self._last_dispatch: float = 0.0
-
-    def should_dispatch(self, now: float | None = None) -> bool:
-        current = time.monotonic() if now is None else now
-        if current - self._last_dispatch >= self._min_interval:
-            self._last_dispatch = current
-            return True
-        return False
-```
-
-### Exponential Moving Average (EMA) Smoothing
-
-To eliminate jarring transitions caused by abrupt screen changes (e.g., scene cuts in movies or rapid weapon firing in games), the Ambilight engine applies an Exponential Moving Average filter to the color stream:
+To protect device integrity, `StreamRateLimiter` enforces a strict leaky-pacing window ($\Delta t \ge 100\text{ ms}$, max rate $= 10\text{ Hz}$) per target bulb IP alongside an Exponential Moving Average (EMA) color filter:
 
 $$\vec{C}_{\text{smoothed}} = \alpha \cdot \vec{C}_{\text{new}} + (1 - \alpha) \cdot \vec{C}_{\text{prev}}$$
 
-Where $\alpha \in [0.1, 0.4]$ controls the smoothing factor:
-- Lower $\alpha$ values produce cinematic, fluid transitions.
-- Higher $\alpha$ values increase responsiveness for fast-paced gaming.
+Where $\alpha \in [0.1, 0.4]$ controls the smoothing factor (lower $\alpha$ produces fluid cinema transitions; higher $\alpha$ prioritizes fast gaming reactivity). `StreamRateLimiter.prepare_frame()` rejects non-finite smoothing values (`NaN`/`Inf`) and advances `_TargetStreamState` beyond the EMA deadband threshold so small color changes converge completely instead of stalling.
 
 ---
 
@@ -268,13 +249,13 @@ Application settings, custom presets, and known bulb configurations are stored l
 $$\text{Path: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$$
 
 Files managed:
-- `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases.
+- `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases (re-validated via `validate_local_endpoint()` on load).
 - `custom_scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed, favorite flag).
 - `settings.json`: Global user preferences (`language`: `"en"` or `"es"`, and `theme`: `"architectural-stone"` or `"atmospheric-dark"`).
 
-### Atomic File Write Pattern
+### Atomic File Write & Read Hardening
 
-To prevent JSON corruption in the event of sudden power cuts or process termination, writes follow the atomic replacement protocol:
+To prevent JSON corruption, tampering, or unbounded reads, repositories in `adapters/storage/json_repositories.py` enforce input file-size caps and strict schema validation on load, and follow an atomic replacement protocol on write:
 1. Serialize JSON payload to an in-memory buffer.
 2. Create a unique temporary file in the same directory via `tempfile.mkstemp` (`.<filename>.<random>.tmp`).
 3. Write, flush, and synchronize the file descriptor (`flush()` + `os.fsync()`).
@@ -292,47 +273,20 @@ To prevent JSON corruption in the event of sudden power cuts or process terminat
 The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), which writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The registered command is `<exe> --minimized` when frozen and `pythonw -m gestor_luces.main --minimized` in development. On every launch, `refresh_if_stale` rewrites the entry if it points to a different path (for example after moving the portable folder). The registry is injectable, so tests never touch `HKCU`.
 
 ### Single Instance
-`adapters/system/single_instance.py` combines a named mutex with a named event protected by an explicit SDDL DACL (`SY`/`BA`/`OW`). A second launch signals the event and exits; the first instance reacts by showing its window (unless bypassed via `--multi-instance` for side-by-side diagnostics).
+`adapters/system/single_instance.py` (`SingleInstanceGuard`) combines a named mutex with a named event protected by an explicit SDDL DACL (`SY`/`BA`/`OW`), guarding Win32 handles against `ERROR_ACCESS_DENIED` and `WAIT_FAILED` while cleaning up handles deterministically on release. A second launch signals the event and exits; the first instance reacts by showing its window (unless bypassed via `--multi-instance` for side-by-side diagnostics).
 
 ### Multi-Theme Engine & Dynamic Widget Geometry
-- **3-Tier CSS Token Architecture**: `ui/themes.css` defines primitive, semantic, and component-level tokens for both `"architectural-stone"` (default warm mineral Light theme) and `"atmospheric-dark"` (translucent glass Dark theme with `oklab` photometric halo), consumed by the layout and component rules in `ui/styles.css`.
-- **Native Window Chrome Synchronization (`THEME_WINDOW_CHROME`)**: `DesktopApplication.create_window()` reads the persisted theme before creating the PyWebView window to set the initial WebView2 `background_color` (`#F4F1EA` or `#08090C`), appends `#theme=<theme>` to the initial window URL, and delegates the Windows DWM titlebar attribute (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` with `0` for light or `1` for dark) to `adapters/platform/windows/window_chrome.py` (`_set_windows_dark_titlebar_attribute`), both on startup and bidirectionally at runtime when the user switches themes. Before `themes.css` loads, `ui/js/theme-boot.js` runs synchronously in `<head>` (preserving the strict `script-src 'self' file:` CSP) to apply `data-theme` and `<meta name="color-scheme">` from `#theme=` or `localStorage` prior to first paint, preventing a light-theme FOUC on startup.
-- **Content-Driven Window Height Auto-Fit**: `adapters/platform/windows/window_geometry.py` implements `_fit_native_window_height` using 64-bit-safe Win32 `ctypes` (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) marshaled onto the WinForms UI thread (`native_form.Invoke`), clamped to the active monitor's work area via `WebviewBridge.fit_window_height`.
+- **3-Tier CSS Token Architecture & Compositor Performance**: `ui/themes.css` defines primitive, semantic, and component-level tokens for both `"architectural-stone"` (default warm mineral Light theme) and `"atmospheric-dark"` (translucent glass Dark theme with `oklab` photometric halo), consumed by `ui/styles.css`. Expensive `backdrop-filter` rules are scoped away from high-count cards and buttons, `.music-meter-fill` animates strictly via compositor `transform: scaleX(var(--meter-scale, 0))`, and `@media (prefers-reduced-motion)` avoids global zero-duration hacks while `:focus-visible`, `:focus-within`, and `@media (forced-colors: active)` preserve keyboard visibility.
+- **Native Window Chrome Synchronization (`THEME_WINDOW_CHROME`)**: `DesktopApplication.create_window()` reads the persisted theme before creating the PyWebView window to set the initial WebView2 `background_color` (`#F4F1EA` or `#08090C`), appends `#theme=<theme>` to the initial window URL, and delegates the Windows DWM titlebar attribute (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` with `0` for light or `1` for dark) and cached `HICON` lifecycle (`release_window_icons()`) to `adapters/platform/windows/window_chrome.py` (`apply_window_icon` unwrapping `.native` handles and using explicit 64-bit `ctypes` `argtypes`/`restype`), both on startup and bidirectionally at runtime when the user switches themes. Before `themes.css` loads, `ui/js/theme-boot.js` runs synchronously in `<head>` to apply `data-theme` and `<meta name="color-scheme">` from `#theme=` or `localStorage` prior to first paint, preventing a light-theme FOUC on startup.
+- **Content-Driven Window Height Auto-Fit**: `adapters/platform/windows/window_geometry.py` implements `_fit_native_window_height` using 64-bit-safe Win32 `ctypes` (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) marshaled onto the WinForms UI thread (`native_form.Invoke`), clamped across multi-monitor `WorkingArea` bounds and high-DPI scaling via `WebviewBridge.fit_window_height`.
 
-### Frontend Serving (loopback HTTP + ES Modules) · D4 verdict: A (2026-11-08)
-The frontend is served over loopback HTTP so `ui/app.js` can be split into real ES
-modules (Chromium blocks `type="module"` over `file://`). `DesktopApplication.create_window()` passes the plain
-filesystem path with the theme fragment (`f"{index_path}#theme={theme}"`) as the window URL and starts `webview.start(http_server=True)` (`BottleServer` strips `#...` when resolving the static root and `Window._resolve_url` preserves the fragment on the loopback URL).
+### Frontend Serving, IPC Bridge & Reactive Polling
+The frontend is served over hardened loopback HTTP so `ui/js/` loads as native ES modules (Chromium blocks `type="module"` over `file://`). `DesktopApplication.create_window()` passes the plain filesystem path with the theme fragment (`f"{index_path}#theme={theme}"`) and starts `webview.start(http_server=True, http_server_class=NoCacheBottleServer)`:
 
-The D4-A spike (T-2.0) verified the following, with evidence:
-- **Loopback-only surface**: pywebview's built-in Bottle server binds `127.0.0.1` only
-  (observed `http://127.0.0.1:42001/`). It is never exposed to the LAN.
-- **Bridge stays direct IPC**: `window.pywebview.api` remains a native WebView2 host
-  object. The HTTP `/js_api/<uuid>` endpoint only carries JS promise callbacks, gated by
-  a per-launch random `uuid`; it is not the application bridge.
-- **Static serving + ESM MIME**: `index.html` → `text/html`, `app.js`/`i18n.js` →
-  `text/javascript` (module-compatible), `themes.css`/`styles.css` → `text/css`.
-- **Path traversal blocked**: `GET /../../<file>` returns `403 Forbidden`
-  (`bottle.static_file` rejects `..`).
-- **Dev boot verified**: `python -m gestor_luces --minimized --multi-instance` served
-  `index.html` with HTTP 200 on `127.0.0.1:42001` (title `WiZ Architectural Lighting
-  Console`), no errors in the log.
-- **`resolve_ui_directory()` unchanged**: returns `ui/` from source and `_MEIPASS/ui`
-  when frozen; both are plain paths, so the server root is identical either way
-  (`resources.py`).
-
-Gotchas recorded for T-2.2:
-- The window URL **must** be a plain path (`str(index_path)`), not `.as_uri()`
-  (`file://` is not rewritten to HTTP by pywebview's `_resolve_url`).
-- The CSP `'self'` origin follows the scheme: it becomes `http://127.0.0.1:42001`;
-  the explicit `file:` allowances become vestigial (harmless) and can be dropped later.
-- `localStorage` origin migrates from `file://` to `http://127.0.0.1:42001`. The port is
-  fixed (`settings['DEFAULT_HTTP_PORT']=42001`) because `private_mode=False`, so data
-  persists across launches — but pre-existing `file://` localStorage does not carry over
-  (one-time migration note; scene/theme truth lives in the JSON repositories anyway).
-- Fixed port `42001` can collide under `--multi-instance` (two simultaneous servers).
-- pywebview's root route `/` is a dead, buggy route (500); windows always load a
-  concrete file path (`/index.html`), so it is never exercised.
+- **Hardened Loopback HTTP (`NoCacheBottleServer`)**: Binds explicitly to `127.0.0.1` on an ephemeral or configured port, uses a cryptographically random `secrets.token_urlsafe(24)` server ID, disables pywebview's HTTP JS-API callback endpoint (`server.js_api_endpoint = None`) and wildcard CORS (`Access-Control-Allow-*` headers removed), enforces `GET`/`HEAD` methods only, validates `Host` and `Origin` headers plus a `64 KiB` `Content-Length` limit, and attaches strict cache-control and `SECURITY_HEADERS` including CSP (`frame-ancestors 'none'`).
+- **Whitelist-Exposed Native IPC (`BlockedJsApi` + `window.expose`)**: Rather than exposing the full `JsApi` object attribute tree on `window.pywebview.api` (which would permit dotted `getattr` traversal), `DesktopApplication` binds a `BlockedJsApi` wrapper as `js_api` and registers only the explicitly curated callables returned by `build_exposed_functions(js_api)` via `window.expose(...)`. `handlers.py` validates finite numbers (`NaN`/`Inf`/`OverflowError`/`bool` rejected) and sanitizes exceptions returned to JavaScript.
+- **Resilient Frontend Bridge & Delta Polling (`ui/js/`)**: `bridge-client.js` awaits `pywebviewready` with a 2000 ms fallback while still upgrading to the native bridge on late `pywebviewready` events, drops stale out-of-order responses via monotonic request sequencing, and deduplicates overlapping calls via `dedupeKey`. `app.js` uses lightweight delta endpoints (`get_ambilight_status`, `get_music_sync_status`) for live stream meters, triggers a silent `refreshStates()` when a stream stops, and performs selective panel DOM updates while protecting focused inputs (`#input-hex`, scene/bulb inputs).
+- **Accessible Controls**: `ui/index.html`, `scenes.js`, and `fixtures.js` keep interactive controls unnested (`.scene-card-trigger` + sibling `.scene-fav-btn`, rename button outside `<label>`) and provide keyboard navigation (`tabindex="0"`, `role="slider"`, arrow keys) on `#color-wheel-canvas`.
 
 ### Internationalization (i18n) Ownership · single source of truth
 Translations have a **single owner per domain** (Gate 2 / T-2.3):
@@ -351,17 +305,17 @@ The two conventions are deliberately incompatible so a literal key can never col
 in the domain that owns it; never mirror the same key in both places.
 
 ### Packaging
-`scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/`), builds the portable ZIP and the Inno Setup installer (`packaging/installer.iss`, per-user, no administrator rights), signs binaries when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`. The checksum file is written with LF and no BOM on purpose: `Set-Content -Encoding UTF8` adds a BOM and CRLF, and on Linux/macOS `sha256sum -c` then reads the carriage return as part of the file name and every line fails with `FAILED open or read`.
+`scripts/build.ps1` generates the icon (`assets/icon/make_icon.py`), runs PyInstaller with `packaging/gestor_luces.spec` (one-folder, windowed, bundling `ui/` and `assets/` while excluding helper `*.py` scripts such as `make_icon.py`), signs `GestorDeLuces.exe` **before** archiving into the portable ZIP and Inno Setup installer (`packaging/installer.iss`, per-user, `runasoriginaluser`, unconditional `HKCU\...\Run` removal on uninstall, and English/Spanish `[CustomMessages]`), signs the installer with HTTPS RFC 3161 timestamping (`https://timestamp.digicert.com`) when `SIGN_CERT_SHA1` is provided, and writes `dist/SHA256SUMS.txt`. `resources.py` resolves assets from `sys._MEIPASS` when frozen. User data always stays in `%LOCALAPPDATA%\GestorDeLuces`. The checksum file is written with LF and no BOM on purpose: `Set-Content -Encoding UTF8` adds a BOM and CRLF, and on Linux/macOS `sha256sum -c` then reads the carriage return as part of the file name and every line fails with `FAILED open or read`.
 
 ### Release Pipeline (`release.yml`)
 
-The same script is what CI runs, so a release is never assembled by hand and the local build path cannot drift from the published one. Four jobs, each one cheap enough to fail early:
+The same script is what CI runs, so a release is never assembled by hand and the local build path cannot drift from the published one. All third-party actions are pinned to 40-character commit SHAs, Inno Setup is pinned (`6.7.1`), the workflow defaults to `permissions: contents: read`, and `contents: write` is scoped strictly to `publish`. Four jobs, each one cheap enough to fail early:
 
 | Job | Runner | What it decides |
 |---|---|---|
 | `guard` | `ubuntu-latest` | Resolves the version once — from the tag on a `v*` push, from a mandatory input on `workflow_dispatch`, because on a manual run `GITHUB_REF_NAME` is the branch — and fails when it does not match `pyproject.toml` or when `docs/releases/<version>.md` is missing. |
-| `build` | `windows-latest` | Installs the `dev` extra (PyInstaller ships in it) plus Inno Setup from Chocolatey, runs `scripts/build.ps1` with no version argument, uploads `dist/`. |
+| `build` | `windows-latest` | Installs the `dev` extra (PyInstaller ships in it) plus Inno Setup (`6.7.1`) from Chocolatey, runs `scripts/build.ps1` with no version argument, uploads `dist/`. |
 | `verify` | `windows-latest` | Compares the artifact set against the three expected names, runs `sha256sum -c SHA256SUMS.txt` and `GestorDeLuces.exe --smoke-test` on the frozen build. Counts files only, because `dist/` also holds the one-folder app directory. |
 | `publish` | `ubuntu-latest` | Creates a draft release (reusing one left by a re-run), uploads with `--clobber`, re-verifies each asset's GitHub digest against the local SHA-256, and only then un-drafts. A `concurrency` group keyed by tag keeps two runs of the same tag from interleaving their publish steps. |
 
-A `dry_run` run executes every step up to the un-draft and then deletes its throwaway draft, which is how the pipeline is rehearsed without publishing anything. The workflow needs no secret beyond the default `GITHUB_TOKEN` (`permissions: contents: write`); binaries stay unsigned until a certificate and `SIGN_CERT_SHA1` exist.
+A `dry_run` run executes every step up to the un-draft and then deletes its throwaway draft, which is how the pipeline is rehearsed without publishing anything. The workflow needs no secret beyond the default `GITHUB_TOKEN`; binaries stay unsigned until a certificate and `SIGN_CERT_SHA1` exist.

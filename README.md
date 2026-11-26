@@ -27,7 +27,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - RGB color selection with live palette preview and hexadecimal input.
 
 2. Firmware Scene Catalog & Custom Presets:
-   - Full catalog of all 36 native WiZ firmware scenes with dynamic speed regulation (20% to 200%).
+   - Full catalog of all 36 native WiZ firmware scenes with dynamic speed regulation (10% to 200%).
    - User-defined custom lighting presets saved to local storage with one-click recall and deletion.
 
 3. Ambient Screen Sync (Ambilight):
@@ -49,7 +49,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Deadlock-free WinForms and PyWebView synchronization.
 
 6. Progressive Sleep Timer:
-   - Configurable countdown timer (1 to 120 minutes) with progressive brightness dimming down to zero before powering off.
+   - Configurable countdown timer (1 to 240 minutes) with progressive brightness dimming down to zero before powering off.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, System Tray and the window menu bar.
@@ -112,7 +112,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 
 | Layer | Component | Version | Description |
 |---|---|---|---|
-| Runtime | Python | >= 3.11 (tested on 3.14) | Base language platform |
+| Runtime | Python | >= 3.12 (tested on 3.14) | Base language platform |
 | Networking | `pywizlight` | 0.6.6 | Local UDP 38899 socket transport |
 | Desktop Container | `pywebview` | 6.2.1 | Native window wrapping Microsoft Edge WebView2 |
 | System Tray | `Pillow` / `pystray` | 13.0.0 / 0.19.5 | `Pillow` renders the bulb icon; the tray menu is a WinForms `NotifyIcon`, with `pystray` as the fallback view |
@@ -153,60 +153,53 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │       ├── main.py              # Composition root and application entrypoint
 │       ├── cli.py               # Low-level network probe and CLI diagnostics
 │       ├── resources.py         # Asset/version resolution (dev and PyInstaller-frozen)
+│       ├── desktop/             # Desktop shell lifecycle & window orchestration
+│       │   └── app.py           # DesktopApplication, menu sync & window events
 │       ├── domain/              # Pure domain logic and entities
-│       │   ├── models.py        # Bulb, LightState, and Group entities
+│       │   ├── models.py        # Bulb and LightState entities
 │       │   ├── scenes.py        # Built-in WiZ catalog and custom scene models
-│       │   └── value_objects.py # Color, Brightness, Kelvin, LightMode validation
-│       ├── ports/               # Driven contracts (typing.Protocol interfaces)
-│       │   ├── interfaces.py    # Public interface exports
+│       │   └── value_objects.py # Color, Brightness, Kelvin, endpoint & mode validation
+│       ├── ports/               # Driven & service contracts (typing.Protocol)
+│       │   ├── light_control.py # LightControlServicePort desktop contract
 │       │   ├── repositories.py  # Controller, Repository, and Sampler protocols
 │       │   └── autostart.py     # AutostartManager protocol
-│       ├── application/         # Use cases and streaming managers
-│       │   ├── service.py       # Core orchestration service
-│       │   ├── rate_limiter.py  # 10 Hz UDP rate limiter
+│       ├── application/         # Use cases, focused services, and streaming managers
+│       │   ├── service.py       # Facade orchestrating application workflows
+│       │   ├── service_context.py # Shared state, repositories, and resource teardown
+│       │   ├── bulb_control_service.py    # Power, color, CCT, and brightness commands
+│       │   ├── bulb_inventory_service.py  # Discovery, probing, and alias management
+│       │   ├── scene_service.py           # Native and custom scene execution
+│       │   ├── timer_service.py           # Sleep timer coordination
+│       │   ├── ambilight_service.py       # Screen-sync configuration & lifecycle
+│       │   ├── music_service.py           # Music-sync configuration & lifecycle
+│       │   ├── settings_service.py        # Language and theme preferences
+│       │   ├── rate_limiter.py  # 10 Hz UDP rate limiter and EMA smoothing
 │       │   ├── sleep_timer.py   # Progressive fade-out timer
 │       │   ├── ambilight_stream.py # Screen sampling stream manager
 │       │   └── music_stream.py  # WASAPI audio reactive stream manager
 │       └── adapters/            # Infrastructure implementations
 │           ├── wiz/             # pywizlight UDP socket controller
-│           ├── storage/         # %LOCALAPPDATA% JSON file repositories
+│           ├── storage/         # %LOCALAPPDATA% atomic JSON file repositories
 │           ├── ambilight/       # MSS screen sampler
-│           ├── audio/           # WASAPI loopback audio sampler
+│           ├── audio/           # WASAPI loopback audio sampler & FFT analysis
+│           ├── platform/windows/# Win32 DWM chrome, multi-monitor geometry & menu helpers
 │           ├── tray/            # Tray controller, WinForms/Pystray views and bulb icon renderer
 │           ├── system/          # Windows autostart (registry) and single-instance guard
-│           └── ui_webview/      # Thread-safe JS-Python bridge and native menu model
-├── tests/                       # Automated test suite
-│   ├── simulators/              # In-memory WiZ UDP server simulator
-│   ├── js/                      # Frontend unit tests (node --test, zero dependencies)
-│   ├── waits.py                 # Bounded condition waits shared by the suite
-│   ├── test_cli.py              # CLI subcommands against the UDP simulator
-│   ├── test_coverage_badge_json.py # shields.io coverage endpoint JSON
-│   ├── test_coverage_gate.py    # Per-package coverage gate logic
-│   ├── test_domain.py           # Domain validation tests
-│   ├── test_menu_state.py       # Tray menu open-state probe tests
-│   ├── test_native_menu.py      # Native menu model and live MenuStrip sync tests
-│   ├── test_rate_limiter.py     # Pacing and interval tests
-│   ├── test_scene_catalog_sync.py # ui/scenes.json vs BUILTIN_SCENES sync test
-│   ├── test_single_instance.py  # Single-instance guard across real processes
-│   ├── test_thread_lifecycle.py # No app-named thread survives shutdown
-│   ├── test_persistence_and_scenes.py # JSON storage and preset tests
-│   ├── test_wiz_integration.py  # UDP integration tests against simulator
-│   ├── test_ui_bridge.py        # Asynchronous JS API bridge tests
-│   ├── test_tray.py             # System tray synchronization and menu tests
-│   ├── test_winforms_tray.py    # WinForms tray view: palette, painter, marshalling
-│   ├── test_ambilight.py        # Screen capture and EMA streaming tests
-│   ├── test_music_sync.py       # WASAPI and FFT DSP tests
-│   ├── test_i18n.py             # Bilingual localization tests
-│   ├── test_app_shell.py        # Menu model, autostart, --minimized and asset tests
-│   ├── test_window_geometry.py  # Compact window sizing and work-area clamping tests
-│   ├── test_window_fit.py       # Content-driven dynamic height adjustment and DWM chrome tests
-│   └── test_security_hardening.py # Security, performance, and hexagonal boundary/concurrency regression tests
-└── ui/                          # Web frontend rendered inside WebView2
+│           └── ui_webview/      # Hardened HTTP server, exposed IPC bridge and native menu
+├── tests/                       # Offline unit, integration, security, and workflow tests
+│   ├── simulators/              # In-memory WiZ UDP server simulator (`FakeWizBulbServer`)
+│   ├── js/                      # Frontend unit, DOM a11y, and CSS perf tests (`node --test`)
+│   └── waits.py                 # Bounded condition waits shared by the suite
+└── ui/                          # Web frontend served over loopback HTTP inside WebView2
     ├── index.html               # Main console markup
-    ├── themes.css               # 3-tier design tokens & theme overrides (Architectural Stone & Atmospheric Dark)
+    ├── themes.css               # 3-tier design tokens & theme overrides
     ├── styles.css               # Tokenized compact controller layout & components
-    ├── app.js                   # Reactive frontend state controller
-    └── i18n.js                  # English / Spanish localization dictionaries
+    ├── scenes.json              # Built-in WiZ scene catalog synced with backend domain
+    ├── i18n.js                  # English / Spanish localization dictionaries
+    └── js/                      # Modular ES frontend (`app.js`, `bridge-client.js`,
+                                 # `store.js`, `scenes.js`, `stage-controls.js`,
+                                 # `fixtures.js`, `ambilight.js`, `music.js`,
+                                 # `shortcuts.js`, `toasts.js`, `theme-boot.js`)
 ```
 
 ---
@@ -232,7 +225,7 @@ No Python installation is required. Download the latest release from [**GitHub R
 #### Prerequisites
 
 - Operating System: Windows 10 (Build 1809+) or Windows 11.
-- Python: Version 3.11 or higher (Python 3.14 fully supported).
+- Python: Version 3.12 or higher (Python 3.14 fully supported).
 - WebView2 Runtime: Microsoft Edge WebView2 Evergreen Runtime.
 
 #### Step-by-Step Setup
@@ -323,6 +316,8 @@ Execute the test suite with:
 pytest
 ```
 
+Workflow tests auto-detect Git Bash on Windows (skipping WSL/WindowsApps shims), so the full `pytest` suite runs cleanly from PowerShell without `--ignore` exclusions.
+
 Coverage is gated **per package**, not as one global percentage: `domain` at least 90 %, `application` at least 75 % and `adapters` at least 55 % (`scripts/check_coverage.py`, run by CI). The percentage in the coverage badge is published by `.github/workflows/coverage-badge.yml` on every push to `main`, so it is never edited by hand. Measure it locally with `pytest --cov=gestor_luces --cov-report=term-missing` and check the gate with `python scripts/check_coverage.py coverage.json`.
 
 All tests should pass (see the CI badge at the top of this file for the live status).
@@ -333,9 +328,9 @@ The frontend modules under `ui/js` are tested separately with Node's built-in te
 npm test
 ```
 
-This runs `tests/js/store.test.js` (shared app state, persisted preferences, photometric helpers) and `tests/js/scenes.test.js` (built-in scene grid, category filtering, custom presets and their backend commands) under a **60 % line-coverage floor** enforced by `--test-coverage-lines`. The `js tests` job of `.github/workflows/ci.yml` runs the same command on every push and pull request.
+This runs the `tests/js/` suites covering the frontend ES modules (`bridge-client`, `app`, `ambilight`, `music`, `fixtures`, `stage-controls`, `toasts`, `store`, `scenes`, `theme-boot`) plus DOM accessibility and CSS compositor checks under a **60 % line-coverage floor** enforced by `--test-coverage-lines`. The `js tests` job of `.github/workflows/ci.yml` runs the same command on every push and pull request.
 
-Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run automatically in CI on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
+Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run as **blocking** CI gates on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
 A nightly workflow (`.github/workflows/nightly.yml`) runs the whole suite five times in a row, each pass in a fresh process, to catch flaky tests that a single green run hides. Separate processes matter: in-process repetition (`--count`) carries threads, sockets and cached state from one pass to the next, so a failure there is not reproducible under `ci.yml`. Run it locally with `for pass in 1 2 3 4 5; do pytest -x --timeout=120 || exit 1; done`.
 
@@ -358,7 +353,9 @@ Use `-SkipInstaller` to build only the app folder and the portable ZIP.
 | `GestorDeLuces-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
 | `SHA256SUMS.txt` | SHA-256 checksums for all release artifacts generated in `dist/`. |
 
-Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `build.ps1` automatically signs the executable and installer with SHA-256 + RFC 3161 timestamping.
+Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `scripts/build.ps1` signs `GestorDeLuces.exe` **before** building the portable ZIP and Inno Setup installer (so both archives carry the signed executable), then signs the installer using SHA-256 and HTTPS RFC 3161 timestamping (`https://timestamp.digicert.com`).
+
+`packaging/gestor_luces.spec` excludes helper Python scripts (such as `make_icon.py`) from packaged `assets/`. `packaging/installer.iss` launches post-install execution with `runasoriginaluser`, removes the `HKCU\...\Run` autostart key unconditionally during uninstall, and provides bilingual English/Spanish `[CustomMessages]`.
 
 ### Releasing
 
@@ -368,7 +365,7 @@ Releases are built and published by CI; the commands above are for local builds.
 2. Write `docs/releases/X.Y.Z.md` with the notes for that release ([convention](docs/releases/README.md)).
 3. Merge, then tag the merged commit and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-`.github/workflows/release.yml` does the rest. `guard` fails in seconds when the tag disagrees with `pyproject.toml` or when the notes file is missing; `build` produces the installer and the portable ZIP on a Windows runner; `verify` runs `sha256sum -c SHA256SUMS.txt` and `GestorDeLuces.exe --smoke-test` against the exact bytes that will ship; `publish` uploads to a **draft** release, compares the digests GitHub reports with the built files, and only then makes the release public. To rehearse, run the workflow manually with `dry_run` enabled: it repeats every step except the final publication and discards the draft.
+`.github/workflows/release.yml` pins all third-party actions by commit SHA, pins Inno Setup (`6.7.1`), and scopes `contents: write` exclusively to the `publish` job. `guard` fails in seconds when the tag disagrees with `pyproject.toml` or when the notes file is missing; `build` produces the installer and the portable ZIP on a Windows runner; `verify` runs `sha256sum -c SHA256SUMS.txt` and `GestorDeLuces.exe --smoke-test` against the exact bytes that will ship; `publish` uploads to a **draft** release, compares the digests GitHub reports with the built files, and only then makes the release public. To rehearse, run the workflow manually with `dry_run` enabled: it repeats every step except the final publication and discards the draft.
 
 Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.

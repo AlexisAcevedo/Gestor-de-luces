@@ -100,7 +100,7 @@ Permite obtener el estado operativo actual del foco, su nivel de brillo, color y
 - `r`, `g`, `b`: Intensidad de los canales RGB (`0` a `255`). Presente cuando opera en modo color.
 - `c`, `w`: Niveles PWM para los canales de blanco frío (*cool white*) y cálido (*warm white*).
 - `sceneId`: Identificador numérico de la escena activa (`0` indica modo manual estático de color o temperatura).
-- `speed`: Multiplicador de velocidad para escenas animadas (`20` a `200`).
+- `speed`: Multiplicador de velocidad para escenas animadas (validado de `10` a `200` por `SceneSpeed` en el dominio de la aplicación; rango típico de firmware WiZ de `20` a `200`).
 
 ---
 
@@ -114,7 +114,7 @@ Ordena al foco modificar su estado de energía, brillo, color, temperatura o esc
 - `temp` *(entero, opcional)*: Temperatura Kelvin entre `2200` y `6500`. Excluyente con `r`, `g`, `b` y `sceneId`.
 - `r`, `g`, `b` *(enteros, opcional)*: Valores rojo, verde y azul entre `0` y `255`.
 - `sceneId` *(entero, opcional)*: Número de escena nativa (`1` a `36`).
-- `speed` *(entero, opcional)*: Multiplicador de velocidad de animación (`20` a `200`).
+- `speed` *(entero, opcional)*: Multiplicador de velocidad de animación (`10` a `200` en la validación de dominio; rango típico de firmware `20` a `200`).
 
 #### Ejemplos de Comandos:
 
@@ -229,18 +229,19 @@ En lugar de asignar y cerrar un nuevo socket del sistema operativo en cada fotog
 
 ### Endurecimiento Defensivo de UDP
 
-Para proteger el bucle de eventos frente a tráfico de red local malformado o inesperado, `WizUdpController` aplica validaciones de transporte estrictas:
+Para proteger el bucle de eventos y los límites de red local frente a tráfico inesperado o malformado, `validate_local_endpoint()` (`domain/value_objects.py`) y `WizUdpController` aplican validaciones estrictas de forma uniforme en `cli.py`, la carga persistida de `bulbs.json` (`json_repositories.py`) y `udp_controller.py`:
+- **Validación Estricta de Endpoints Locales**: `validate_local_endpoint()` rechaza `0.0.0.0`, `255.255.255.255`, direcciones multicast o broadcast, objetivos externos no locales y puertos no autorizados antes de abrir o enviar por el socket.
+- **Inicialización Segura de Sockets**: `WizUdpController` ejecuta `create_datagram_endpoint` dentro del bloque `try` protegido para liberar descriptores ante cualquier error de apertura.
 - **Límite de Tamaño de Datagramas Entrantes**: Los datagramas UDP recibidos se limitan a `4.096` bytes para evitar agotamiento de memoria por paquetes sobredimensionados.
-- **Validación de IP de Destino**: Las direcciones de los focos se validan como direcciones IPv4 unicast estrictas antes de transmitir paquetes al socket.
 - **Resiliencia ante Cargas Malformadas**: Las respuestas JSON de `getPilot` y `getSystemConfig` truncadas o con estructura inválida se descartan de forma segura sin interrumpir el bucle de eventos `asyncio`.
 
-### Restricción de Frecuencia por Hardware (Límite de 10 Hz)
+### Restricción de Frecuencia por Hardware (Límite de 10 Hz) y Suavizado EMA
 
 Los microcontroladores integrados en los focos WiZ (generalmente Espressif ESP8266 o ESP32) disponen de un búfer de recepción en anillo de capacidad reducida.
 
 - Transmitir a tasas superiores a 15 Hz satura rápidamente dicho búfer.
 - El desbordamiento dispara el temporizador guardián (*watchdog timer*) del microcontrolador, provocando un reinicio del foco con parpadeo blanco y desconexión momentánea de la red Wi-Fi.
-- Por esta razón, `StreamRateLimiter` impone un intervalo mínimo de **100 milisegundos (10 Hz)** por cada IP de foco.
+- Por esta razón, `StreamRateLimiter` impone un intervalo mínimo de **100 milisegundos (10 Hz)** por cada IP de foco, rechaza entradas no finitas (`NaN`/`Inf`) y avanza el estado objetivo más allá de la banda muerta EMA para que las transiciones suaves converjan sin estancarse.
 
 ---
 
