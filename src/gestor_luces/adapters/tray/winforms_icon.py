@@ -19,7 +19,10 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from gestor_luces.adapters.platform.windows.window_chrome import NATIVE_CALL_ERRORS
+from gestor_luces.adapters.platform.windows.window_chrome import (
+    NATIVE_CALL_ERRORS,
+    _configure_fn_signature,
+)
 from gestor_luces.adapters.tray.tray_view import render_icon_image
 from gestor_luces.adapters.tray.winforms_host import _WinFormsApi, release_native
 
@@ -33,14 +36,25 @@ DestroyIcon = Callable[[int], None]
 
 def _destroy_icon_handle(handle: int) -> None:
     """Libera un `HICON` creado con `Bitmap.GetHicon()` (Windows no lo libera solo)."""
+    if not handle:
+        return
     try:
-        ctypes.windll.user32.DestroyIcon(handle)
+        from ctypes import wintypes
+
+        destroy = ctypes.windll.user32.DestroyIcon
+        _configure_fn_signature(destroy, [wintypes.HICON], wintypes.BOOL)
+        destroy(handle)
     # `DestroyIcon` es una llamada `ctypes` pura: solo falla con `NATIVE_CALL_ERRORS`.
     except NATIVE_CALL_ERRORS:
         _LOGGER.debug("DestroyIcon failed for handle %s.", handle, exc_info=True)
 
 
-def _build_icon_image(rgb: tuple[int, int, int], api: _WinFormsApi) -> tuple[Any, int]:
+def _build_icon_image(
+    rgb: tuple[int, int, int],
+    api: _WinFormsApi,
+    *,
+    destroy_icon: DestroyIcon = _destroy_icon_handle,
+) -> tuple[Any, int]:
     """Convierte la imagen PIL en un `Icon` de WinForms a traves de un flujo en memoria."""
     buffer = io.BytesIO()
     render_icon_image(rgb).save(buffer, format="PNG")
@@ -49,7 +63,12 @@ def _build_icon_image(rgb: tuple[int, int, int], api: _WinFormsApi) -> tuple[Any
     bitmap = api.drawing.Bitmap(source)
     try:
         handle = bitmap.GetHicon()
-        return api.drawing.Icon.FromHandle(handle), int(handle.ToInt64())
+        raw_handle = int(handle.ToInt64())
+        try:
+            return api.drawing.Icon.FromHandle(handle), raw_handle
+        except BaseException:
+            destroy_icon(raw_handle)
+            raise
     finally:
         bitmap.Dispose()
         source.Dispose()
@@ -78,12 +97,12 @@ class IconCache:
         with self._lock:
             if self._rgb == rgb and self._icon is not None:
                 return self._icon
-        icon, handle = _build_icon_image(rgb, self._api)
+        icon, handle = _build_icon_image(rgb, self._api, destroy_icon=self._destroy_icon)
         with self._lock:
             previous, previous_handle = self._icon, self._handle
             self._icon, self._handle, self._rgb = icon, handle, rgb
         if previous is not None:
-            previous.Dispose()
+            release_native(previous.Dispose, self._api, what="Prior tray icon image disposal")
         if previous_handle:
             self._destroy_icon(previous_handle)
         return icon

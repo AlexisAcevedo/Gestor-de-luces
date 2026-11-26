@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from gestor_luces.adapters.tray.winforms_host import _WinFormsApi, clr_errors
+from gestor_luces.adapters.tray.winforms_host import _WinFormsApi, clr_errors, release_native
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -276,6 +276,9 @@ def apply_menu_region(control: Any, api: _WinFormsApi) -> bool:
         return False
     left, top, right, bottom, radius = geometry
     path = None
+    previous_region = getattr(control, "Region", None)
+    new_region = None
+    assigned = False
     try:
         from System.Drawing.Drawing2D import GraphicsPath
 
@@ -286,7 +289,9 @@ def apply_menu_region(control: Any, api: _WinFormsApi) -> bool:
         path.AddArc(right - diameter, bottom - diameter, diameter, diameter, 0, 90)
         path.AddArc(left, bottom - diameter, diameter, diameter, 90, 90)
         path.CloseFigure()
-        control.Region = api.drawing.Region(path)
+        new_region = api.drawing.Region(path)
+        control.Region = new_region
+        assigned = True
     # `ImportError` cubre un runtime sin `System.Drawing.Drawing2D`; el resto es .NET.
     except (*clr_errors(api), ImportError):
         _LOGGER.debug("Rounded tray menu region skipped.", exc_info=True)
@@ -294,6 +299,10 @@ def apply_menu_region(control: Any, api: _WinFormsApi) -> bool:
     finally:
         if path is not None:
             path.Dispose()
+        if assigned and previous_region is not None and previous_region is not new_region:
+            release_native(previous_region.Dispose, api, what="Prior tray menu region disposal")
+        elif not assigned and new_region is not None:
+            release_native(new_region.Dispose, api, what="Unassigned tray menu region disposal")
     return True
 
 
