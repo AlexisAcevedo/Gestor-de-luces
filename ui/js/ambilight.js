@@ -19,7 +19,11 @@ export function syncAmbilightPolling() {
   if (isActive && !appState.ambilightPollTimer) {
     appState.ambilightPollTimer = setInterval(() => {
       if (document.hidden) return;
-      invokeApi(() => getBackendApi().get_ambilight_status(), null);
+      invokeApi(() => getBackendApi().get_ambilight_status(), null, {
+        silent: true,
+        poll: true,
+        dedupeKey: "poll:ambilight"
+      });
     }, 400);
   } else if (!isActive && appState.ambilightPollTimer) {
     clearInterval(appState.ambilightPollTimer);
@@ -59,7 +63,9 @@ export function renderAmbilightPanel() {
         monitorSelect.appendChild(opt);
       });
     }
-    monitorSelect.value = String(ambi.monitor_index ?? 1);
+    if (document.activeElement !== monitorSelect) {
+      monitorSelect.value = String(ambi.monitor_index ?? 1);
+    }
   }
 
   const badge = document.getElementById("ambilight-status-badge");
@@ -108,7 +114,7 @@ export function renderAmbilightPanel() {
 
   const alphaSlider = document.getElementById("ambilight-smoothing-slider");
   const alphaOutput = document.getElementById("ambilight-smoothing-output");
-  if (alphaSlider && alphaOutput && typeof ambi.smoothing_alpha === "number") {
+  if (alphaSlider && alphaOutput && typeof ambi.smoothing_alpha === "number" && document.activeElement !== alphaSlider) {
     alphaSlider.value = String(ambi.smoothing_alpha);
     alphaOutput.textContent = Number(ambi.smoothing_alpha).toFixed(2);
     updateSliderFill(alphaSlider);
@@ -128,10 +134,12 @@ export function renderAmbilightPanel() {
     minBriRow.classList.toggle("is-disabled", !isAutoBri);
   }
   if (minBriSlider && minBriOutput) {
-    minBriSlider.value = String(floorVal);
     minBriSlider.disabled = !isAutoBri;
-    minBriOutput.textContent = `${floorVal}%`;
-    updateSliderFill(minBriSlider);
+    if (document.activeElement !== minBriSlider) {
+      minBriSlider.value = String(floorVal);
+      minBriOutput.textContent = `${floorVal}%`;
+      updateSliderFill(minBriSlider);
+    }
   }
 }
 

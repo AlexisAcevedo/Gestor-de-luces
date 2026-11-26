@@ -95,15 +95,14 @@ export function renderScenesGrid() {
     filtered = appState.scenes.filter((scene) => scene.category === appState.sceneCategory);
   }
 
-  grid.replaceChildren();
   if (filtered.length === 0) {
     const empty = createEl("div", "empty-fixtures-state");
     empty.appendChild(createEl("p", null, t("scenes.emptyFavorites")));
-    grid.appendChild(empty);
+    grid.replaceChildren(empty);
     return;
   }
 
-  filtered.forEach((scene) => {
+  const cards = filtered.map((scene) => {
     const isSceneActive = activeSceneId === scene.scene_id;
     const isFav = appState.favoriteSceneIds.includes(scene.scene_id);
     const displayName = formatSceneDisplayName(scene);
@@ -179,8 +178,9 @@ export function renderScenesGrid() {
       }
     });
 
-    grid.appendChild(card);
+    return card;
   });
+  grid.replaceChildren(...cards);
 }
 
 /* Renderiza la galeria de presets personalizados guardados en JSON */
@@ -192,15 +192,14 @@ export function renderCustomScenesGrid() {
   }
   if (!grid) return;
 
-  grid.replaceChildren();
   if (appState.customScenes.length === 0) {
     const empty = createEl("div", "empty-fixtures-state");
     empty.append(createEl("p", null, t("custom.emptyTitle")), createEl("p", null, t("custom.emptySubtitle")));
-    grid.appendChild(empty);
+    grid.replaceChildren(empty);
     return;
   }
 
-  appState.customScenes.forEach((preset) => {
+  const cards = appState.customScenes.map((preset) => {
     const card = createEl("article", "custom-scene-card");
     let swatchCss = "#FFF1E0";
     let summaryText = `${preset.brightness}%`;
@@ -289,8 +288,9 @@ export function renderCustomScenesGrid() {
 
     actions.append(favoriteBtn, applyBtn, editBtn, deleteBtn);
     card.append(topArea, actions);
-    grid.appendChild(card);
+    return card;
   });
+  grid.replaceChildren(...cards);
 }
 
 /* Abre el dialogo modal para crear un nuevo preset o editar uno existente */

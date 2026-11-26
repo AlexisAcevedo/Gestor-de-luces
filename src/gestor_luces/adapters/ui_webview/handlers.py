@@ -347,7 +347,7 @@ class BridgeHandlers:
     def get_ambilight_status(self) -> dict[str, Any]:
         """Obtiene el estado en vivo del muestreo Ambilight para la vista previa."""
         # Sondeo frecuente de previsualizacion: evita reconstruir el menu Win32 cada 400ms.
-        return self._poll()
+        return self._poll_section("ambilight", self._service.get_ambilight_status)
 
     def start_music_sync(
         self,
@@ -379,7 +379,27 @@ class BridgeHandlers:
     def get_music_sync_status(self) -> dict[str, Any]:
         """Obtiene la telemetria espectral (Graves, Medios, Agudos y RMS) en tiempo real."""
         # Sondeo de 250ms de barras espectrales: no reconstruye el menu de la bandeja.
-        return self._poll()
+        return self._poll_section("music_sync", self._service.get_music_sync_status)
+
+    def _poll_section(self, key: str, reader: Any) -> dict[str, Any]:
+        """Read a single live-stream status section on the bridge loop for delta polling."""
+        import threading
+
+        async def _read() -> Any:
+            return reader()
+
+        try:
+            if (
+                threading.current_thread() is self._thread
+                or self._closed
+                or not self._loop.is_running()
+            ):
+                data = reader()
+            else:
+                data = self._run_async(_read(), timeout=3.0)
+        except (ValueError, KeyError, TypeError, OSError, RuntimeError, TimeoutError) as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, key: data, "error": None}
 
     # --- Arranque con el sistema ----------------------------------------------------
 

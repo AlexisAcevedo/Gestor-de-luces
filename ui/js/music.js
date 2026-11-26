@@ -18,7 +18,11 @@ export function syncMusicPolling() {
   if (isActive && !appState.musicPollTimer) {
     appState.musicPollTimer = setInterval(() => {
       if (document.hidden) return;
-      invokeApi(() => getBackendApi().get_music_sync_status(), null);
+      invokeApi(() => getBackendApi().get_music_sync_status(), null, {
+        silent: true,
+        poll: true,
+        dedupeKey: "poll:music"
+      });
     }, 250);
   } else if (!isActive && appState.musicPollTimer) {
     clearInterval(appState.musicPollTimer);
@@ -64,7 +68,7 @@ export function renderMusicPanel() {
         devSelect.appendChild(opt);
       });
     }
-    if (music.device_index !== null && music.device_index !== undefined) {
+    if (music.device_index !== null && music.device_index !== undefined && document.activeElement !== devSelect) {
       devSelect.value = String(music.device_index);
     }
   }
@@ -135,7 +139,7 @@ export function renderMusicPanel() {
 
   const sensSlider = document.getElementById("music-sensitivity-slider");
   const sensOutput = document.getElementById("music-sensitivity-output");
-  if (sensSlider && sensOutput && typeof music.sensitivity === "number") {
+  if (sensSlider && sensOutput && typeof music.sensitivity === "number" && document.activeElement !== sensSlider) {
     sensSlider.value = String(music.sensitivity);
     sensOutput.textContent = `${Number(music.sensitivity).toFixed(1)}x`;
     updateSliderFill(sensSlider);
@@ -143,7 +147,7 @@ export function renderMusicPanel() {
 
   const alphaSlider = document.getElementById("music-smoothing-slider");
   const alphaOutput = document.getElementById("music-smoothing-output");
-  if (alphaSlider && alphaOutput && typeof music.smoothing_alpha === "number") {
+  if (alphaSlider && alphaOutput && typeof music.smoothing_alpha === "number" && document.activeElement !== alphaSlider) {
     alphaSlider.value = String(music.smoothing_alpha);
     alphaOutput.textContent = Number(music.smoothing_alpha).toFixed(2);
     updateSliderFill(alphaSlider);
