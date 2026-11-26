@@ -51,23 +51,24 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 ### Separación de Responsabilidades por Capa
 
 1. **Capa de Dominio (`gestor_luces.domain`)**:
-   - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`) y las invariantes de preferencias globales de interfaz en `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`) y `DEFAULT_THEME` (`"architectural-stone"`)).
+   - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), validación de endpoints (`validate_local_endpoint`) y las invariantes de preferencias globales de interfaz en `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`) y `DEFAULT_THEME` (`"architectural-stone"`)).
    - Libre de dependencias externas: no importa librerías de red, APIs de Windows ni frameworks de interfaz de usuario.
-   - Aplica invariantes de negocio (enteros RGB entre 0 y 255, rangos de temperatura Kelvin entre 2.200 K y 6.500 K, restricciones de identificación de focos y validación de códigos de idioma y tema).
+   - Aplica invariantes de negocio (enteros RGB entre 0 y 255, rangos de temperatura Kelvin entre 2.200 K y 6.500 K, validación de endpoints IPv4 locales unicast rechazando direcciones sin especificar, broadcast o multicast, y códigos de idioma y tema permitidos).
 
 2. **Capa de Puertos (`gestor_luces.ports`)**:
-   - Define contratos mediante `typing.Protocol` con el decorador `@runtime_checkable` (tipado estructural estático).
-   - Los puertos salientes especifican qué necesita la aplicación del exterior sin atarse a tecnologías concretas:
-     - `LightController`: Define las operaciones de red (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
+   - Define contratos mediante `typing.Protocol` con el decorador `@runtime_checkable` distribuidos en `light_control.py`, `repositories.py` y `autostart.py`, sin un barril monolítico `interfaces.py`:
+     - `LightControlServicePort` (`ports/light_control.py`): Contrato del servicio de aplicación consumido por `DesktopApplication`.
+     - `LightController` (`ports/repositories.py`): Define las operaciones de red (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
      - `BulbRepository`, `SceneRepository`, `SettingsRepository`: Contratos para lectura y escritura del estado persistente.
      - `ScreenSampler`: Contrato para capturar fotogramas y calcular el color representativo de pantalla (`sample_frame`, `sample_average_color`, `list_monitors`, `close`).
      - `AudioSampler`: Contrato para muestrear la energía y el espectro frecuencial del audio del sistema (`sample_frame`, `sample_audio_metrics`, `list_audio_devices`, `close`).
+     - `AutostartManager` (`ports/autostart.py`): Contrato de autoinicio en el registro.
 
 3. **Capa de Aplicación (`gestor_luces.application`)**:
-   - Orquesta los casos de uso a través de `LightControlService`.
+   - Orquesta los casos de uso mediante `LightControlService` (`service.py`), delegando en servicios específicos (`bulb_control_service.py`, `bulb_inventory_service.py`, `scene_service.py`, `timer_service.py`, `ambilight_service.py`, `music_service.py`, `settings_service.py`) sobre un contexto compartido (`service_context.py`).
    - Recibe fábricas perezosas de muestreo (`screen_sampler_factory`, `audio_sampler_factory`) inyectadas desde la raíz de composición (`main.py`) de modo que las capas internas (`domain`, `ports`, `application`) nunca importan `adapters` (verificado estáticamente vía AST en `tests/test_security_hardening.py`).
-   - Administra operaciones concurrentes hacia múltiples focos mediante `asyncio.gather`.
-   - Incluye servicios de dominio especializados:
+   - Separa el cierre de recursos entre `close_audio_sampler()` (invocado mientras `BridgeLifecycle` detiene los flujos activos) y `close_all_resources()` al finalizar el cierre completo, con rotación de logs (`RotatingFileHandler`) y retroceso exponencial ante errores de flujo.
+   - Aloja coordinadores especializados protegidos por guardas monotónicas de generación/ID de ejecución (`_generation` / `run_id`) frente a carreras al reiniciar:
      - `StreamRateLimiter`: Asegura una cadencia máxima de 10 Hz para transmisiones de alta frecuencia.
      - `SleepTimerManager`: Gestiona temporizadores no bloqueantes con desvanecimiento lineal progresivo del brillo.
      - `AmbilightStreamManager`: Controla los ciclos periódicos de captura y suavizado de color en pantalla.
@@ -77,18 +78,19 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
    - Implementa los puertos conectando con el hardware y el sistema operativo:
      - `adapters.wiz.udp_controller`: Gestiona el descubrimiento por broadcast UDP y los datagramas JSON-RPC unicast mediante `pywizlight`.
      - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\GestorDeLuces`.
-     - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows a alta velocidad con `mss`.
-     - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` y aplicando `numpy.fft.rfft`.
+     - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows con `mss` y recuperación controlada ante `ScreenShotError`.
+     - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` (`wasapi_session.py`, `wasapi_devices.py`) bajo bloqueo de ciclo de vida COM/sesión, recuperación ante desconexión en caliente, cierre sin fugas y caché de planes/búferes FFT en `wasapi_capture.py`.
+     - `adapters.platform.windows`: Aísla el cromado DWM Win32 y caché de iconos (`window_chrome.py`), geometría multimonitor `WorkingArea` y DPI (`window_geometry.py`), foco de ventana (`foreground.py`), sincronización del menú nativo (`menu_sync.py`, `menu_state.py`) y diálogos (`message.py`).
      - `adapters.tray`: Integra la bandeja del sistema detrás de un contrato mínimo `TrayView`:
-      - `tray_icon`: `TrayController` posee el modelo de menú, los handlers, el ejecutor y el único hilo de refresco; no importa ningún toolkit gráfico.
+      - `tray_icon`: `TrayController` posee el modelo de menú, los handlers, el ejecutor y el único hilo de refresco sincronizado por variable de condición (`_refresh_cond`); no importa ningún toolkit gráfico.
       - `tray_view`: protocolo `TrayView` (`run`/`stop`/`apply`) más el mapeo modelo→acción y el generador del icono.
       - `winforms_tray`: punto de entrada de la vista principal. `create_winforms_view` y `WinFormsTrayView` componen las piezas de abajo y conservan la política de aplicación (icono/tooltip siempre, rebuild del menú diferido mientras el menú está visible); reexporta la superficie que ya importaban sus consumidores.
-      - `winforms_host`: el host STA. Resolución perezosa de pythonnet/WinForms, `CoInitializeEx`, el `Form` oculto de 0×0 —marcado `WS_EX_TOOLWINDOW` sobre el handle recién creado, así una ventana visible, transparente y minimizada nunca aparece como entrada del alt+tab—, `Application.Run(form)` y el marshalling con `Control.Invoke`. Ningún otro módulo importa .NET por su cuenta.
+      - `winforms_host`: el host STA. Resolución perezosa de pythonnet/WinForms, `CoInitializeEx`, el `Form` oculto de 0×0 protegido con `IsHandleCreated` —marcado `WS_EX_TOOLWINDOW` sobre el handle recién creado, así una ventana visible, transparente y minimizada nunca aparece como entrada del alt+tab—, `Application.Run(form)` y el marshalling con `Control.Invoke`. Ningún otro módulo importa .NET por su cuenta.
       - `winforms_icon`: `NotifyIcon` más una caché de `HICON` por color que destruye los handles reemplazados, y el límite de 63 caracteres del tooltip.
       - `winforms_menu`: construye el `ContextMenuStrip` y sus submenús desde el modelo puro `TrayMenuEntry`, es dueño de las firmas de menú/estado y engancha el acabado de ventana a cada superficie de menú.
-      - `winforms_paint`: paletas por tema, parseo de colores y toda la operación de dibujo (painter de filas, hover, punto de nivel activo, chevron de submenú, separadores, geometría de la región redondeada escalada por DPI y el recorte de la `Region`).
+      - `winforms_paint`: paletas por tema, parseo de colores, liberación previa de `Region` y toda la operación de dibujo (painter de filas, hover, punto de nivel activo, chevron de submenú, separadores, geometría de la región redondeada escalada por DPI y el recorte de la `Region`).
       - `pystray_tray`: vista de respaldo (menú Win32 clásico) cuando pythonnet/WinForms no puede cargar.
-     - `adapters.ui_webview.bridge`: Expone una API asíncrona segura de JavaScript hacia Python dentro del contenedor Edge WebView2 mediante una fachada pública restringida (lista blanca `JsApi`), impidiendo la invocación de métodos o callbacks internos desde JavaScript. El adaptador está partido en `dispatch` (la tabla explícita `JS_API_DISPATCH`, `JsApi` y el contrato de ajuste de ventana), `handlers` (un handler por capacidad) y `lifecycle` (event loop propio, sellado de envelopes, notificaciones de estado, la lectura `refresh_tray_states` exclusiva de la bandeja que no notifica, y apagado); `bridge.py` conserva `WebviewBridge` y reexporta toda la superficie, así que quien lo importa no cambia.
+     - `adapters.ui_webview.bridge`: Expone funciones puntuales autorizadas explícitamente hacia Edge WebView2 (`BlockedJsApi` sobre `js_api` más `window.expose(*build_exposed_functions(js_api))`), bloqueando el recorrido por atributos encadenados (`getattr`) desde JavaScript. El adaptador se divide en `dispatch` (`BlockedJsApi`, `build_exposed_functions`, `JsApi` y ajuste de ventana), `handlers` (validación estricta de tipos y valores finitos, sanitización de errores y sondeo delta para Ambilight/Music Sync), `http_server` (`NoCacheBottleServer`) y `lifecycle` (`BridgeLifecycle` bajo `_loop_state_lock`, cancelación de tareas agotadas, sellado de envelopes, notificaciones de estado, `refresh_tray_states` y apagado); `bridge.py` mantiene `WebviewBridge` y reexporta la superficie pública.
 
 ---
 
@@ -128,11 +130,11 @@ Cada llamada pasa un `name=` explícito y `daemon=True`: un `stop()` omitido no 
 
 | Hilo (`name=`) | Dueño (módulo → creador) | Vida | Cómo se detiene |
 | --- | --- | --- | --- |
-| `GestorLucesAsyncLoop` (`ASYNC_LOOP_THREAD_NAME`) | `adapters/ui_webview/lifecycle.py` → `BridgeLifecycle._start_async_loop`, arrancado por `WebviewBridge.__init__` | Larga: uno por sesión, ejecuta el bucle `asyncio` privado del puente (`loop.run_forever()`) | `WebviewBridge.shutdown()` cancela los flujos activos, llama `loop.call_soon_threadsafe(loop.stop)` y `thread.join(timeout=2.0)`. Idempotente tras `_shutdown_lock`; lo invocan `DesktopApplication.cleanup()` y el evento `closed` de la ventana. |
+| `GestorLucesAsyncLoop` (`ASYNC_LOOP_THREAD_NAME`) | `adapters/ui_webview/lifecycle.py` → `BridgeLifecycle._start_async_loop`, arrancado por `WebviewBridge.__init__` | Larga: uno por sesión, ejecuta el bucle `asyncio` privado del puente (`loop.run_forever()`) | `WebviewBridge.shutdown()` coordina el estado bajo `_loop_state_lock`, cancela los flujos activos y tareas agotadas, libera el muestreador de audio, llama `loop.call_soon_threadsafe(loop.stop)` y `thread.join(timeout=2.0)`. Idempotente tras `_shutdown_lock`; lo invocan `DesktopApplication.cleanup()` y el evento `closed` de la ventana. |
 | `GestorLucesTray` (`ICON_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start`, ejecuta `TrayView.run` | Larga: el bombeo nativo de mensajes de la vista (WinForms `Application.Run` en un hilo STA, o `pystray.Icon.run`) durante toda la sesión | `TrayController.stop()` marca `_stopped` y llama `TrayView.stop()` (WinForms cierra el form oculto, `pystray` detiene el icono), así que `run` retorna. Seguro de invocar varias veces y desde cualquier hilo. |
-| `GestorLucesTrayRefresh` (`REFRESH_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start` → `_refresh_worker` | Larga: espera en `_refresh_requested` con el timeout de `poll_interval` (5 s) | El mismo `TrayController.stop()`: marca `_stopped` y `_refresh_requested`, y el worker sale por la bandera. Es el único escritor del estado nativo de la bandeja (T-3.6). Solo un ciclo nacido del timeout (periódico) le pide al puente una lectura real `getPilot` mediante `refresh_tray_states`, que no sella el sobre de éxito; un refresco pedido por una acción conserva el cache que esa acción acaba de escribir. |
+| `GestorLucesTrayRefresh` (`REFRESH_THREAD_NAME`) | `adapters/tray/tray_icon.py` → `TrayController.start` → `_refresh_worker` | Larga: espera en `_refresh_cond` con el timeout de `poll_interval` (5 s) | El mismo `TrayController.stop()`: adquiere `_refresh_cond`, marca `_stopped` y notifica, y el worker sale por la bandera. Es el único escritor del estado nativo de la bandeja (T-3.6). Solo un ciclo nacido del timeout (periódico) le pide al puente una lectura real `getPilot` mediante `refresh_tray_states`, que no sella el sobre de éxito; un refresco pedido por una acción conserva el cache que esa acción acaba de escribir. |
 | `GestorLucesTrayAction` (literal en `_default_executor`) | `adapters/tray/tray_icon.py` → `TrayController.dispatch` → `_run_action` | Corta: un hilo por acción de menú despachada | Termina solo; nadie lo une (*join*). `quit_app` no desmonta la bandeja desde este hilo a propósito: el desmontaje ocurre después en `cleanup()`. |
-| `GestorLucesMenuSync` (`MENU_SYNC_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.start` → `_menu_sync_worker` | Larga: espera en `_menu_sync_requested` y reaplica en vivo el `MenuStrip` nativo (pywebview no tiene API de actualización de menú) | `DesktopApplication.cleanup()` marca `is_quitting` y llama una vez a `request_menu_sync()`: el bucle despierta, ve la bandera y sale antes de reaplicar. |
+| `GestorLucesMenuSync` (`MENU_SYNC_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.start` → `_menu_sync_worker` | Larga: espera en `_menu_sync_cond` (respaldado por `_state_lock`) y reaplica en vivo el `MenuStrip` nativo (pywebview no tiene API de actualización de menú) | `DesktopApplication.cleanup()` marca `is_quitting` bajo `_state_lock`, notifica `_menu_sync_cond` y el bucle sale antes de reaplicar. `DesktopApplication` mantiene además `_visibility_generation` para evitar carreras entre eventos de ocultar/mostrar y suprime sincronizaciones de barra/menú durante el arrastre de controles de luz. |
 | `GestorLucesHideOnClose` (`HIDE_ON_CLOSE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_closing` (evento `closing` de la ventana) | Corta: llama `hide_window` y termina | Termina sola. pywebview dispara `closing` de forma síncrona en el hilo GUI con `should_lock`, así que ocultar dentro del manejador podría reentrar o bloquearse; de ahí el hilo. |
 | `GestorLucesHideOnMinimize` (`HIDE_ON_MINIMIZE_THREAD_NAME`) | `desktop/app.py` → `DesktopApplication.on_minimized` (evento `minimized` de la ventana) | Corta: llama `hide_window` y termina | Termina sola, por la misma razón que el cierre. |
 | `GestorLucesSingleInstance` (literal en `listen`) | `adapters/system/single_instance.py` → `SingleInstanceGuard.listen` | Larga: sondea `WaitForSingleObject(handle, 500 ms)` esperando un segundo lanzamiento | `SingleInstanceGuard.release()` marca `self._stop` y el hilo sale dentro de un sondeo de 500 ms. Lo llama `DesktopApplication.cleanup()`. |
@@ -229,35 +231,13 @@ Los focos WiZ están basados en microcontroladores de bajo consumo ESP8266 / ESP
 - Pérdida masiva de paquetes UDP y saltos visibles en las transiciones de luz.
 - Congestión en la banda de 2.4 GHz de la red Wi-Fi.
 
-### Mecanismo de Regulación a 10 Hz
+### Mecanismo de Regulación a 10 Hz y Suavizado EMA
 
-Para garantizar la estabilidad del hardware, `StreamRateLimiter` impone una ventana temporal estricta:
-
-$$\Delta t \ge 100\text{ ms} \quad (\text{Tasa máxima } = 10\text{ Hz})$$
-
-```python
-class StreamRateLimiter:
-    def __init__(self, min_interval_seconds: float = 0.10) -> None:
-        self._min_interval = min_interval_seconds
-        self._last_dispatch: float = 0.0
-
-    def should_dispatch(self, now: float | None = None) -> bool:
-        current = time.monotonic() if now is None else now
-        if current - self._last_dispatch >= self._min_interval:
-            self._last_dispatch = current
-            return True
-        return False
-```
-
-### Suavizado por Media Móvil Exponencial (EMA)
-
-Para evitar saltos abruptos generados por cambios súbitos de la pantalla (cortes de cámara o explosiones en videojuegos), el motor de Ambilight aplica un filtro de media móvil exponencial:
+Para garantizar la estabilidad del hardware, `StreamRateLimiter` impone una ventana temporal estricta ($\Delta t \ge 100\text{ ms}$, tasa máxima $= 10\text{ Hz}$) por cada IP de foco junto con un filtro de Media Móvil Exponencial (EMA):
 
 $$\vec{C}_{\text{suavizado}} = \alpha \cdot \vec{C}_{\text{nuevo}} + (1 - \alpha) \cdot \vec{C}_{\text{anterior}}$$
 
-Donde $\alpha \in [0.1, 0.4]$ regula la inercia del color:
-- Valores bajos de $\alpha$ generan transiciones cinematográficas muy fluidas.
-- Valores más altos de $\alpha$ aumentan la reactividad inmediata para juegos de acción.
+Donde $\alpha \in [0.1, 0.4]$ regula la inercia del color (valores bajos generan transiciones cinematográficas fluidas; valores más altos aumentan la reactividad para juegos). `StreamRateLimiter.prepare_frame()` rechaza factores de suavizado no finitos (`NaN`/`Inf`) y avanza `_TargetStreamState` más allá de la banda muerta del filtro EMA para que cambios pequeños de color converjan por completo sin estancarse.
 
 ---
 
@@ -268,13 +248,13 @@ Las preferencias de usuario, las escenas personalizadas y el inventario de focos
 $$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$$
 
 Archivos gestionados:
-- `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario).
+- `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario, revalidados al cargar mediante `validate_local_endpoint()`).
 - `custom_scenes.json`: Presets personalizados creados por el usuario (modo, RGB, CCT, brillo, velocidad, favorito).
 - `settings.json`: Preferencias globales de usuario (`language`: `"en"` o `"es"`, y `theme`: `"architectural-stone"` o `"atmospheric-dark"`).
 
-### Patrón de Escritura Atómica en Disco
+### Patrón de Escritura Atómica y Endurecimiento de Lectura
 
-Para prevenir la corrupción de los archivos JSON ante cortes imprevistos de energía o cierres forzados, todas las escrituras siguen el protocolo atómico:
+Para prevenir corrupción, manipulación o lecturas ilimitadas en disco, los repositorios en `adapters/storage/json_repositories.py` aplican límites de tamaño de archivo y validación estricta de esquema al leer, y siguen un protocolo de reemplazo atómico al escribir:
 1. Se serializa la información JSON a un búfer en memoria.
 2. Se crea un archivo temporal único en la misma carpeta mediante `tempfile.mkstemp` (`.<archivo>.<aleatorio>.tmp`).
 3. Se vuelcan y sincronizan los descriptores con el sistema de archivos (`flush()` + `os.fsync()`).
@@ -292,49 +272,20 @@ Para prevenir la corrupción de los archivos JSON ante cortes imprevistos de ene
 El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` reescribe la entrada si apunta a otra ruta (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
 
 ### Instancia Única
-`adapters/system/single_instance.py` combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`). Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana (salvo que se indique `--multi-instance` para ejecución simultánea de diagnóstico).
+`adapters/system/single_instance.py` (`SingleInstanceGuard`) combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`), controlando errores `ERROR_ACCESS_DENIED` y `WAIT_FAILED` y liberando los handles de Win32 de forma determinista. Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana (salvo que se indique `--multi-instance` para ejecución simultánea de diagnóstico).
 
 ### Motor Multitema y Geometría Dinámica de Widget
-- **Arquitectura de Tokens CSS de 3 Niveles**: `ui/themes.css` define tokens primitivos, semánticos y de componente tanto para `"architectural-stone"` (tema claro predeterminado en piedra mineral cálida) como para `"atmospheric-dark"` (tema oscuro en cristal esmerilado con halo fotométrico `oklab`), consumidos por las reglas estructurales de `ui/styles.css`.
-- **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `DesktopApplication.create_window()` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`), añade `#theme=<theme>` a la URL inicial de la ventana y delega la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) a `adapters/platform/windows/window_chrome.py` (`_set_windows_dark_titlebar_attribute`), tanto en el arranque como al cambiar el tema en tiempo de ejecución. Antes de cargar `themes.css`, `ui/js/theme-boot.js` se ejecuta de forma síncrona en `<head>` (manteniendo intacta la CSP estricta `script-src 'self' file:`) para aplicar `data-theme` y `<meta name="color-scheme">` desde `#theme=` o `localStorage` antes del primer pintado, evitando el destello en tema claro (FOUC) al iniciar.
-- **Autoajuste Dinámico de Altura según Contenido**: `adapters/platform/windows/window_geometry.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`native_form.Invoke`) y acotadas al área de trabajo del monitor activo a través de `WebviewBridge.fit_window_height`.
+- **Arquitectura de Tokens CSS de 3 Niveles y Rendimiento de Compositor**: `ui/themes.css` define tokens primitivos, semánticos y de componente tanto para `"architectural-stone"` (tema claro predeterminado en piedra mineral cálida) como para `"atmospheric-dark"` (tema oscuro en cristal esmerilado con halo fotométrico `oklab`), consumidos por las reglas estructurales de `ui/styles.css`. Las reglas costosas de `backdrop-filter` se restringen lejos de tarjetas y botones repetidos, `.music-meter-fill` se anima únicamente mediante `transform: scaleX(var(--meter-scale, 0))` en compositor, y `@media (prefers-reduced-motion)` evita hacks globales de duración mínima mientras `:focus-visible`, `:focus-within` y `@media (forced-colors: active)` preservan el foco visible por teclado.
+- **Sincronización del Marco Nativo de Ventana (`THEME_WINDOW_CHROME`)**: `DesktopApplication.create_window()` lee el tema persistido antes de crear la ventana de PyWebView para definir el `background_color` inicial de WebView2 (`#F4F1EA` o `#08090C`), añade `#theme=<theme>` a la URL inicial de la ventana y delega la barra de título de Windows DWM (`DwmSetWindowAttribute` `DWMWA_USE_IMMERSIVE_DARK_MODE = 20` con `0` para modo claro o `1` para modo oscuro) y la caché de `HICON` (`release_window_icons()`) a `adapters/platform/windows/window_chrome.py` (`apply_window_icon` desempacando `.native` con firmas `argtypes`/`restype` explícitas de 64 bits), tanto en el arranque como al cambiar el tema en tiempo de ejecución. Antes de cargar `themes.css`, `ui/js/theme-boot.js` se ejecuta de forma síncrona en `<head>` para aplicar `data-theme` y `<meta name="color-scheme">` desde `#theme=` o `localStorage` antes del primer pintado, evitando el destello en tema claro (FOUC) al iniciar.
+- **Autoajuste Dinámico de Altura según Contenido**: `adapters/platform/windows/window_geometry.py` implementa `_fit_native_window_height` mediante llamadas Win32 `ctypes` seguras en 64 bits (`GetWindowRect`, `GetClientRect`, `SetWindowPos`) despachadas en el hilo de interfaz de WinForms (`native_form.Invoke`) y acotadas al `WorkingArea` multimonitor y escalado DPI a través de `WebviewBridge.fit_window_height`.
 
-### Servido del Frontend (HTTP por loopback + Módulos ES) · veredicto D4: A (2026-11-08)
-El frontend se sirve por HTTP en loopback para poder partir `ui/app.js` en módulos ES
-reales (Chromium bloquea `type="module"` sobre `file://`). `DesktopApplication.create_window()` pasa la ruta de
-archivo plana con el fragmento de tema (`f"{index_path}#theme={theme}"`) como URL de la ventana y arranca
-`webview.start(http_server=True)` (`BottleServer` descarta `#...` al resolver la raíz estática y `Window._resolve_url` conserva el fragmento en la URL de loopback).
+### Servido del Frontend, Puente IPC y Sondeo Reactivo
+El frontend se sirve por HTTP en loopback endurecido para cargar `ui/js/` como módulos ES nativos (Chromium bloquea `type="module"` sobre `file://`). `DesktopApplication.create_window()` pasa la ruta plana con el fragmento de tema (`f"{index_path}#theme={theme}"`) y arranca `webview.start(http_server=True, http_server_class=NoCacheBottleServer)`:
 
-El spike D4-A (T-2.0) verificó lo siguiente, con evidencia:
-- **Superficie solo-loopback**: el servidor Bottle integrado de pywebview enlaza
-  únicamente `127.0.0.1` (observado `http://127.0.0.1:42001/`). Nunca se expone a la LAN.
-- **El bridge sigue siendo IPC directo**: `window.pywebview.api` continúa como objeto
-  host nativo de WebView2. El endpoint HTTP `/js_api/<uuid>` solo transporta callbacks de
-  promesas JS, gateados por un `uuid` aleatorio por lanzamiento; no es el bridge de la app.
-- **Servido estático + MIME para ESM**: `index.html` → `text/html`, `app.js`/`i18n.js` →
-  `text/javascript` (compatible con módulos), `themes.css`/`styles.css` → `text/css`.
-- **Traversal de rutas bloqueado**: `GET /../../<archivo>` devuelve `403 Forbidden`
-  (`bottle.static_file` rechaza `..`).
-- **Arranque en dev verificado**: `python -m gestor_luces --minimized --multi-instance`
-  sirvió `index.html` con HTTP 200 en `127.0.0.1:42001` (título `WiZ Architectural
-  Lighting Console`), sin errores en el log.
-- **`resolve_ui_directory()` sin cambios**: devuelve `ui/` desde fuente y `_MEIPASS/ui`
-  cuando está congelada; ambas son rutas planas, así que la raíz del servidor es idéntica
-  en ambos casos (`resources.py`).
-
-Gotchas registrados para T-2.2:
-- La URL de la ventana **debe** ser una ruta plana (`str(index_path)`), no `.as_uri()`
-  (`file://` no se reescribe a HTTP en `_resolve_url` de pywebview).
-- El origen `'self'` de la CSP sigue el esquema: pasa a ser `http://127.0.0.1:42001`; los
-  permisos explícitos `file:` quedan vestigiales (inofensivos) y pueden quitarse después.
-- El origen de `localStorage` migra de `file://` a `http://127.0.0.1:42001`. El puerto es
-  fijo (`settings['DEFAULT_HTTP_PORT']=42001`) porque `private_mode=False`, así que los
-  datos persisten entre lanzamientos — pero el `localStorage` previo de `file://` no se
-  transfiere (nota de migración única; la verdad de escenas/tema vive igual en los
-  repositorios JSON).
-- El puerto fijo `42001` puede colisionar bajo `--multi-instance` (dos servidores simultáneos).
-- La ruta raíz `/` de pywebview es una ruta muerta y rota (500); las ventanas siempre cargan
-  una ruta de archivo concreta (`/index.html`), así que nunca se ejecuta.
+- **Servidor HTTP Loopback Endurecido (`NoCacheBottleServer`)**: Enlaza explícitamente `127.0.0.1` en un puerto efímero o configurado, utiliza un identificador criptográfico `secrets.token_urlsafe(24)`, deshabilita el endpoint HTTP de callbacks JS-API de pywebview (`server.js_api_endpoint = None`) y las cabeceras CORS abiertas (`Access-Control-Allow-*`), restringe los métodos a `GET`/`HEAD`, valida las cabeceras `Host` y `Origin` además de un límite de `64 KiB` en `Content-Length`, y adjunta cabeceras de no-caché y `SECURITY_HEADERS` incluida CSP (`frame-ancestors 'none'`).
+- **Puente IPC por Lista Blanca (`BlockedJsApi` + `window.expose`)**: En lugar de exponer el árbol completo de atributos de `JsApi` sobre `window.pywebview.api` (lo que permitiría recorrer atributos encadenados con `getattr`), `DesktopApplication` enlaza una instancia de `BlockedJsApi` como `js_api` y registra únicamente las funciones explícitas devueltas por `build_exposed_functions(js_api)` mediante `window.expose(...)`. `handlers.py` valida números finitos (rechazando `NaN`, `Inf`, `OverflowError` y booleanos) y sanea las excepciones devueltas a JavaScript.
+- **Cliente de Puente Resiliente y Sondeo Delta (`ui/js/`)**: `bridge-client.js` espera `pywebviewready` con respaldo de 2000 ms pero conserva la actualización al puente nativo ante eventos `pywebviewready` tardíos, descarta respuestas obsoletas fuera de orden mediante secuenciación monotónica y deduplica llamadas simultáneas con `dedupeKey`. `app.js` usa endpoints delta livianos (`get_ambilight_status`, `get_music_sync_status`) para los medidores en vivo, dispara un `refreshStates()` silencioso cuando se detiene un flujo y realiza actualizaciones selectivas del DOM protegiendo entradas con foco (`#input-hex`, campos de escena y foco).
+- **Controles Accesibles**: `ui/index.html`, `scenes.js` y `fixtures.js` mantienen los controles interactivos sin anidamiento (`.scene-card-trigger` + botón hermano `.scene-fav-btn`, botón de renombrado fuera de `<label>`) y ofrecen navegación por teclado (`tabindex="0"`, `role="slider"`, teclas de flecha) en `#color-wheel-canvas`.
 
 ### Propiedad de la Internacionalización (i18n) · fuente única de verdad
 Las traducciones tienen **un único dueño por dominio** (Gate 2 / T-2.3):
@@ -354,17 +305,17 @@ Al agregar una cadena, ubicala en el dominio que le corresponde; nunca dupliques
 clave en ambos lugares.
 
 ### Empaquetado
-`scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/`), construye el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, sin permisos de administrador), firma los binarios si se define `SIGN_CERT_SHA1` y genera `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`. El archivo de sumas se escribe con LF y sin BOM a propósito: `Set-Content -Encoding UTF8` agrega BOM y CRLF, y en Linux/macOS `sha256sum -c` entonces lee el retorno de carro como parte del nombre del archivo y toda línea falla con `FAILED open or read`.
+`scripts/build.ps1` genera el icono (`assets/icon/make_icon.py`), ejecuta PyInstaller con `packaging/gestor_luces.spec` (carpeta, sin consola, incluyendo `ui/` y `assets/` mientras excluye scripts auxiliares `*.py` como `make_icon.py`), firma `GestorDeLuces.exe` **antes** de empaquetar el ZIP portable y el instalador de Inno Setup (`packaging/installer.iss`, por usuario, `runasoriginaluser`, eliminación incondicional de `HKCU\...\Run` al desinstalar y `[CustomMessages]` en inglés y español), firma el instalador con sello de tiempo RFC 3161 por HTTPS (`https://timestamp.digicert.com`) cuando se define `SIGN_CERT_SHA1` y escribe `dist/SHA256SUMS.txt`. `resources.py` resuelve los assets desde `sys._MEIPASS` cuando la app está congelada. Los datos del usuario siempre quedan en `%LOCALAPPDATA%\GestorDeLuces`. El archivo de sumas se escribe con LF y sin BOM a propósito: `Set-Content -Encoding UTF8` agrega BOM y CRLF, y en Linux/macOS `sha256sum -c` entonces lee el retorno de carro como parte del nombre del archivo y toda línea falla con `FAILED open or read`.
 
 ### Pipeline de release (`release.yml`)
 
-El CI corre el mismo script, así que ninguna release se arma a mano y el camino local no puede divergir del publicado. Cuatro jobs, cada uno lo bastante barato como para fallar temprano:
+El CI corre el mismo script, así que ninguna release se arma a mano y el camino local no puede divergir del publicado. Todas las acciones de terceros están fijadas por SHA de commit de 40 caracteres, Inno Setup está fijado en la versión `6.7.1`, el workflow usa `permissions: contents: read` por defecto y `contents: write` queda restringido al job `publish`. Cuatro jobs, cada uno lo bastante barato como para fallar temprano:
 
 | Job | Runner | Qué decide |
 |---|---|---|
 | `guard` | `ubuntu-latest` | Resuelve la versión una sola vez —del tag en un push `v*`, de un input obligatorio en `workflow_dispatch`, porque en una corrida manual `GITHUB_REF_NAME` es la rama— y falla cuando no coincide con `pyproject.toml` o cuando falta `docs/releases/<versión>.md`. |
-| `build` | `windows-latest` | Instala el extra `dev` (PyInstaller viene ahí) más Inno Setup desde Chocolatey, corre `scripts/build.ps1` sin argumento de versión y sube `dist/`. |
+| `build` | `windows-latest` | Instala el extra `dev` (PyInstaller viene ahí) más Inno Setup (`6.7.1`) desde Chocolatey, corre `scripts/build.ps1` sin argumento de versión y sube `dist/`. |
 | `verify` | `windows-latest` | Compara el conjunto de artefactos contra los tres nombres esperados, corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre el build congelado. Cuenta solo archivos, porque `dist/` también tiene el directorio de la app. |
 | `publish` | `ubuntu-latest` | Crea una release en borrador (reusa la que dejó un re-run), sube con `--clobber`, re-verifica el digest que informa GitHub de cada asset contra el SHA-256 local y recién entonces publica. Un grupo `concurrency` por tag evita que dos corridas del mismo tag intercalen la publicación. |
 
-Una corrida con `dry_run` ejecuta todos los pasos hasta la publicación y después borra su borrador descartable: así se ensaya el pipeline sin publicar nada. El workflow no necesita ningún secreto más allá del `GITHUB_TOKEN` por defecto (`permissions: contents: write`); los binarios siguen sin firmar hasta que exista un certificado y `SIGN_CERT_SHA1`.
+Una corrida con `dry_run` ejecuta todos los pasos hasta la publicación y después borra su borrador descartable: así se ensaya el pipeline sin publicar nada. El workflow no necesita ningún secreto más allá del `GITHUB_TOKEN` por defecto; los binarios siguen sin firmar hasta que exista un certificado y `SIGN_CERT_SHA1`.

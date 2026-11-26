@@ -100,7 +100,7 @@ Used to inspect the bulb's operational parameters, power status, current color, 
 - `r`, `g`, `b`: RGB channel levels (`0` to `255`). Present when operating in RGB mode.
 - `c`, `w`: Cool white and warm white PWM channel levels.
 - `sceneId`: Integer ID of the active native scene (`0` indicates manual static color or temperature mode).
-- `speed`: Playback speed percentage for animated scenes (`20` to `200`).
+- `speed`: Playback speed percentage for animated scenes (validated as `10` to `200` by `SceneSpeed` in the application domain; typical WiZ firmware range is `20` to `200`).
 
 ---
 
@@ -114,7 +114,7 @@ Commands the bulb to alter its power state, brightness, color, temperature, or s
 - `temp` *(integer, optional)*: Color temperature in Kelvin between `2200` and `6500`. Mutually exclusive with `r`, `g`, `b` and `sceneId`.
 - `r`, `g`, `b` *(integers, optional)*: Red, green, and blue levels between `0` and `255`.
 - `sceneId` *(integer, optional)*: Built-in scene identifier (`1` to `36`).
-- `speed` *(integer, optional)*: Animation speed multiplier (`20` to `200`).
+- `speed` *(integer, optional)*: Animation speed multiplier (`10` to `200` in domain validation; `20` to `200` typical firmware range).
 
 #### Command Examples:
 
@@ -229,18 +229,19 @@ Rather than allocating and closing a new OS socket on every 10 Hz Ambilight or M
 
 ### Defensive UDP Hardening
 
-To protect the event loop against malformed or untrusted local network traffic, `WizUdpController` enforces strict transport validation:
+To protect the event loop and local network boundaries against malformed or unintended traffic, `validate_local_endpoint()` (`domain/value_objects.py`) and `WizUdpController` enforce strict transport validation across `cli.py`, persisted `bulbs.json` loading (`json_repositories.py`), and `udp_controller.py`:
+- **Strict Local Endpoint Validation**: `validate_local_endpoint()` rejects `0.0.0.0`, `255.255.255.255`, multicast/broadcast addresses, loopback/non-local external targets, and unauthorized ports before any socket bind or send.
+- **Leak-Free Socket Initialization**: `WizUdpController` executes `create_datagram_endpoint` inside its guarded `try` block so failed datagram initialization closes transport/socket handles cleanly.
 - **Inbound Datagram Size Cap**: Incoming UDP datagrams are capped at `4,096` bytes to prevent memory exhaustion from oversized packets.
-- **Target IP Validation**: Target bulb addresses are validated as strict IPv4 unicast addresses before socket transmission.
 - **Malformed Payload Resilience**: Malformed or truncated `getPilot` and `getSystemConfig` JSON responses are safely rejected without crashing the `asyncio` event loop.
 
-### The 10 Hz Rate Limit Constraint
+### The 10 Hz Rate Limit Constraint & EMA Smoothing
 
 WiZ bulb microcontrollers (typically Espressif ESP8266 or ESP32) maintain a small internal ring buffer for incoming UDP packets. 
 
 - Transmitting at > 15 Hz quickly overruns the microcontroller's socket buffer.
 - Buffer overflow triggers the bulb's hardware watchdog timer (WDT), causing the bulb to reboot, flicker white, and temporarily drop off Wi-Fi.
-- `StreamRateLimiter` enforces a strict minimum inter-packet interval of **100 milliseconds (10 Hz)** per target bulb IP.
+- `StreamRateLimiter` enforces a strict minimum inter-packet interval of **100 milliseconds (10 Hz)** per target bulb IP, rejects non-finite smoothing inputs (`NaN`/`Inf`), and updates target state past the EMA deadband threshold so small gradual color transitions converge cleanly instead of stalling.
 
 ---
 

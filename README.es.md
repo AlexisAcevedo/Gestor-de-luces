@@ -27,7 +27,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Selección de color RGB con previsualización en vivo e ingreso hexadecimal.
 
 2. Catálogo de Escenas Nativas y Presets Personalizados:
-   - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (20% a 200%).
+   - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (10% a 200%).
    - Presets de iluminación personalizados por el usuario, almacenados localmente con recuperación y eliminación en un clic.
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
@@ -50,7 +50,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
 
 6. Temporizador de Apagado Progresivo (Sleep Timer):
-   - Cuenta regresiva configurable (1 a 120 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
+   - Cuenta regresiva configurable (1 a 240 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo y dinámico en la UI, el menú de la bandeja y la barra de menú de la ventana.
@@ -113,7 +113,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 
 | Capa | Componente | Versión | Descripción |
 |---|---|---|---|
-| Entorno de Ejecución | Python | >= 3.11 (verificado en 3.14) | Plataforma base del lenguaje |
+| Entorno de Ejecución | Python | >= 3.12 (verificado en 3.14) | Plataforma base del lenguaje |
 | Red | `pywizlight` | 0.6.6 | Transporte por sockets UDP en puerto 38899 |
 | Contenedor de Escritorio | `pywebview` | 6.2.1 | Ventana nativa sobre Microsoft Edge WebView2 |
 | Bandeja del Sistema | `Pillow` / `pystray` | 13.0.0 / 0.19.5 | `Pillow` dibuja el icono del foco; el menú es un `NotifyIcon` de WinForms y `pystray` queda como vista de respaldo |
@@ -154,60 +154,53 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │       ├── main.py              # Raíz de composición y punto de entrada de la app
 │       ├── cli.py               # Herramienta de sondeo y diagnóstico de red por CLI
 │       ├── resources.py         # Resolución de assets y versión (dev y congelado con PyInstaller)
+│       ├── desktop/             # Ciclo de vida del shell de escritorio y ventana
+│       │   └── app.py           # DesktopApplication, sync de menú y eventos de ventana
 │       ├── domain/              # Lógica pura del dominio y entidades
-│       │   ├── models.py        # Entidades Bulb, LightState y Group
+│       │   ├── models.py        # Entidades Bulb y LightState
 │       │   ├── scenes.py        # Catálogo nativo de WiZ y modelo de presets personalizados
-│       │   └── value_objects.py # Validación de Color, Brillo, Kelvin y Modos
+│       │   └── value_objects.py # Validación de Color, Brillo, Kelvin, endpoints y modos
 │       ├── ports/               # Contratos (interfaces typing.Protocol)
-│       │   ├── interfaces.py    # Exportación centralizada de puertos
+│       │   ├── light_control.py # Protocolo LightControlServicePort para el escritorio
 │       │   ├── repositories.py  # Protocolos de controladores, persistencia y muestreo
 │       │   └── autostart.py     # Protocolo AutostartManager
-│       ├── application/         # Casos de uso y gestores de streaming
-│       │   ├── service.py       # Servicio principal de orquestación
-│       │   ├── rate_limiter.py  # Limitador de tasa UDP a 10 Hz
+│       ├── application/         # Casos de uso, servicios acotados y gestores de streaming
+│       │   ├── service.py       # Fachada principal de orquestación
+│       │   ├── service_context.py # Estado compartido, repositorios y cierre de recursos
+│       │   ├── bulb_control_service.py    # Comandos de encendido, color, CCT y brillo
+│       │   ├── bulb_inventory_service.py  # Descubrimiento, sondeo y gestión de alias
+│       │   ├── scene_service.py           # Ejecución de escenas nativas y personalizadas
+│       │   ├── timer_service.py           # Coordinación del temporizador de apagado
+│       │   ├── ambilight_service.py       # Configuración y ciclo de Ambilight
+│       │   ├── music_service.py           # Configuración y ciclo de Music Sync
+│       │   ├── settings_service.py        # Preferencias de idioma y tema
+│       │   ├── rate_limiter.py  # Limitador de tasa UDP a 10 Hz y suavizado EMA
 │       │   ├── sleep_timer.py   # Temporizador de apagado progresivo
 │       │   ├── ambilight_stream.py # Gestor de streaming de captura de pantalla
 │       │   └── music_stream.py  # Gestor de streaming reactivo a música por WASAPI
 │       └── adapters/            # Implementaciones de infraestructura
 │           ├── wiz/             # Controlador UDP mediante pywizlight
-│           ├── storage/         # Repositorios en disco JSON (%LOCALAPPDATA%)
+│           ├── storage/         # Repositorios atómicos en disco JSON (%LOCALAPPDATA%)
 │           ├── ambilight/       # Muestreador de pantalla MSS
-│           ├── audio/           # Muestreador de audio WASAPI loopback
-│           ├── tray/            # Controlador de bandeja, vistas WinForms/Pystray y render del icono
+│           ├── audio/           # Muestreador de audio WASAPI loopback y análisis FFT
+│           ├── platform/windows/# Cromado DWM Win32, geometría multimonitor y menús
+│           ├── tray/            # Controlador de bandeja, vistas WinForms/Pystray e icono
 │           ├── system/          # Autoinicio de Windows (registro) e instancia única
-│           └── ui_webview/      # Puente seguro JS-Python y modelo del menú nativo
-├── tests/                       # Suite de pruebas automatizadas
-│   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria
-│   ├── js/                      # Pruebas unitarias del frontend (node --test, sin dependencias)
-│   ├── waits.py                 # Esperas acotadas por condición compartidas por la suite
-│   ├── test_cli.py              # Subcomandos del CLI contra el simulador UDP
-│   ├── test_coverage_badge_json.py # Endpoint JSON del badge de cobertura
-│   ├── test_coverage_gate.py    # Lógica del gate de cobertura por paquete
-│   ├── test_domain.py           # Pruebas de reglas e invariantes del dominio
-│   ├── test_menu_state.py       # Pruebas del sondeo de menú de bandeja abierto
-│   ├── test_native_menu.py      # Pruebas del modelo de menú nativo y su sync en vivo
-│   ├── test_rate_limiter.py     # Pruebas del limitador de frecuencia
-│   ├── test_scene_catalog_sync.py # Sincronía entre ui/scenes.json y BUILTIN_SCENES
-│   ├── test_single_instance.py  # Guarda de instancia única con procesos reales
-│   ├── test_thread_lifecycle.py # Ningún hilo con nombre de la app sobrevive al cierre
-│   ├── test_persistence_and_scenes.py # Pruebas de persistencia JSON y presets
-│   ├── test_wiz_integration.py  # Pruebas de integración UDP contra el simulador
-│   ├── test_ui_bridge.py        # Pruebas del puente asíncrono con la interfaz gráfica
-│   ├── test_tray.py             # Pruebas de la bandeja del sistema y sincronización
-│   ├── test_winforms_tray.py    # Vista WinForms de la bandeja: paleta, painter, marshalling
-│   ├── test_ambilight.py        # Pruebas de captura de pantalla y suavizado EMA
-│   ├── test_music_sync.py       # Pruebas de análisis espectral FFT y WASAPI
-│   ├── test_i18n.py             # Pruebas de localización bilingüe
-│   ├── test_app_shell.py        # Pruebas del menú, autoinicio, --minimized y assets
-│   ├── test_window_geometry.py  # Pruebas de dimensiones de ventana compacta y área de trabajo
-│   ├── test_window_fit.py       # Pruebas de ajuste dinámico de altura y barra de título DWM
-│   └── test_security_hardening.py # Pruebas de regresión de seguridad, rendimiento y límites hexagonales/concurrencia
-└── ui/                          # Frontend web embebido en WebView2
+│           └── ui_webview/      # Servidor HTTP endurecido, puente IPC y menú nativo
+├── tests/                       # Suite offline de pruebas unitarias, integración, seguridad y CI
+│   ├── simulators/              # Servidor simulador UDP de foco WiZ en memoria (`FakeWizBulbServer`)
+│   ├── js/                      # Pruebas unitarias, accesibilidad DOM y rendimiento CSS (`node --test`)
+│   └── waits.py                 # Esperas acotadas por condición compartidas por la suite
+└── ui/                          # Frontend web servido por HTTP loopback dentro de WebView2
     ├── index.html               # Estructura visual de la consola
-    ├── themes.css               # Tokens de diseño de 3 niveles y temas (Architectural Stone y Atmospheric Dark)
+    ├── themes.css               # Tokens de diseño de 3 niveles y temas
     ├── styles.css               # Disposición de controlador compacto y componentes tokenizados
-    ├── app.js                   # Controlador de estado reactivo de la interfaz
-    └── i18n.js                  # Diccionarios de localización en inglés y español
+    ├── scenes.json              # Catálogo nativo de escenas WiZ sincronizado con el dominio
+    ├── i18n.js                  # Diccionarios de localización en inglés y español
+    └── js/                      # Módulos ES del frontend (`app.js`, `bridge-client.js`,
+                                 # `store.js`, `scenes.js`, `stage-controls.js`,
+                                 # `fixtures.js`, `ambilight.js`, `music.js`,
+                                 # `shortcuts.js`, `toasts.js`, `theme-boot.js`)
 ```
 
 ---
@@ -233,7 +226,7 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
 #### Requisitos Previos
 
 - Sistema Operativo: Windows 10 (Compilación 1809 o superior) o Windows 11.
-- Python: Versión 3.11 o posterior (probado y verificado en Python 3.14).
+- Python: Versión 3.12 o posterior (probado y verificado en Python 3.14).
 - Runtime de WebView2: Microsoft Edge WebView2 Evergreen Runtime.
 
 #### Proceso de Instalación
@@ -324,6 +317,8 @@ Para correr las pruebas:
 pytest
 ```
 
+Las pruebas de workflows detectan automáticamente Git Bash en Windows (descartando los stubs de WSL y WindowsApps), por lo que la suite completa de `pytest` se ejecuta sin problemas desde PowerShell sin exclusiones `--ignore`.
+
 La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
 
 Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
@@ -334,9 +329,9 @@ Los módulos del frontend bajo `ui/js` se prueban aparte con el runner integrado
 npm test
 ```
 
-Corre `tests/js/store.test.js` (estado compartido de la app, preferencias persistidas y helpers fotométricos) y `tests/js/scenes.test.js` (grilla de escenas nativas, filtrado por categoría, presets personalizados y los comandos que envían al backend) con un **piso de 60 % de cobertura de líneas** verificado por `--test-coverage-lines`. El job `js tests` de `.github/workflows/ci.yml` corre el mismo comando en cada push y pull request.
+Ejecuta las suites bajo `tests/js/` sobre los módulos ES del frontend (`bridge-client`, `app`, `ambilight`, `music`, `fixtures`, `stage-controls`, `toasts`, `store`, `scenes`, `theme-boot`) junto con verificaciones de accesibilidad del DOM y rendimiento CSS bajo un **piso de 60 % de cobertura de líneas** verificado por `--test-coverage-lines`. El job `js tests` de `.github/workflows/ci.yml` corre el mismo comando en cada push y pull request.
 
-El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan automáticamente en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
+El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan como comprobaciones **bloqueantes** en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 
 Un workflow nocturno (`.github/workflows/nightly.yml`) corre la suite completa cinco veces seguidas, cada pasada en un proceso nuevo, para detectar tests inestables que una sola corrida en verde esconde. Que los procesos sean separados importa: la repeticion dentro del mismo proceso (`--count`) arrastra hilos, sockets y estado cacheado de una pasada a la siguiente, asi que un fallo ahi no se reproduce bajo `ci.yml`. Se puede correr localmente con `for pass in 1 2 3 4 5; do pytest -x --timeout=120 || exit 1; done`.
 
@@ -359,7 +354,9 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 | `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
 | `SHA256SUMS.txt` | Hashes SHA-256 de todos los artefactos generados en `dist/`. |
 
-Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `build.ps1` firma automáticamente el ejecutable y el instalador con SHA-256 y sello de tiempo RFC 3161.
+Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `scripts/build.ps1` firma `GestorDeLuces.exe` **antes** de crear el ZIP portable y el instalador de Inno Setup (para que ambos incluyan el ejecutable firmado) y luego firma el instalador con SHA-256 y sello de tiempo RFC 3161 por HTTPS (`https://timestamp.digicert.com`).
+
+`packaging/gestor_luces.spec` excluye scripts auxiliares de Python (como `make_icon.py`) del directorio `assets/` empaquetado. `packaging/installer.iss` inicia la ejecución post-instalación con `runasoriginaluser`, elimina de forma incondicional la clave de autoinicio en `HKCU\...\Run` al desinstalar e incluye mensajes personalizados bilingües en inglés y español (`[CustomMessages]`).
 
 ### Publicar una release
 
@@ -369,7 +366,7 @@ Las releases las compila y publica el CI; los comandos de arriba son para compil
 2. Escribir `docs/releases/X.Y.Z.md` con las notas de esa release ([convención](docs/releases/README.md)).
 3. Mergear, y después taggear el commit mergeado y pushear el tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-`.github/workflows/release.yml` hace el resto. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
+`.github/workflows/release.yml` fija todas las acciones de terceros por su SHA de commit, fija la versión de Inno Setup (`6.7.1`) y restringe `contents: write` exclusivamente al job `publish`. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
 
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
