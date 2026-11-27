@@ -16,6 +16,7 @@ from gestor_luces.adapters.platform.windows.menu_state import (
 )
 from gestor_luces.adapters.platform.windows.menu_sync import (
     _sync_native_menu,
+    _sync_native_menu_theme,
     _to_webview_menus,
 )
 from gestor_luces.adapters.platform.windows.message import show_message_box
@@ -61,6 +62,7 @@ __all__ = [
     "_resolve_native_hwnd",
     "_set_windows_dark_titlebar_attribute",
     "_sync_native_menu",
+    "_sync_native_menu_theme",
     "_to_webview_menus",
     "apply_app_user_model_id",
     "apply_window_icon",

@@ -249,6 +249,22 @@ class TrayController:
             self._refresh_pending = True
             self._refresh_cond.notify()
 
+    def show_notification(self, title: str, message: str) -> bool:
+        """Forward a non-blocking notification to the active tray view when supported."""
+        with self._refresh_cond:
+            view = self._view
+            stopped = self._stopped.is_set()
+        if view is None or stopped:
+            return False
+        notify_fn = getattr(view, "notify", None)
+        if not callable(notify_fn):
+            return False
+        self._call_view(
+            lambda: notify_fn(title, message),
+            "Failed to display the tray notification.",
+        )
+        return True
+
     def refresh(self) -> None:
         """Recalcula menu, tooltip e imagen y entrega el estado a la vista."""
         try:

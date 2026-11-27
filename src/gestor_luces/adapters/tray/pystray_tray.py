@@ -209,6 +209,20 @@ class PystrayTrayView:
         icon = self._ensure_icon()
         self._apply_native(icon, state)
 
+    def notify(self, title: str, message: str) -> None:
+        """Send a notification via the underlying pystray icon when supported."""
+        with self._lock:
+            if self._stopped or self._icon is None:
+                return
+            icon = self._icon
+        notify_fn = getattr(icon, "notify", None)
+        if not callable(notify_fn):
+            return
+        try:
+            notify_fn(str(message), str(title))
+        except (OSError, RuntimeError, AttributeError, TypeError, ValueError):
+            _LOGGER.debug("pystray tray notification skipped.", exc_info=True)
+
     def _ensure_icon(self) -> Any:
         """Crea el `pystray.Icon` una sola vez, con el estado vigente."""
         with self._create_lock:

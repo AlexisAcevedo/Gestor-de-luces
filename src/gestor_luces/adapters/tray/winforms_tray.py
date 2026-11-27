@@ -207,6 +207,32 @@ class WinFormsTrayView:
             return
         self._marshal(form, lambda: self._apply_native(state))
 
+    def notify(self, title: str, message: str, *, timeout_ms: int = 4000) -> None:
+        """Display a non-blocking system tray balloon notification on the host UI thread."""
+        with self._lock:
+            if self._stopped:
+                return
+            form, notify_icon = self._form, self._notify
+        if form is None or notify_icon is None:
+            return
+
+        def _show() -> None:
+            with self._lock:
+                if self._stopped or self._notify is None:
+                    return
+                target = self._notify
+            try:
+                target.BalloonTipTitle = str(title)[:63]
+                target.BalloonTipText = str(message)[:255]
+                tip_icon = getattr(self._api.forms, "ToolTipIcon", None)
+                if tip_icon is not None and hasattr(tip_icon, "Info"):
+                    target.BalloonTipIcon = tip_icon.Info
+                target.ShowBalloonTip(int(timeout_ms))
+            except clr_errors(self._api):
+                _LOGGER.debug("Tray balloon notification skipped.", exc_info=True)
+
+        self._marshal(form, _show)
+
     def _apply_native(self, state: State) -> None:
         """Aplica el estado en el hilo de la vista; solo el rebuild se difiere (T-3.6)."""
         spec, title, rgb, theme = state

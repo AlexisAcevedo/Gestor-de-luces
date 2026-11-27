@@ -21,6 +21,7 @@ from gestor_luces.adapters.platform.windows import (
     _fit_native_window_height,
     _set_windows_dark_titlebar_attribute,
     _sync_native_menu,
+    _sync_native_menu_theme,
     _to_webview_menus,
     apply_window_icon,
     show_message_box,
@@ -33,6 +34,7 @@ from gestor_luces.adapters.platform.windows.window_geometry import (
 from gestor_luces.adapters.storage.json_repositories import resolve_default_data_dir
 from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
 from gestor_luces.adapters.tray import Dispatch, TrayController, TrayView
+from gestor_luces.adapters.tray.menu_model import build_tray_hint
 from gestor_luces.adapters.ui_webview.app_menu import (
     ACTION_EXIT,
     ACTION_SHOW_ABOUT,
@@ -44,6 +46,7 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     build_about_text,
     build_about_title,
     build_app_menu,
+    build_window_title,
 )
 from gestor_luces.adapters.ui_webview.bridge import (
     BlockedJsApi,
@@ -52,7 +55,7 @@ from gestor_luces.adapters.ui_webview.bridge import (
     build_exposed_functions,
 )
 from gestor_luces.adapters.ui_webview.http_server import NoCacheBottleServer
-from gestor_luces.domain.value_objects import DEFAULT_THEME, normalize_theme
+from gestor_luces.domain.value_objects import DEFAULT_THEME, normalize_language, normalize_theme
 from gestor_luces.ports.autostart import AutostartManager
 from gestor_luces.ports.light_control import LightControlServicePort
 from gestor_luces.resources import resolve_app_version
@@ -69,12 +72,16 @@ def _build_initial_ui_url(
     index_path: Path,
     theme: str,
     *,
+    language: str | None = None,
     cache_bust: str | None = None,
 ) -> str:
-    """Construye la URL inicial de la vista web con query anti-cache y fragmento de tema."""
+    """Construye la URL inicial de la vista web con query anti-cache y fragmento de tema/idioma."""
     normalized = normalize_theme(theme)
     query = f"?v={cache_bust}" if cache_bust else ""
-    return f"{index_path}{query}#theme={normalized}"
+    if language is None:
+        return f"{index_path}{query}#theme={normalized}"
+    normalized_lang = normalize_language(language)
+    return f"{index_path}{query}#theme={normalized}&lang={normalized_lang}"
 
 
 def create_tray_view(dispatch: Dispatch) -> TrayView | None:
@@ -138,6 +145,8 @@ class DesktopApplication:
         self._visibility_generation = 0
         self._last_titlebar_theme: str | None = None
         self._last_menu_language = str(service.get_language() or "en")
+        tray_hint_getter = getattr(service, "get_tray_hint_seen", None)
+        self._tray_hint_shown = bool(tray_hint_getter()) if callable(tray_hint_getter) else False
 
         self._menu_handlers: dict[str, Callable[[], None]] = {
             ACTION_TOGGLE_WINDOW: self.toggle_window,
@@ -206,13 +215,15 @@ class DesktopApplication:
         self._bridge.set_fit_window_callback(self.fit_window)
 
         initial_theme = normalize_theme(self._service.get_theme())
+        initial_language = normalize_language(self._service.get_language())
         initial_chrome = THEME_WINDOW_CHROME.get(initial_theme, THEME_WINDOW_CHROME[DEFAULT_THEME])
         js_api = JsApi(self._bridge, fit_window=self.fit_window)
         self._window = webview.create_window(
-            title=WINDOW_TITLE,
+            title=build_window_title(initial_language),
             url=_build_initial_ui_url(
                 self._index_path,
                 initial_theme,
+                language=initial_language,
                 cache_bust=uuid.uuid4().hex[:8],
             ),
             js_api=BlockedJsApi(),
@@ -342,7 +353,7 @@ class DesktopApplication:
             return False
 
     def sync_theme_titlebar(self, *, force: bool = False) -> None:
-        """Sincroniza el atributo DWM de la barra de titulo segun el tema activo."""
+        """Sincroniza el atributo DWM de la barra de titulo y el MenuStrip segun el tema activo."""
         if self._window is None:
             return
         current_theme = normalize_theme(self._service.get_theme())
@@ -354,9 +365,25 @@ class DesktopApplication:
             self._window,
             enabled=bool(chrome["dark_titlebar"]),
         )
+        _sync_native_menu_theme(self._window, current_theme)
         if applied:
             with self._state_lock:
                 self._last_titlebar_theme = current_theme
+
+    def sync_window_title(self, language: str | None = None) -> None:
+        """Update the native window title to match the active language when supported."""
+        if self._window is None:
+            return
+        resolved_lang = normalize_language(
+            language if language is not None else self._service.get_language()
+        )
+        set_title_fn = getattr(self._window, "set_title", None)
+        if not callable(set_title_fn):
+            return
+        try:
+            set_title_fn(build_window_title(resolved_lang))
+        except Exception:
+            _LOGGER.debug("Window title update skipped.", exc_info=True)
 
     def show_window(self) -> None:
         """Restaura la ventana desde la bandeja y la trae al frente en Windows."""
@@ -379,12 +406,34 @@ class DesktopApplication:
         if self._tray is not None:
             self._tray.request_refresh()
 
-    def _apply_hide(self) -> None:
+    def _maybe_show_tray_hint(self) -> None:
+        """Show the non-intrusive hide-to-tray notice at most once and persist the flag."""
+        with self._state_lock:
+            if self._tray_hint_shown or self._is_quitting:
+                return
+        tray = self._tray
+        if tray is None:
+            return
+        lang = normalize_language(str(self._service.get_language() or "en"))
+        title, message = build_tray_hint(lang)
+        if tray.show_notification(title, message):
+            with self._state_lock:
+                self._tray_hint_shown = True
+            setter = getattr(self._service, "set_tray_hint_seen", None)
+            if callable(setter):
+                try:
+                    setter(True)
+                except Exception:
+                    _LOGGER.debug("Could not persist tray_hint_seen flag.", exc_info=True)
+
+    def _apply_hide(self, *, show_tray_hint: bool = False) -> None:
         """Ejecuta el ocultamiento nativo y notifica menu y bandeja."""
         self._window.hide()
         self.request_menu_sync()
         if self._tray is not None:
             self._tray.request_refresh()
+        if show_tray_hint:
+            self._maybe_show_tray_hint()
 
     def hide_window(self) -> None:
         """Oculta la ventana en la bandeja manteniendo vivos el bucle UDP y los temporizadores."""
@@ -395,7 +444,12 @@ class DesktopApplication:
             self._visibility_generation += 1
         self._apply_hide()
 
-    def _hide_if_generation(self, generation: int) -> None:
+    def _hide_if_generation(
+        self,
+        generation: int,
+        *,
+        show_tray_hint: bool = False,
+    ) -> None:
         """Oculta la ventana solo si ninguna transicion posterior invalido la solicitud."""
         with self._state_lock:
             if (
@@ -406,7 +460,7 @@ class DesktopApplication:
                 return
             self._is_window_visible = False
             self._visibility_generation += 1
-        self._apply_hide()
+        self._apply_hide(show_tray_hint=show_tray_hint)
 
     def notify_ui(self) -> None:
         """Avisa a la vista web que una accion de la bandeja modifico el estado luminico."""
@@ -470,8 +524,7 @@ class DesktopApplication:
                 return True
             generation = self._visibility_generation
         threading.Thread(
-            target=self._hide_if_generation,
-            args=(generation,),
+            target=lambda: self._hide_if_generation(generation, show_tray_hint=True),
             name=HIDE_ON_CLOSE_THREAD_NAME,
             daemon=True,
         ).start()
@@ -484,8 +537,7 @@ class DesktopApplication:
                 return
             generation = self._visibility_generation
         threading.Thread(
-            target=self._hide_if_generation,
-            args=(generation,),
+            target=lambda: self._hide_if_generation(generation, show_tray_hint=True),
             name=HIDE_ON_MINIMIZE_THREAD_NAME,
             daemon=True,
         ).start()
@@ -524,6 +576,7 @@ class DesktopApplication:
                 self._menu_sync_pending = False
             try:
                 _sync_native_menu(self._window, self.current_menu_spec())
+                _sync_native_menu_theme(self._window, normalize_theme(self._service.get_theme()))
             # FRONTERA: este es el bucle que serializa los refrescos del menu nativo y cruza
             # a WinForms con pythonnet; una reaplicacion fallida no puede matar el unico
             # hilo que reaplica el menu hasta el cierre.
@@ -597,6 +650,7 @@ class DesktopApplication:
             if language_changed:
                 self._last_menu_language = current_language
         if language_changed:
+            self.sync_window_title(current_language)
             self.request_menu_sync()
 
     def on_window_shown(self) -> None:

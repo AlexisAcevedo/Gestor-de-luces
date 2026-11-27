@@ -106,6 +106,7 @@ class ServiceContext:
         self.custom_scenes: dict[str, CustomScene] = {}
         self.language: str = DEFAULT_LANGUAGE
         self.theme: str = DEFAULT_THEME
+        self.tray_hint_seen: bool = False
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -128,6 +129,7 @@ class ServiceContext:
             loaded_settings = self.settings_repo.load_settings()
             self.language = normalize_language(loaded_settings.get("language", DEFAULT_LANGUAGE))
             self.theme = normalize_theme(loaded_settings.get("theme", DEFAULT_THEME))
+            self.tray_hint_seen = bool(loaded_settings.get("tray_hint_seen", False))
 
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
@@ -200,7 +202,10 @@ class ServiceContext:
     def persist_settings(self) -> None:
         """Delega el guardado de preferencias globales si hay un repositorio configurado."""
         if self.settings_repo is not None:
-            self.settings_repo.save_settings({"language": self.language, "theme": self.theme})
+            payload: dict[str, object] = {"language": self.language, "theme": self.theme}
+            if self.tray_hint_seen:
+                payload["tray_hint_seen"] = True
+            self.settings_repo.save_settings(payload)
 
     def ensure_screen_sampler(self) -> ScreenSampler | None:
         """Obtiene el adaptador de pantalla inyectado o lo instancia mediante la fabrica

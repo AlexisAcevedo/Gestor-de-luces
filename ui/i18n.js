@@ -718,4 +718,15 @@
     t,
     translateDom
   };
+
+  if (typeof document !== "undefined" && document.documentElement) {
+    const bootLang =
+      (document.documentElement.dataset && document.documentElement.dataset.lang) ||
+      document.documentElement.lang ||
+      "en";
+    const resolvedBootLang = setLanguage(bootLang);
+    if (resolvedBootLang !== "en") {
+      translateDom(document);
+    }
+  }
 })();

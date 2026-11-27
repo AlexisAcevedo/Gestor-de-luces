@@ -37,3 +37,13 @@ class SettingsService:
         self._ctx.theme = normalize_theme(theme)
         self._ctx.persist_settings()
         return self._ctx.theme
+
+    def get_tray_hint_seen(self) -> bool:
+        """Return whether the one-time hide-to-tray notice has already been shown."""
+        return bool(self._ctx.tray_hint_seen)
+
+    def set_tray_hint_seen(self, seen: bool = True) -> bool:
+        """Persist whether the one-time hide-to-tray notice has been displayed."""
+        self._ctx.tray_hint_seen = bool(seen)
+        self._ctx.persist_settings()
+        return self._ctx.tray_hint_seen

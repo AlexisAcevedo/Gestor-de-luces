@@ -1,15 +1,20 @@
 /*
- * Synchronous pre-CSS theme bootstrap (FOUC prevention under strict CSP).
+ * Synchronous pre-CSS theme and language bootstrap (FOUC/FOUL prevention under strict CSP).
  *
- * Runs before stylesheets load so the first paint uses the persisted theme
- * passed via URL hash (`#theme=...` from DesktopApplication) or localStorage.
+ * Runs before stylesheets load so the first paint uses the persisted theme and language
+ * passed via URL hash (`#theme=...&lang=...` from DesktopApplication) or localStorage.
  */
-(function bootstrapInitialTheme() {
+(function bootstrapInitialThemeAndLanguage() {
   var ALLOWED = {
     "architectural-stone": true,
     "atmospheric-dark": true
   };
   var DEFAULT_THEME = "architectural-stone";
+  var ALLOWED_LANGS = {
+    en: true,
+    es: true
+  };
+  var DEFAULT_LANG = "en";
   var UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
 
   function normalize(value) {
@@ -18,36 +23,60 @@
     return Object.prototype.hasOwnProperty.call(ALLOWED, cleaned) ? cleaned : null;
   }
 
-  function readThemeFromHash() {
+  function normalizeLang(value) {
+    if (typeof value !== "string") return null;
+    var cleaned = value.trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(ALLOWED_LANGS, cleaned) ? cleaned : null;
+  }
+
+  function readParamsFromHash() {
     try {
       var hash = String((window.location && window.location.hash) || "");
       if (!hash || hash === "#") return null;
       var query = hash.charAt(0) === "#" ? hash.slice(1) : hash;
-      var params = new URLSearchParams(query);
-      return normalize(params.get("theme"));
+      return new URLSearchParams(query);
     } catch (_err) {
       return null;
     }
   }
 
-  function readThemeFromStorage() {
+  function readPrefsFromStorage() {
     try {
       if (!window.localStorage) return null;
       var raw = window.localStorage.getItem(UI_PREFS_STORAGE_KEY);
       if (!raw) return null;
       var parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? normalize(parsed.theme) : null;
+      return parsed && typeof parsed === "object" ? parsed : null;
     } catch (_err) {
       return null;
     }
   }
 
-  var resolved = readThemeFromHash() || readThemeFromStorage() || DEFAULT_THEME;
+  var hashParams = readParamsFromHash();
+  var storedPrefs = readPrefsFromStorage();
+
+  var resolved =
+    (hashParams ? normalize(hashParams.get("theme")) : null) ||
+    (storedPrefs ? normalize(storedPrefs.theme) : null) ||
+    DEFAULT_THEME;
+
+  var resolvedLang =
+    (hashParams ? normalizeLang(hashParams.get("lang")) : null) ||
+    (storedPrefs ? normalizeLang(storedPrefs.language) : null) ||
+    DEFAULT_LANG;
+
   var root = document.documentElement;
-  if (root && root.dataset) {
-    root.dataset.theme = resolved;
-  } else if (root && typeof root.setAttribute === "function") {
-    root.setAttribute("data-theme", resolved);
+  if (root) {
+    root.lang = resolvedLang;
+    if (root.dataset) {
+      root.dataset.theme = resolved;
+      root.dataset.lang = resolvedLang;
+    }
+    if (typeof root.setAttribute === "function") {
+      root.setAttribute("lang", resolvedLang);
+      root.setAttribute("data-theme", resolved);
+      root.setAttribute("data-lang", resolvedLang);
+    }
   }
 
   var colorSchemeMeta =
