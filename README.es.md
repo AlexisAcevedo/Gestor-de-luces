@@ -2,8 +2,8 @@
 
 [English](README.md) | [Español](README.es.md)
 
-[![CI](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/Gestor-de-luces/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AlexisAcevedo/Gestor-de-luces/badges/coverage.json)](https://github.com/AlexisAcevedo/Gestor-de-luces/blob/main/.github/workflows/coverage-badge.yml)
+[![CI](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AlexisAcevedo/wiz-architectural-lighting-console/badges/coverage.json)](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/blob/main/.github/workflows/coverage-badge.yml)
 
 Centro de control de escritorio para sistemas de iluminación inteligente Philips WiZ sobre redes de área local (LAN). Diseñado con Python, Arquitectura Hexagonal (Puertos y Adaptadores) y Microsoft WebView2 (PyWebView), operando de manera exclusiva mediante paquetes UDP locales sin dependencias de la nube, puentes externos ni necesidad de conexión a Internet.
 
@@ -210,7 +210,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 
 ### Opción A — Instalador de Windows o ZIP Portable (Recomendado para Usuarios)
 
-No requiere tener Python instalado. Descargá la última versión desde [**GitHub Releases**](https://github.com/AlexisAcevedo/Gestor-de-luces/releases/latest):
+No requiere tener Python instalado. Descargá la última versión desde [**GitHub Releases**](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/releases/latest):
 
 - **Instalador (`GestorDeLuces-Setup-<versión>.exe`)**: Instalación por usuario (sin pedir permisos de administrador) con accesos en el Menú Inicio, icono opcional en el escritorio y registro opcional de "Iniciar con Windows".
 - **Portable (`GestorDeLuces-portable-<versión>.zip`)**: Extraelo en cualquier carpeta y ejecutá `GestorDeLuces.exe` (mantené la carpeta `_internal` junto al ejecutable).
@@ -234,8 +234,8 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
 
 1. Clonar el repositorio y ubicarse en su carpeta:
    ```bash
-   git clone https://github.com/AlexisAcevedo/Gestor-de-luces.git
-   cd Gestor-de-luces
+   git clone https://github.com/AlexisAcevedo/wiz-architectural-lighting-console.git
+   cd wiz-architectural-lighting-console
    ```
 
 2. Crear y activar el entorno virtual de Python:

@@ -40,7 +40,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/AlexisAcevedo/Gestor-de-luces"
+Repository = "https://github.com/AlexisAcevedo/wiz-architectural-lighting-console"
 
 [project.scripts]
 gestor-luces = "gestor_luces.main:main"

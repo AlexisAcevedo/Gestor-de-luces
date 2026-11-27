@@ -24,7 +24,7 @@ APP_DISPLAY_NAME_ES = "Consola de Iluminación Arquitectónica WiZ"
 #: dialogo no puede depender de la suerte del entorno para mostrar la licencia o el autor.
 APP_LICENSE = "MIT"
 APP_AUTHOR = "AlexisAcevedo"
-APP_REPOSITORY = "https://github.com/AlexisAcevedo/Gestor-de-luces"
+APP_REPOSITORY = "https://github.com/AlexisAcevedo/wiz-architectural-lighting-console"
 
 _STRINGS: dict[str, dict[str, str]] = {
     "en": {
