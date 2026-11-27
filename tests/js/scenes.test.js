@@ -18,6 +18,7 @@ import {
   openCustomSceneDialog,
   renderCustomScenesGrid,
   renderScenesGrid,
+  resetPendingPresetDeleteForTests,
   updateSceneCategoryCounts
 } from "../../ui/js/scenes.js";
 import { resolveBackendApi } from "../../ui/js/bridge-client.js";
@@ -405,10 +406,12 @@ function buildPage({ skip = [] } = {}) {
     "custom-scene-dialog-subtitle": () => document.seed("p", { id: "custom-scene-dialog-subtitle" }),
     "custom-scene-id-input": () => document.seed("input", { id: "custom-scene-id-input", value: "" }),
     "custom-scene-name-input": () => document.seed("input", { id: "custom-scene-name-input", value: "" }),
+    "custom-scene-error": () => document.seed("p", { id: "custom-scene-error" }),
     "custom-scene-overwrite-row": () => document.seed("div", { id: "custom-scene-overwrite-row" }),
     "custom-scene-overwrite-checkbox": () =>
       document.seed("input", { id: "custom-scene-overwrite-checkbox", checked: false }),
     "custom-scene-submit-btn": () => document.seed("button", { id: "custom-scene-submit-btn" }),
+    "toast-region": () => document.seed("div", { id: "toast-region" }),
     "quick-save-preset-btn": () => document.seed("button", { id: "quick-save-preset-btn" }),
     "open-save-scene-dialog-btn": () => document.seed("button", { id: "open-save-scene-dialog-btn" }),
     "custom-scene-form": () => document.seed("form", { id: "custom-scene-form" })
@@ -502,6 +505,7 @@ let page;
 let backend;
 
 beforeEach(async () => {
+  resetPendingPresetDeleteForTests();
   page = buildPage();
   backend = createFakeBackend();
   globalThis.document = page.document;
@@ -522,6 +526,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  resetPendingPresetDeleteForTests();
   delete globalThis.document;
   delete globalThis.window;
 });
@@ -911,13 +916,25 @@ describe("renderCustomScenesGrid(): custom presets", () => {
     ]);
   });
 
-  test("delete dispatches delete_custom_scene(id)", async () => {
+  test("delete defers delete_custom_scene(id) for 5s and supports Undo cancellation", async (ctx) => {
+    ctx.mock.timers.enable({ apis: ["setTimeout"] });
     appState.customScenes = [RGB_PRESET];
     renderCustomScenesGrid();
 
     buttonByLabel(page.customGrid.children[0], "T(custom.deleteBtn)").click();
-    await tick();
+    assert.deepEqual(backend.calledWith("delete_custom_scene"), []);
+    assert.equal(page.customTabLabel.textContent, "T(tabs.customWithCount|count=0)");
 
+    const undoBtn = findByClass(page["toast-region"], "toast-action");
+    assert.ok(undoBtn);
+    undoBtn.click();
+    ctx.mock.timers.tick(5500);
+    assert.deepEqual(backend.calledWith("delete_custom_scene"), []);
+    assert.equal(page.customTabLabel.textContent, "T(tabs.customWithCount|count=1)");
+
+    buttonByLabel(page.customGrid.children[0], "T(custom.deleteBtn)").click();
+    ctx.mock.timers.tick(5100);
+    await tick();
     assert.deepEqual(backend.calledWith("delete_custom_scene"), [["preset-rgb"]]);
   });
 

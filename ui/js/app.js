@@ -215,6 +215,12 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     }
     if (hasMusic) syncMusicPolling();
   }
+  const streamToggled =
+    (hasAmbi && wasAmbiActive !== Boolean(appState.ambilight && appState.ambilight.active)) ||
+    (hasMusic && wasMusicActive !== Boolean(appState.musicSync && appState.musicSync.active));
+  if (streamToggled && !bulbsChanged) {
+    renderStageHeaderAndControls();
+  }
   if (
     !hasBulbs &&
     ((hasAmbi && wasAmbiActive && !appState.ambilight.active) ||

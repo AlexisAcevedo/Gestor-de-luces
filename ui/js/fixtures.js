@@ -3,8 +3,14 @@
  */
 
 import { getBackendApi, invokeApi } from "./bridge-client.js";
-import { appState, clampInt, formatCountdown, t } from "./store.js";
+import { appState, clampInt, formatCountdown, isValidIpv4, setFieldError, t, withButtonBusy } from "./store.js";
 import { setStatusMessage } from "./toasts.js";
+
+let sleepTimerWasActive = false;
+
+export function resetFixtureUiStateForTests() {
+  sleepTimerWasActive = false;
+}
 
 function createSvgIcon(pathD, strokeWidth = "1.5") {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -34,6 +40,7 @@ export function openRenameDialog(bulb) {
   if (ipDisplay) {
     ipDisplay.textContent = t("dialog.renameIpDisplay", { ip: bulb.ip, mac: bulb.mac });
   }
+  setFieldError(nameInput, document.getElementById("rename-bulb-error"), "");
   dialog.showModal();
   nameInput.focus();
   nameInput.select();
@@ -147,9 +154,11 @@ export function renderFixtureList() {
     powerBtn.appendChild(createSvgIcon("M10 2.75v6.5M6.1 4.85a6.5 6.5 0 1 0 7.8 0", "1.75"));
     powerBtn.addEventListener("click", () => {
       const nextPower = !bulb.state.is_on;
-      invokeApi(
-        () => getBackendApi().set_power(nextPower, null, [bulb.ip]),
-        () => t(nextPower ? "status.bulbTurnedOn" : "status.bulbTurnedOff", { name: bulb.name })
+      withButtonBusy(powerBtn, () =>
+        invokeApi(
+          () => getBackendApi().set_power(nextPower, null, [bulb.ip]),
+          () => t(nextPower ? "status.bulbTurnedOn" : "status.bulbTurnedOff", { name: bulb.name })
+        )
       );
     });
 
@@ -186,7 +195,8 @@ export function renderSleepTimer() {
   const cancelBtn = document.getElementById("cancel-sleep-timer-btn");
   const timer = appState.sleepTimer || { active: false, remaining_seconds: 0, total_seconds: 0 };
 
-  if (detailsEl && timer.active) detailsEl.open = true;
+  if (detailsEl && timer.active && !sleepTimerWasActive) detailsEl.open = true;
+  sleepTimerWasActive = Boolean(timer.active);
   if (badge) {
     badge.setAttribute("data-active", String(Boolean(timer.active)));
     badge.setAttribute("data-live", String(Boolean(timer.active)));
@@ -238,44 +248,108 @@ export function bindFixtureEvents() {
     });
   }
 
+  const openAddDialog = () => {
+    if (!addDialog) return;
+    const ipInput = document.getElementById("manual-ip-input");
+    setFieldError(ipInput, document.getElementById("add-bulb-error"), "");
+    addDialog.showModal();
+    if (ipInput) ipInput.focus();
+  };
+
   const openAddBtn = document.getElementById("open-add-dialog-btn");
   const addDialog = document.getElementById("add-bulb-dialog");
   if (openAddBtn && addDialog) {
-    openAddBtn.addEventListener("click", () => {
-      addDialog.showModal();
-      const ipInput = document.getElementById("manual-ip-input");
-      if (ipInput) ipInput.focus();
-    });
+    openAddBtn.addEventListener("click", openAddDialog);
+  }
+
+  const manualIpInput = document.getElementById("manual-ip-input");
+  const addBulbError = document.getElementById("add-bulb-error");
+  if (manualIpInput) {
+    manualIpInput.addEventListener("input", () => setFieldError(manualIpInput, addBulbError, ""));
   }
 
   const addForm = document.getElementById("add-bulb-form");
+  const submitAddBtn = document.getElementById("submit-add-bulb-btn");
   if (addForm && addDialog) {
-    addForm.addEventListener("submit", (event) => {
+    addForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const ipInput = document.getElementById("manual-ip-input");
       const nameInput = document.getElementById("manual-name-input");
       const ip = ipInput ? ipInput.value.trim() : "";
       const name = nameInput ? nameInput.value.trim() : "";
-      if (!ip) return;
-      addDialog.close();
-      if (ipInput) ipInput.value = "";
-      if (nameInput) nameInput.value = "";
-      invokeApi(() => getBackendApi().add_manual_bulb(ip, name), () => t("status.registeredIp", { ip }));
+      if (!isValidIpv4(ip)) {
+        setFieldError(ipInput, addBulbError, t("dialog.invalidIp"));
+        if (ipInput) ipInput.focus();
+        return;
+      }
+      setFieldError(ipInput, addBulbError, "");
+      const ok = await withButtonBusy(submitAddBtn, () =>
+        invokeApi(() => getBackendApi().add_manual_bulb(ip, name), () => t("status.registeredIp", { ip }))
+      );
+      if (ok) {
+        addDialog.close();
+        if (ipInput) ipInput.value = "";
+        if (nameInput) nameInput.value = "";
+      } else {
+        setFieldError(ipInput, addBulbError, t("dialog.addFailed"));
+        if (ipInput) ipInput.focus();
+      }
     });
+  }
+
+  const renameNameInput = document.getElementById("rename-bulb-name-input");
+  const renameBulbError = document.getElementById("rename-bulb-error");
+  if (renameNameInput) {
+    renameNameInput.addEventListener("input", () => setFieldError(renameNameInput, renameBulbError, ""));
   }
 
   const renameForm = document.getElementById("rename-bulb-form");
   const renameDialog = document.getElementById("rename-bulb-dialog");
+  const renameSubmitBtn = renameForm ? renameForm.querySelector('button[type="submit"]') : null;
   if (renameForm && renameDialog) {
-    renameForm.addEventListener("submit", (event) => {
+    renameForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const ipInput = document.getElementById("rename-bulb-ip-input");
       const nameInput = document.getElementById("rename-bulb-name-input");
       const ip = ipInput ? ipInput.value : "";
       const newName = nameInput ? nameInput.value.trim() : "";
-      if (!ip || !newName) return;
-      renameDialog.close();
-      invokeApi(() => getBackendApi().rename_bulb(ip, newName), () => t("status.renamedBulb", { ip, name: newName }));
+      if (!ip || !newName) {
+        setFieldError(nameInput, renameBulbError, t("dialog.renameFailed"));
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      setFieldError(nameInput, renameBulbError, "");
+      const ok = await withButtonBusy(renameSubmitBtn, () =>
+        invokeApi(() => getBackendApi().rename_bulb(ip, newName), () => t("status.renamedBulb", { ip, name: newName }))
+      );
+      if (ok) {
+        renameDialog.close();
+      } else {
+        setFieldError(nameInput, renameBulbError, t("dialog.renameFailed"));
+        if (nameInput) nameInput.focus();
+      }
+    });
+  }
+
+  const stageEmptyScanBtn = document.getElementById("stage-empty-scan-btn");
+  if (stageEmptyScanBtn) {
+    stageEmptyScanBtn.addEventListener("click", () =>
+      withButtonBusy(stageEmptyScanBtn, () =>
+        invokeApi(() => getBackendApi().discover_bulbs(), () => t("status.scanDone"))
+      )
+    );
+  }
+  const stageEmptyAddBtn = document.getElementById("stage-empty-add-btn");
+  if (stageEmptyAddBtn) {
+    stageEmptyAddBtn.addEventListener("click", openAddDialog);
+  }
+  const stageEmptySelectAllBtn = document.getElementById("stage-empty-select-all-btn");
+  if (stageEmptySelectAllBtn) {
+    stageEmptySelectAllBtn.addEventListener("click", () => {
+      const allIps = appState.bulbs.map((b) => b.ip);
+      withButtonBusy(stageEmptySelectAllBtn, () =>
+        invokeApi(() => getBackendApi().select_targets(allIps), () => t("status.multiSelectionUpdated"))
+      );
     });
   }
 
@@ -290,7 +364,9 @@ export function bindFixtureEvents() {
   const syncNowBtn = document.getElementById("sync-now-btn");
   if (syncNowBtn) {
     syncNowBtn.addEventListener("click", () => {
-      invokeApi(() => getBackendApi().refresh_states(), () => t("status.syncedLive"));
+      withButtonBusy(syncNowBtn, () =>
+        invokeApi(() => getBackendApi().refresh_states(), () => t("status.syncedLive"))
+      );
     });
   }
 

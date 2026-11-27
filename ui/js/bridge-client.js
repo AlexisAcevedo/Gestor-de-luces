@@ -382,7 +382,7 @@ export async function invokeApi(callFn, successMessage, options) {
     if (typeof envelopeHandler === "function") {
       envelopeHandler(response, successMessage, retry, silent, options);
     }
-    return true;
+    return Boolean(response && response.ok !== false);
   } catch (err) {
     if (isPoll && seq < latestMutationSeq) return false;
     const message = t("status.commError", { error: err && err.message ? err.message : String(err) });

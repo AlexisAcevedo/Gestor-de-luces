@@ -5,11 +5,14 @@
 import { getBackendApi, invokeApi } from "./bridge-client.js";
 import {
   appState,
+  bindSliderInteraction,
   clampInt,
   computeLiveFps,
+  isSliderProtected,
   rgbToHex,
   t,
-  updateSliderFill
+  updateSliderFill,
+  withButtonBusy
 } from "./store.js";
 import { setStatusMessage } from "./toasts.js";
 
@@ -96,7 +99,8 @@ export function renderAmbilightPanel() {
     if (colorReadout) {
       colorReadout.textContent = `RGB (${lastColor.r}, ${lastColor.g}, ${lastColor.b}) · ${hex}`;
     }
-    if (ambi.active) {
+    const shell = document.getElementById("console-shell");
+    if (ambi.active && (!shell || shell.getAttribute("data-power") !== "off")) {
       document.documentElement.style.setProperty("--beam-color", cssRgb);
     }
   }
@@ -114,7 +118,7 @@ export function renderAmbilightPanel() {
 
   const alphaSlider = document.getElementById("ambilight-smoothing-slider");
   const alphaOutput = document.getElementById("ambilight-smoothing-output");
-  if (alphaSlider && alphaOutput && typeof ambi.smoothing_alpha === "number" && document.activeElement !== alphaSlider) {
+  if (alphaSlider && alphaOutput && typeof ambi.smoothing_alpha === "number" && !isSliderProtected(alphaSlider)) {
     alphaSlider.value = String(ambi.smoothing_alpha);
     alphaOutput.textContent = Number(ambi.smoothing_alpha).toFixed(2);
     updateSliderFill(alphaSlider);
@@ -135,7 +139,7 @@ export function renderAmbilightPanel() {
   }
   if (minBriSlider && minBriOutput) {
     minBriSlider.disabled = !isAutoBri;
-    if (document.activeElement !== minBriSlider) {
+    if (!isSliderProtected(minBriSlider)) {
       minBriSlider.value = String(floorVal);
       minBriOutput.textContent = `${floorVal}%`;
       updateSliderFill(minBriSlider);
@@ -164,7 +168,7 @@ export function bindAmbilightEvents() {
 
   const startOrUpdateAmbilight = (statusMsg) => {
     const p = readAmbilightParamsFromDom();
-    invokeApi(
+    return invokeApi(
       () =>
         getBackendApi().start_ambilight(
           p.monitorIndex,
@@ -182,11 +186,12 @@ export function bindAmbilightEvents() {
   const toggleAmbilightBtn = document.getElementById("toggle-ambilight-btn");
   if (toggleAmbilightBtn) {
     toggleAmbilightBtn.addEventListener("click", () => {
-      if (appState.ambilight && appState.ambilight.active) {
-        invokeApi(() => getBackendApi().stop_ambilight(), () => t("status.ambiStopped"));
-      } else {
-        startOrUpdateAmbilight(() => t("status.ambiStarted"));
-      }
+      withButtonBusy(toggleAmbilightBtn, () => {
+        if (appState.ambilight && appState.ambilight.active) {
+          return invokeApi(() => getBackendApi().stop_ambilight(), () => t("status.ambiStopped"));
+        }
+        return startOrUpdateAmbilight(() => t("status.ambiStarted"));
+      });
     });
   }
 
@@ -219,6 +224,7 @@ export function bindAmbilightEvents() {
   const alphaSlider = document.getElementById("ambilight-smoothing-slider");
   const alphaOutput = document.getElementById("ambilight-smoothing-output");
   if (alphaSlider && alphaOutput) {
+    bindSliderInteraction(alphaSlider);
     alphaSlider.addEventListener("input", () => {
       alphaOutput.textContent = Number(alphaSlider.value).toFixed(2);
       updateSliderFill(alphaSlider);
@@ -255,6 +261,7 @@ export function bindAmbilightEvents() {
   }
 
   if (minBriSlider && minBriOutput) {
+    bindSliderInteraction(minBriSlider);
     minBriSlider.addEventListener("input", () => {
       const val = clampInt(minBriSlider.value, 5, 20);
       minBriOutput.textContent = `${val}%`;
