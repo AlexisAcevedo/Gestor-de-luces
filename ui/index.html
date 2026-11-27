@@ -29,7 +29,7 @@
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
         <span class="status-dot" id="drawer-pill-dot" aria-hidden="true"></span>
-        <span class="drawer-pill-label" id="drawer-pill-label" data-i18n="rail.title">Photometric Console</span>
+        <span class="drawer-pill-label" id="drawer-pill-label" data-i18n="rail.title">Lighting Console</span>
         <span class="fixture-count-badge" id="fixture-count-badge" data-i18n="rail.onlineZero">0 online</span>
       </button>
 
@@ -111,8 +111,8 @@
             <div class="brand-lockup">
               <span class="aperture-dot" aria-hidden="true"></span>
               <div>
-                <h2 class="console-title" data-i18n="rail.title">Photometric Console</h2>
-                <p class="console-subtitle" data-i18n="rail.subtitle">Local UDP 38899 Direct Control</p>
+                <h2 class="console-title" data-i18n="rail.title">Lighting Console</h2>
+                <p class="console-subtitle" data-i18n="rail.subtitle">Local WiZ Network Control</p>
               </div>
             </div>
 
@@ -171,7 +171,7 @@
               type="button"
               class="btn btn-compact"
               id="sync-now-btn"
-              title="Query getPilot state from all bulbs"
+              title="Refresh live state from all bulbs"
               data-i18n-title="rail.syncNowTitle"
             >
               <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -187,7 +187,7 @@
             </label>
           </div>
           <p class="status-banner" id="status-banner" role="status" aria-live="polite" data-i18n="rail.statusReady">
-            Ready for local UDP telemetry.
+            Ready for local WiZ control.
           </p>
         </footer>
       </aside>
@@ -401,8 +401,8 @@
         <div class="control-well kelvin-well">
           <div class="well-header">
             <div>
-              <h3 class="well-title" data-i18n="kelvin.title">Correlated Color Temperature (CCT)</h3>
-              <p class="well-description" data-i18n="kelvin.description">Continuous blackbody locus from 2200 K warm filament to 6500 K overcast daylight.</p>
+              <h3 class="well-title" data-i18n="kelvin.title">Color Temperature</h3>
+              <p class="well-description" data-i18n="kelvin.description">Adjust warmth from 2200 K warm candlelight to 6500 K cool daylight.</p>
             </div>
             <output class="numeric-readout" id="kelvin-output" for="kelvin-slider">4200 K</output>
           </div>
@@ -600,7 +600,7 @@
         <div class="scenes-toolbar custom-scenes-toolbar">
           <div>
             <h3 class="well-title" data-i18n="custom.title">Saved Custom Presets</h3>
-            <p class="well-description" data-i18n="custom.description">Capture any RGB color, Kelvin temperature, or dynamic scene with brightness into local JSON storage.</p>
+            <p class="well-description" data-i18n="custom.description">Save any color, white temperature, or scene with its brightness for quick reuse.</p>
           </div>
           <button type="button" class="btn btn-primary" id="open-save-scene-dialog-btn">
             <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -628,7 +628,7 @@
           <div class="ambilight-preview-card">
             <div class="ambilight-preview-header">
               <span class="timer-status-badge" id="ambilight-status-badge" data-active="false" data-i18n="ambi.statusStandby">STANDBY</span>
-              <span class="telemetry-meta" id="ambilight-frames-readout">0 frames sent</span>
+              <span class="telemetry-meta" id="ambilight-frames-readout" data-i18n="ambi.telemetryZero">0 FPS · 0 frames</span>
             </div>
 
             <div class="ambilight-swatch-stage">
@@ -638,7 +638,7 @@
                 aria-hidden="true"
               ></div>
               <div class="ambilight-readout-block">
-                <p class="ambilight-swatch-title" data-i18n="ambi.swatchTitle">Sampled Screen Chromaticity</p>
+                <p class="ambilight-swatch-title" data-i18n="ambi.swatchTitle">Detected Screen Color</p>
                 <p class="ambilight-color-readout" id="ambilight-color-readout">RGB (0, 0, 0) · #000000</p>
               </div>
             </div>
@@ -662,7 +662,7 @@
             <div class="field-group">
               <label for="ambilight-monitor-select" data-i18n="ambi.sourceLabel">Source Display</label>
               <select id="ambilight-monitor-select" class="console-select">
-                <option value="1">Display 1 (Primary)</option>
+                <option value="1" data-i18n="ambi.defaultDisplay">Display 1 (Primary)</option>
               </select>
             </div>
 
@@ -692,7 +692,7 @@
 
             <div class="field-group">
               <div class="speed-label-row">
-                <label for="ambilight-smoothing-slider" data-i18n="ambi.smoothingLabel">EMA Smoothing Response (Alpha)</label>
+                <label for="ambilight-smoothing-slider" data-i18n="ambi.smoothingLabel">Transition Smoothing</label>
                 <output id="ambilight-smoothing-output" for="ambilight-smoothing-slider">0.38</output>
               </div>
               <input
@@ -704,7 +704,7 @@
                 step="0.01"
                 value="0.38"
               >
-              <div class="slider-scale-anchored" role="group" aria-label="EMA alpha presets" data-i18n-aria-label="ambi.smoothingPresetsAria">
+              <div class="slider-scale-anchored" role="group" aria-label="Smoothing presets" data-i18n-aria-label="ambi.smoothingPresetsAria">
                 <button
                   type="button"
                   class="scale-preset-btn pos-0"
@@ -744,7 +744,7 @@
             <div class="ambilight-toggle-row">
               <label class="checkbox-control" for="ambilight-auto-brightness">
                 <input type="checkbox" id="ambilight-auto-brightness" checked>
-                <span data-i18n="ambi.autoBrightness">Track screen brightness automatically (ITU-R BT.709 luminance)</span>
+                <span data-i18n="ambi.autoBrightness">Match screen brightness automatically</span>
               </label>
 
               <div class="field-group conditional-floor-row" id="ambilight-min-brightness-row">
@@ -781,7 +781,7 @@
           <div class="music-telemetry-card">
             <div class="ambilight-preview-header">
               <span class="timer-status-badge" id="music-status-badge" data-active="false" data-i18n="music.statusStandby">STANDBY</span>
-              <span class="telemetry-meta" id="music-frames-readout">0 frames sent</span>
+              <span class="telemetry-meta" id="music-frames-readout" data-i18n="music.telemetryZero">0 FPS · 0 frames</span>
             </div>
 
             <div class="music-swatch-row">
@@ -791,12 +791,12 @@
                 aria-hidden="true"
               ></div>
               <div class="ambilight-readout-block">
-                <p class="ambilight-swatch-title" data-i18n="music.swatchTitle">Acoustic Spectrum Output</p>
+                <p class="ambilight-swatch-title" data-i18n="music.swatchTitle">Live Audio Color</p>
                 <p class="ambilight-color-readout" id="music-color-readout">RGB (56, 34, 24) · #382218</p>
               </div>
             </div>
 
-            <div class="music-meters-list" role="region" aria-label="Real-time FFT frequency band meters" data-i18n-aria-label="music.metersAria">
+            <div class="music-meters-list" role="region" aria-label="Real-time audio frequency meters" data-i18n-aria-label="music.metersAria">
               <div class="music-meter-row">
                 <div class="music-meter-header">
                   <span class="music-meter-label" data-i18n="music.bassLabel">Bass (20-250 Hz)</span>
@@ -829,7 +829,7 @@
 
               <div class="music-meter-row">
                 <div class="music-meter-header">
-                  <span class="music-meter-label" data-i18n="music.rmsLabel">RMS Volume</span>
+                  <span class="music-meter-label" data-i18n="music.rmsLabel">Volume Level</span>
                   <span class="music-meter-value" id="music-meter-rms-val">0%</span>
                 </div>
                 <div class="music-meter-track" aria-hidden="true">
@@ -854,9 +854,9 @@
           <!-- Right: WASAPI Loopback & FFT Spectrum Configuration -->
           <div class="music-config-column">
             <div class="field-group">
-              <label for="music-device-select" data-i18n="music.deviceLabel">Loopback Audio Device</label>
+              <label for="music-device-select" data-i18n="music.deviceLabel">Audio Output Device</label>
               <select id="music-device-select" class="console-select">
-                <option value="-1">Default System Output (WASAPI Loopback)</option>
+                <option value="-1" data-i18n="music.defaultDevice">Default System Output</option>
               </select>
             </div>
 
@@ -946,7 +946,7 @@
 
             <div class="field-group">
               <div class="speed-label-row">
-                <label for="music-smoothing-slider" data-i18n="music.smoothingLabel">EMA Smoothing Response (Alpha)</label>
+                <label for="music-smoothing-slider" data-i18n="music.smoothingLabel">Transition Smoothing</label>
                 <output id="music-smoothing-output" for="music-smoothing-slider">0.50</output>
               </div>
               <input
@@ -958,7 +958,7 @@
                 step="0.05"
                 value="0.50"
               >
-              <div class="slider-scale-anchored" role="group" aria-label="Music EMA smoothing presets" data-i18n-aria-label="music.smoothingPresetsAria">
+              <div class="slider-scale-anchored" role="group" aria-label="Music smoothing presets" data-i18n-aria-label="music.smoothingPresetsAria">
                 <button
                   type="button"
                   class="scale-preset-btn pos-0"
@@ -1061,13 +1061,13 @@
   <dialog id="add-bulb-dialog" class="console-dialog" closedby="any" aria-labelledby="add-bulb-title">
     <form id="add-bulb-form" method="dialog" class="dialog-surface">
       <header class="dialog-header">
-        <h2 id="add-bulb-title" class="dialog-title" data-i18n="dialog.addTitle">Register Fixture by IPv4</h2>
-        <p class="dialog-subtitle" data-i18n="dialog.addSubtitle">Directly probe a WiZ bulb on UDP port 38899 when broadcast discovery is filtered.</p>
+        <h2 id="add-bulb-title" class="dialog-title" data-i18n="dialog.addTitle">Add Bulb by IP</h2>
+        <p class="dialog-subtitle" data-i18n="dialog.addSubtitle">Connect directly to a WiZ bulb on your local network when auto-discovery doesn't find it.</p>
       </header>
 
       <div class="dialog-body">
         <div class="field-group">
-          <label for="manual-ip-input" data-i18n="dialog.addIpLabel">Fixture IPv4 Address</label>
+          <label for="manual-ip-input" data-i18n="dialog.addIpLabel">Bulb IP Address</label>
           <input
             type="text"
             id="manual-ip-input"
@@ -1081,7 +1081,7 @@
         </div>
 
         <div class="field-group">
-          <label for="manual-name-input" data-i18n="dialog.addNameLabel">Fixture Label (Optional)</label>
+          <label for="manual-name-input" data-i18n="dialog.addNameLabel">Bulb Name (Optional)</label>
           <input
             type="text"
             id="manual-name-input"
@@ -1095,7 +1095,7 @@
 
       <footer class="dialog-footer">
         <button type="button" class="btn btn-ghost" data-close-dialog="add-bulb-dialog" data-i18n="dialog.cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="submit-add-bulb-btn" data-i18n="dialog.addSubmit">Probe and Register</button>
+        <button type="submit" class="btn btn-primary" id="submit-add-bulb-btn" data-i18n="dialog.addSubmit">Add Bulb</button>
       </footer>
     </form>
   </dialog>
@@ -1156,7 +1156,7 @@
     <form id="custom-scene-form" method="dialog" class="dialog-surface">
       <header class="dialog-header">
         <h2 id="custom-scene-dialog-title" class="dialog-title" data-i18n="dialog.presetSaveTitle">Save Custom Preset</h2>
-        <p class="dialog-subtitle" id="custom-scene-dialog-subtitle" data-i18n="dialog.presetSaveSubtitle">Snapshots the active fixture state into local persistent storage.</p>
+        <p class="dialog-subtitle" id="custom-scene-dialog-subtitle" data-i18n="dialog.presetSaveSubtitle">Saves the current bulb state so you can recall it anytime.</p>
       </header>
 
       <div class="dialog-body">

@@ -58,16 +58,28 @@ export function renderMusicPanel() {
 
   const devSelect = document.getElementById("music-device-select");
   if (devSelect && Array.isArray(appState.audioDevices) && appState.audioDevices.length > 0) {
+    const resolveDeviceLabel = (dev) => {
+      if (dev.is_placeholder || (Number(dev.index) === -1 && dev.name === "System Audio Loopback")) {
+        return t("music.defaultDevice");
+      }
+      if (dev.name) {
+        const cleanName = String(dev.name).replace(/\s*\[Loopback\]\s*$/i, "").trim() || dev.name;
+        const prefix = dev.is_default ? `${t("music.defaultPrefix")} · ` : "";
+        const rateSuffix = typeof dev.sample_rate === "number" && dev.sample_rate > 0 ? ` (${dev.sample_rate} Hz)` : "";
+        return `${prefix}${cleanName}${rateSuffix}`;
+      }
+      return dev.label;
+    };
     const currentOpts = Array.from(devSelect.options)
       .map((o) => `${o.value}:${o.textContent}`)
       .join("|");
-    const nextOpts = appState.audioDevices.map((d) => `${d.index}:${d.label}`).join("|");
+    const nextOpts = appState.audioDevices.map((d) => `${d.index}:${resolveDeviceLabel(d)}`).join("|");
     if (currentOpts !== nextOpts) {
       devSelect.replaceChildren();
       appState.audioDevices.forEach((dev) => {
         const opt = document.createElement("option");
         opt.value = String(dev.index);
-        opt.textContent = dev.label;
+        opt.textContent = resolveDeviceLabel(dev);
         devSelect.appendChild(opt);
       });
     }
@@ -234,8 +246,14 @@ export function bindMusicEvents() {
       });
       appState.musicSync.palette_mode = btn.dataset.paletteMode || "spectrum";
       if (appState.musicSync.active) {
+        const paletteKeyMap = {
+          spectrum: "music.paletteSpectrum",
+          club: "music.paletteClub",
+          chill: "music.paletteChill"
+        };
+        const paletteLabel = t(paletteKeyMap[appState.musicSync.palette_mode] || "music.paletteSpectrum");
         startOrUpdateMusicSync(() =>
-          t("status.musicPaletteChanged", { palette: appState.musicSync.palette_mode })
+          t("status.musicPaletteChanged", { palette: paletteLabel })
         );
       }
     });

@@ -194,7 +194,7 @@ def test_build_tray_menu_spec_reflects_visibility_power_and_sleep_timer() -> Non
         window_visible=False,
         sleep_timer_active=False,
     )
-    assert spec_hidden_off[1].label == "Open console"
+    assert spec_hidden_off[1].label == "Show window"
     assert spec_hidden_off[1].action_id == ACTION_SHOW_WINDOW
     assert spec_hidden_off[1].is_default is True
 
@@ -238,11 +238,11 @@ def test_resolve_entry_action_maps_defaults_to_the_window_toggle() -> None:
         window_visible=False,
         sleep_timer_active=False,
     )
-    show_entry = _find_entry_by_label(spec, "Open console")
+    show_entry = _find_entry_by_label(spec, "Show window")
     assert resolve_entry_action(show_entry) == (WINDOW_TOGGLE_ACTION, None)
 
     # El mismo item deja de despachar el toggle cuando no es el item por defecto.
-    not_default = TrayMenuEntry(label="Open console", action_id=ACTION_SHOW_WINDOW)
+    not_default = TrayMenuEntry(label="Show window", action_id=ACTION_SHOW_WINDOW)
     assert resolve_entry_action(not_default) == (ACTION_SHOW_WINDOW, None)
 
     # Un padre de submenu y un separador no despachan nada por si mismos.
@@ -711,7 +711,7 @@ def test_pystray_menu_items_dispatch_every_leaf_action() -> None:
         _pystray_spec(presets=[TrayPreset(id="p1", name="Warm Desk", is_favorite=True)]),
     )
     menu = harness.icon.menu
-    for label in ("Turn on", "Hide window", "25%", "Warm Desk", "Quit"):
+    for label in ("Turn on", "Hide window", "25%", "Warm Desk", "Exit"):
         _find_menu_item(menu, label)(object())
 
     assert harness.dispatched == [

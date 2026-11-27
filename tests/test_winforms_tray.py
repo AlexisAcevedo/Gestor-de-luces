@@ -169,7 +169,7 @@ def test_menu_items_map_the_model_with_the_dark_palette() -> None:
             "Ocultar ventana",
             "",
             "Brillo",
-            "Escenas favoritas",
+            "Presets favoritos",
             "Cancelar temporizador",
             "",
             "Salir",
@@ -224,9 +224,9 @@ def test_menu_items_use_the_light_palette_and_disabled_color() -> None:
         assert _rgb(quit_item.BackColor) == background
         assert _rgb(quit_item.ForeColor) == text
 
-        presets = _by_label(items, "Escenas favoritas")
+        presets = _by_label(items, "Presets favoritos")
         placeholder = list(presets.DropDownItems)[0]
-        assert placeholder.Text == "Sin escenas guardadas"
+        assert placeholder.Text == "Sin presets guardados"
         assert placeholder.Enabled is False
         assert _rgb(placeholder.ForeColor) == disabled
     finally:
@@ -260,7 +260,7 @@ def test_submenu_parents_expose_dropdown_items_without_click_hacks() -> None:
 
     try:
         assert_same_tree(spec, items)
-        for label in ("Brillo", "Escenas favoritas"):
+        for label in ("Brillo", "Presets favoritos"):
             parent = _by_label(items, label)
             assert isinstance(parent, api.forms.ToolStripMenuItem)
             entry = next(entry for entry in spec if entry.label == label)
@@ -290,7 +290,7 @@ def test_leaf_clicks_dispatch_their_action_and_payload() -> None:
         _by_label(items, "Cancelar temporizador").PerformClick()
         brightness = _by_label(items, "Brillo")
         next(level for level in brightness.DropDownItems if level.Text == "25%").PerformClick()
-        presets = _by_label(items, "Escenas favoritas")
+        presets = _by_label(items, "Presets favoritos")
         next(level for level in presets.DropDownItems if level.Text == "Cinema Mode").PerformClick()
     finally:
         _dispose(items)
@@ -315,7 +315,7 @@ def test_default_window_entry_dispatches_the_window_toggle() -> None:
         api=api,
     )
     try:
-        window_item = _by_label(items, "Abrir consola")
+        window_item = _by_label(items, "Mostrar ventana")
         window_item.PerformClick()
     finally:
         _dispose(items)
@@ -334,7 +334,7 @@ def test_disabled_entries_never_dispatch() -> None:
         api=api,
     )
     try:
-        presets = _by_label(items, "Escenas favoritas")
+        presets = _by_label(items, "Presets favoritos")
         placeholder = list(presets.DropDownItems)[0]
         assert placeholder.Enabled is False
         placeholder.PerformClick()
@@ -768,7 +768,7 @@ def test_paint_menu_item_uses_palette_colors_for_normal_hover_and_checked() -> N
         disabled,
         palette=LIGHT_PALETTE,
         api=FAKE_API,
-        text="Sin escenas guardadas",
+        text="Sin presets guardados",
         font=object(),
         width=169,
         height=28,
@@ -778,7 +778,7 @@ def test_paint_menu_item_uses_palette_colors_for_normal_hover_and_checked() -> N
     assert (
         "text",
         parse_hex_color(LIGHT_PALETTE.disabled_text),
-        "Sin escenas guardadas",
+        "Sin presets guardados",
     ) in disabled.ops
 
     submenu = _RecordingGraphics()
@@ -786,7 +786,7 @@ def test_paint_menu_item_uses_palette_colors_for_normal_hover_and_checked() -> N
         submenu,
         palette=LIGHT_PALETTE,
         api=FAKE_API,
-        text="Escenas favoritas",
+        text="Presets favoritos",
         font=object(),
         width=169,
         height=28,

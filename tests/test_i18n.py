@@ -113,13 +113,13 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
     labels_off = [entry.label for entry in spec_es_off if not entry.is_separator]
     assert labels_off == [
         "Encender",
-        "Abrir consola",
+        "Mostrar ventana",
         "Brillo",
-        "Escenas favoritas",
+        "Presets favoritos",
         "Salir",
     ]
-    fav_submenu = next(e for e in spec_es_off if e.label == "Escenas favoritas")
-    assert fav_submenu.children[0].label == "Sin escenas guardadas"
+    fav_submenu = next(e for e in spec_es_off if e.label == "Presets favoritos")
+    assert fav_submenu.children[0].label == "Sin presets guardados"
     assert fav_submenu.children[0].enabled is False
 
     spec_es_on = build_tray_menu_spec(
@@ -135,7 +135,7 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         "Apagar",
         "Ocultar ventana",
         "Brillo",
-        "Escenas favoritas",
+        "Presets favoritos",
         "Cancelar temporizador",
         "Salir",
     ]
@@ -192,7 +192,7 @@ async def test_bridge_set_language_updates_tray_controller_immediately(
             await asyncio.to_thread(tray.refresh)
             assert created_views[0].title == "Iluminación WiZ - Encendido 75%"
             assert tray.spec[1].label == "Ocultar ventana"
-            assert any(e.label == "Escenas favoritas" for e in tray.spec)
+            assert any(e.label == "Presets favoritos" for e in tray.spec)
             assert any(e.label == "Salir" for e in tray.spec)
         finally:
             tray.stop()
