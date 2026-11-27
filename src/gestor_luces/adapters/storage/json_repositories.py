@@ -279,6 +279,8 @@ class JsonSettingsRepository:
         merged.update(parsed)
         merged["language"] = language
         merged["theme"] = theme
+        if "tray_hint_seen" in merged:
+            merged["tray_hint_seen"] = bool(merged["tray_hint_seen"])
         return merged
 
     def save_settings(self, settings: dict[str, Any]) -> None:
@@ -289,4 +291,6 @@ class JsonSettingsRepository:
         payload.update(settings)
         payload["language"] = language
         payload["theme"] = theme
+        if "tray_hint_seen" in payload:
+            payload["tray_hint_seen"] = bool(payload["tray_hint_seen"])
         _atomic_write_json(self._file_path, payload)

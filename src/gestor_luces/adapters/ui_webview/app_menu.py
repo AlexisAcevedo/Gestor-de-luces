@@ -126,6 +126,11 @@ def build_about_title(language: str) -> str:
     return resolve_menu_strings(language)["about_title"]
 
 
+def build_window_title(language: str) -> str:
+    """Return the localized main window title."""
+    return resolve_menu_strings(language)["app_name"]
+
+
 def build_about_text(
     language: str,
     version: str,

@@ -58,6 +58,8 @@ function runBootScript({ hash = "", storage = undefined, includeColorSchemeMeta 
   vm.runInContext(BOOT_SCRIPT_SOURCE, context, { filename: "theme-boot.js" });
   return {
     theme: documentElement.dataset.theme,
+    lang: documentElement.dataset.lang,
+    htmlLang: documentElement.lang,
     colorScheme: colorSchemeMeta ? colorSchemeMeta.getAttribute("content") : null
   };
 }
@@ -146,5 +148,29 @@ describe("theme-boot.js", () => {
     });
     assert.equal(withoutHash.theme, "architectural-stone");
     assert.equal(withoutHash.colorScheme, "light");
+  });
+
+  test("resolves language from URL hash or localStorage before paint without flash", () => {
+    const fromHash = runBootScript({
+      hash: "#theme=atmospheric-dark&lang=es",
+      storage: createStorage({ theme: "architectural-stone", language: "en" })
+    });
+    assert.equal(fromHash.theme, "atmospheric-dark");
+    assert.equal(fromHash.lang, "es");
+    assert.equal(fromHash.htmlLang, "es");
+
+    const fromStorage = runBootScript({
+      hash: "#theme=atmospheric-dark",
+      storage: createStorage({ language: "es" })
+    });
+    assert.equal(fromStorage.lang, "es");
+    assert.equal(fromStorage.htmlLang, "es");
+
+    const invalidLang = runBootScript({
+      hash: "#lang=fr",
+      storage: createStorage()
+    });
+    assert.equal(invalidLang.lang, "en");
+    assert.equal(invalidLang.htmlLang, "en");
   });
 });

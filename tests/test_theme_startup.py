@@ -110,7 +110,7 @@ def test_create_window_passes_theme_fragment_and_background_color(
     assert len(fake_webview.create_window_calls) == 1
     call = fake_webview.create_window_calls[0]
     assert call["url"].startswith(f"{index_path}?v=")
-    assert call["url"].endswith(f"#theme={theme}")
+    assert call["url"].endswith(f"#theme={theme}&lang=en")
     assert call["background_color"] == expected_bg
     assert isinstance(call["js_api"], BlockedJsApi)
     assert len(fake_webview.exposed_functions) == 1
@@ -294,3 +294,157 @@ def test_index_html_loads_theme_boot_synchronously_before_css_under_strict_csp()
         flags=re.DOTALL | re.IGNORECASE,
     )
     assert inline_scripts == []
+
+
+def test_build_initial_ui_url_supports_language_fragment(tmp_path: Path) -> None:
+    index_path = tmp_path / "ui" / "index.html"
+    assert (
+        _build_initial_ui_url(index_path, "atmospheric-dark", language="es")
+        == f"{index_path}#theme=atmospheric-dark&lang=es"
+    )
+    assert (
+        _build_initial_ui_url(index_path, "architectural-stone", language="fr", cache_bust="x1")
+        == f"{index_path}?v=x1#theme=architectural-stone&lang=en"
+    )
+
+
+def test_desktop_application_localizes_window_title_on_boot_and_language_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
+    from gestor_luces.adapters.ui_webview.app_menu import APP_DISPLAY_NAME, APP_DISPLAY_NAME_ES
+
+    set_title_calls: list[str] = []
+    menu_theme_calls: list[str] = []
+    monkeypatch.setattr(
+        desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True
+    )
+    monkeypatch.setattr(
+        desktop_app,
+        "_sync_native_menu_theme",
+        lambda _win, theme: menu_theme_calls.append(theme) or True,
+    )
+
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+    settings_repo.save_settings({"language": "es", "theme": "atmospheric-dark"})
+    service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        settings_repository=settings_repo,
+    )
+    bridge = WebviewBridge(service=service)
+    fake_webview = _FakeWebviewModule()
+    orig_create = fake_webview.create_window
+
+    def _create_with_set_title(**kwargs: Any) -> SimpleNamespace:
+        win = orig_create(**kwargs)
+        win.set_title = lambda title: set_title_calls.append(title)
+        return win
+
+    fake_webview.create_window = _create_with_set_title  # type: ignore[method-assign]
+    app = DesktopApplication(
+        service=service,
+        bridge=bridge,
+        index_path=tmp_path / "index.html",
+        icon_path=tmp_path / "app.ico",
+        ui_dir=tmp_path,
+        webview_module=fake_webview,
+    )
+    try:
+        app.create_window()
+        assert fake_webview.create_window_calls[0]["title"] == APP_DISPLAY_NAME_ES
+        assert fake_webview.create_window_calls[0]["url"].endswith(
+            "#theme=atmospheric-dark&lang=es"
+        )
+
+        service.set_language("en")
+        app.on_state_changed()
+        assert set_title_calls == [APP_DISPLAY_NAME]
+        assert menu_theme_calls == ["atmospheric-dark"]
+
+        service.set_theme("architectural-stone")
+        app.on_state_changed()
+        assert menu_theme_calls == ["atmospheric-dark", "architectural-stone"]
+    finally:
+        bridge.shutdown()
+
+
+def test_hide_to_tray_notice_shows_once_and_persists_across_restarts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
+
+    monkeypatch.setattr(
+        desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True
+    )
+    monkeypatch.setattr(desktop_app, "_sync_native_menu_theme", lambda *_a, **_kw: False)
+
+    notifications: list[tuple[str, str]] = []
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+    settings_repo.save_settings({"language": "es", "theme": "architectural-stone"})
+    service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        settings_repository=settings_repo,
+    )
+    bridge = WebviewBridge(service=service)
+    fake_webview = _FakeWebviewModule()
+
+    def _create_with_hide(**kwargs: Any) -> SimpleNamespace:
+        win = _FakeWebviewModule.create_window(fake_webview, **kwargs)
+        win.hide = lambda: None
+        return win
+
+    fake_webview.create_window = _create_with_hide  # type: ignore[method-assign]
+    app = DesktopApplication(
+        service=service,
+        bridge=bridge,
+        index_path=tmp_path / "index.html",
+        icon_path=tmp_path / "app.ico",
+        ui_dir=tmp_path,
+        webview_module=fake_webview,
+    )
+
+    def _record_notification(title: str, msg: str) -> bool:
+        notifications.append((title, msg))
+        return True
+
+    try:
+        app.create_window()
+        assert app.tray is not None
+        app.tray.show_notification = _record_notification  # type: ignore[method-assign]
+
+        # First user close/minimize hide sends localized Spanish notice and persists flag
+        app._apply_hide(show_tray_hint=True)
+        assert len(notifications) == 1
+        assert "Consola de Iluminación WiZ" in notifications[0][0]
+        assert "bandeja" in notifications[0][1]
+        assert settings_repo.load_settings()["tray_hint_seen"] is True
+
+        # Second hide on the same instance must NOT notify again
+        app._apply_hide(show_tray_hint=True)
+        assert len(notifications) == 1
+    finally:
+        bridge.shutdown()
+
+    # Fresh instance reloading persisted settings must also suppress repeated notices
+    reloaded_service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        settings_repository=JsonSettingsRepository(data_dir=tmp_path),
+    )
+    assert reloaded_service.get_tray_hint_seen() is True
+    reloaded_bridge = WebviewBridge(service=reloaded_service)
+    app2 = DesktopApplication(
+        service=reloaded_service,
+        bridge=reloaded_bridge,
+        index_path=tmp_path / "index.html",
+        icon_path=tmp_path / "app.ico",
+        ui_dir=tmp_path,
+        webview_module=fake_webview,
+    )
+    try:
+        app2.create_window()
+        assert app2.tray is not None
+        app2.tray.show_notification = _record_notification  # type: ignore[method-assign]
+        app2._apply_hide(show_tray_hint=True)
+        assert len(notifications) == 1
+    finally:
+        reloaded_bridge.shutdown()

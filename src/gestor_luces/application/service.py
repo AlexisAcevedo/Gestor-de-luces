@@ -119,6 +119,14 @@ class LightControlService:
         """Normaliza, actualiza y persiste el tema visual activo de la consola."""
         return self._settings.set_theme(theme)
 
+    def get_tray_hint_seen(self) -> bool:
+        """Devuelve si el aviso inicial al minimizar a la bandeja ya fue mostrado."""
+        return self._settings.get_tray_hint_seen()
+
+    def set_tray_hint_seen(self, seen: bool = True) -> bool:
+        """Marca como mostrado y persiste el aviso inicial de bandeja."""
+        return self._settings.set_tray_hint_seen(seen)
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()

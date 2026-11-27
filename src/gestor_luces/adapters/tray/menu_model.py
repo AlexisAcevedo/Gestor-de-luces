@@ -87,6 +87,10 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
         "no_saved_presets": "No saved presets",
         "cancel_sleep_timer": "Cancel sleep timer",
         "quit": "Exit",
+        "tray_hint_title": "WiZ Lighting Console",
+        "tray_hint_message": (
+            "Still running in the system tray. Click the icon to reopen or right-click to exit."
+        ),
     },
     "es": {
         "hide_window": "Ocultar ventana",
@@ -98,8 +102,19 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
         "no_saved_presets": "Sin presets guardados",
         "cancel_sleep_timer": "Cancelar temporizador",
         "quit": "Salir",
+        "tray_hint_title": "Consola de Iluminación WiZ",
+        "tray_hint_message": (
+            "Sigue ejecutándose en la bandeja del sistema. "
+            "Haz clic en el icono para reabrir o clic derecho para salir."
+        ),
     },
 }
+
+
+def build_tray_hint(language: str = "en") -> tuple[str, str]:
+    """Return localized (title, message) for the one-time hide-to-tray notification."""
+    strings = _resolve_tray_strings(language)
+    return (strings["tray_hint_title"], strings["tray_hint_message"])
 
 
 def _resolve_tray_strings(language: str) -> dict[str, str]:

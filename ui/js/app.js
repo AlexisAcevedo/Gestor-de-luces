@@ -28,7 +28,7 @@ import {
 import { setStatusMessage, showToast } from "./toasts.js";
 
 const lastRendered = {
-  language: null, theme: null, persistedTheme: null,
+  language: null, persistedLanguage: null, theme: null, persistedTheme: null,
   bulbsKey: null, scenesKey: null, customKey: null, sleepKey: null, ambiKey: null, musicKey: null
 };
 
@@ -39,12 +39,19 @@ export function resetUiSyncCache() {
 /* Sincroniza el selector visual de idioma (EN | ES) y traduce el arbol DOM estatico */
 export function syncLanguageUi(lang) {
   const normalized = String(lang || "en").trim().toLowerCase() === "es" ? "es" : "en";
+  if (lastRendered.persistedLanguage !== normalized) {
+    saveUiPref("language", normalized);
+    lastRendered.persistedLanguage = normalized;
+  }
   if (lastRendered.language === normalized && appState.language === normalized) {
     return false;
   }
   const prevLang = appState.language;
   lastRendered.language = normalized;
   appState.language = normalized;
+  if (document.documentElement && document.documentElement.dataset) {
+    document.documentElement.dataset.lang = normalized;
+  }
   if (window.I18N) {
     window.I18N.setLanguage(normalized);
     window.I18N.translateDom();
@@ -399,7 +406,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined" && typeof d
   document.addEventListener("DOMContentLoaded", async () => {
     syncThemeUi(normalizeTheme(document.documentElement.dataset.theme), { persist: false });
     loadSceneCatalog();
-    syncLanguageUi("en");
+    const bootLang =
+      (document.documentElement &&
+        ((document.documentElement.dataset && document.documentElement.dataset.lang) ||
+          document.documentElement.lang)) ||
+      "en";
+    const normalizedBootLang = String(bootLang).trim().toLowerCase() === "es" ? "es" : "en";
+    lastRendered.persistedLanguage = normalizedBootLang;
+    syncLanguageUi(normalizedBootLang);
     drawColorWheel();
     updateAllSlidersFill();
     bindEvents();
