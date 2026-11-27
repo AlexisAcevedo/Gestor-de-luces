@@ -586,15 +586,27 @@
   /* Toasts de feedback */
   .toast-region {
     position: fixed;
-    right: 16px;
-    bottom: 16px;
+    inset: 56px 16px auto auto;
     z-index: 50;
+    max-width: min(420px, calc(100vw - 32px));
+    pointer-events: none;
+  }
+
+  .toast-region[popover] {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    overflow: visible;
+    color: inherit;
+  }
+
+  .toast-region:not([popover]),
+  .toast-region:popover-open {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
-    max-width: min(420px, calc(100vw - 32px));
-    pointer-events: none;
   }
 
   .toast {
@@ -804,6 +816,13 @@
     color: var(--ink-2);
   }
 
+  .floor-hint,
+  .custom-scenes-toolbar .well-description,
+  details.sleep-timer-well[open] .well-description {
+    display: block;
+    line-height: 1.35;
+  }
+
   .numeric-readout {
     font-family: var(--font-mono);
     font-size: 0.88rem;
@@ -945,7 +964,7 @@
     border-radius: var(--radius-md);
   }
 
-  @container stage (max-width: 420px) {
+  @container stage (max-width: 480px) {
     .mode-tabs {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -1800,9 +1819,15 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 4px;
     padding-top: 6px;
     border-top: 1px solid var(--border-subtle);
+  }
+
+  .custom-scene-actions .btn-compact {
+    padding: 4px 7px;
+    font-size: 0.72rem;
+    gap: 4px;
   }
 
   .btn-favorite {
@@ -1924,7 +1949,7 @@
     cursor: pointer;
   }
 
-  .ambilight-Toggle-row {
+  .ambilight-toggle-row {
     padding-top: 6px;
     border-top: 1px solid var(--border-subtle);
     display: flex;
@@ -1933,17 +1958,17 @@
   }
 
   .slider-scale-anchored {
-    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 6px;
     width: 100%;
-    height: 20px;
-    margin-top: 2px;
+    margin-top: 4px;
   }
 
   .scale-preset-btn {
-    position: absolute;
-    top: 0;
-    left: var(--pos, 0%);
-    padding: 1px 5px;
+    padding: 2px 6px;
     background: transparent;
     color: var(--ink-3);
     border: 1px solid transparent;
@@ -1954,38 +1979,6 @@
     white-space: nowrap;
     cursor: pointer;
     transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
-  }
-
-  .scale-preset-btn.pos-0 {
-    --pos: 0%;
-  }
-
-  .scale-preset-btn.pos-28 {
-    --pos: 28.57%;
-  }
-
-  .scale-preset-btn.pos-38 {
-    --pos: 38.33%;
-  }
-
-  .scale-preset-btn.pos-46 {
-    --pos: 46.15%;
-  }
-
-  .scale-preset-btn.pos-100 {
-    --pos: 100%;
-  }
-
-  .scale-preset-btn[data-align="start"] {
-    transform: translateX(0);
-  }
-
-  .scale-preset-btn[data-align="center"] {
-    transform: translateX(-50%);
-  }
-
-  .scale-preset-btn[data-align="end"] {
-    transform: translateX(-100%);
   }
 
   .scale-preset-btn:hover,
@@ -2383,7 +2376,7 @@
     }
   }
 
-  @container stage (max-width: 430px) {
+  @container stage (max-width: 480px) {
     .stage-header {
       flex-wrap: wrap;
     }
@@ -2392,13 +2385,24 @@
       min-width: 0;
     }
 
+    .stage-identity {
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+
     .master-power-group {
       flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-left: auto;
     }
   }
 }
 
 @layer utilities {
+  [hidden] {
+    display: none !important;
+  }
+
   .sr-only {
     position: absolute;
     width: 1px;
