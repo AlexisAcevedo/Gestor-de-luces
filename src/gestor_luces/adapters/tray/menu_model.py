@@ -88,7 +88,9 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
         "cancel_sleep_timer": "Cancel sleep timer",
         "quit": "Exit",
         "tray_hint_title": "WiZ Lighting Console",
-        "tray_hint_message": "Still running in the system tray. Click the icon to reopen or right-click to exit.",
+        "tray_hint_message": (
+            "Still running in the system tray. Click the icon to reopen or right-click to exit."
+        ),
     },
     "es": {
         "hide_window": "Ocultar ventana",
@@ -101,7 +103,10 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
         "cancel_sleep_timer": "Cancelar temporizador",
         "quit": "Salir",
         "tray_hint_title": "Consola de Iluminación WiZ",
-        "tray_hint_message": "Sigue ejecutándose en la bandeja del sistema. Haz clic en el icono para reabrir o clic derecho para salir.",
+        "tray_hint_message": (
+            "Sigue ejecutándose en la bandeja del sistema. "
+            "Haz clic en el icono para reabrir o clic derecho para salir."
+        ),
     },
 }
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+from typing import Any
 
 from gestor_luces.adapters.platform.windows.menu_sync import (
     _apply_menu_strip_theme,
@@ -202,7 +203,9 @@ def _fake_winforms_api() -> SimpleNamespace:
     )
 
 
-def _fake_menu_strip(api: SimpleNamespace) -> tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
+def _fake_menu_strip(
+    api: SimpleNamespace,
+) -> tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
     class _Item:
         def __init__(self, text: str, *, enabled: bool = True, checked: bool = False) -> None:
             self.Text = text
@@ -308,7 +311,12 @@ def test_sync_native_menu_theme_applies_dark_palette_and_binds_paint_idempotentl
 def test_sync_native_menu_theme_skips_non_win32_and_disposed(monkeypatch) -> None:
     api = _fake_winforms_api()
     monkeypatch.setattr("gestor_luces.adapters.platform.windows.menu_sync.sys.platform", "linux")
-    assert _sync_native_menu_theme(SimpleNamespace(native=SimpleNamespace()), "atmospheric-dark", api=api) is False
+    assert (
+        _sync_native_menu_theme(
+            SimpleNamespace(native=SimpleNamespace()), "atmospheric-dark", api=api
+        )
+        is False
+    )
 
     monkeypatch.setattr("gestor_luces.adapters.platform.windows.menu_sync.sys.platform", "win32")
     assert (

@@ -316,7 +316,9 @@ def test_desktop_application_localizes_window_title_on_boot_and_language_switch(
 
     set_title_calls: list[str] = []
     menu_theme_calls: list[str] = []
-    monkeypatch.setattr(desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True)
+    monkeypatch.setattr(
+        desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True
+    )
     monkeypatch.setattr(
         desktop_app,
         "_sync_native_menu_theme",
@@ -350,7 +352,9 @@ def test_desktop_application_localizes_window_title_on_boot_and_language_switch(
     try:
         app.create_window()
         assert fake_webview.create_window_calls[0]["title"] == APP_DISPLAY_NAME_ES
-        assert fake_webview.create_window_calls[0]["url"].endswith("#theme=atmospheric-dark&lang=es")
+        assert fake_webview.create_window_calls[0]["url"].endswith(
+            "#theme=atmospheric-dark&lang=es"
+        )
 
         service.set_language("en")
         app.on_state_changed()
@@ -369,7 +373,9 @@ def test_hide_to_tray_notice_shows_once_and_persists_across_restarts(
 ) -> None:
     from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
 
-    monkeypatch.setattr(desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True)
+    monkeypatch.setattr(
+        desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True
+    )
     monkeypatch.setattr(desktop_app, "_sync_native_menu_theme", lambda *_a, **_kw: False)
 
     notifications: list[tuple[str, str]] = []
@@ -396,10 +402,15 @@ def test_hide_to_tray_notice_shows_once_and_persists_across_restarts(
         ui_dir=tmp_path,
         webview_module=fake_webview,
     )
+
+    def _record_notification(title: str, msg: str) -> bool:
+        notifications.append((title, msg))
+        return True
+
     try:
         app.create_window()
         assert app.tray is not None
-        app.tray.show_notification = lambda title, msg: (notifications.append((title, msg)) or True)  # type: ignore[method-assign]
+        app.tray.show_notification = _record_notification  # type: ignore[method-assign]
 
         # First user close/minimize hide sends localized Spanish notice and persists flag
         app._apply_hide(show_tray_hint=True)
@@ -432,7 +443,7 @@ def test_hide_to_tray_notice_shows_once_and_persists_across_restarts(
     try:
         app2.create_window()
         assert app2.tray is not None
-        app2.tray.show_notification = lambda title, msg: (notifications.append((title, msg)) or True)  # type: ignore[method-assign]
+        app2.tray.show_notification = _record_notification  # type: ignore[method-assign]
         app2._apply_hide(show_tray_hint=True)
         assert len(notifications) == 1
     finally:

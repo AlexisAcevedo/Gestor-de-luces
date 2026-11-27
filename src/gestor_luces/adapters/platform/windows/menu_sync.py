@@ -9,11 +9,12 @@ ya que pythonnet 3.2.1 no emite tipos derivados con despacho virtual).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 from typing import TYPE_CHECKING, Any
 
-from gestor_luces.adapters.tray.winforms_host import _WinFormsApi, _load_winforms
+from gestor_luces.adapters.tray.winforms_host import _load_winforms, _WinFormsApi
 from gestor_luces.adapters.tray.winforms_menu import apply_menu_chrome
 from gestor_luces.adapters.tray.winforms_paint import (
     TrayPalette,
@@ -140,10 +141,8 @@ def _apply_menu_strip_theme(
 
     if not state["disposed_hooked"]:
         state["disposed_hooked"] = True
-        try:
+        with contextlib.suppress(AttributeError, TypeError):
             strip.Disposed += lambda _s, _e, k=strip_key: _THEMED_STRIPS.pop(k, None)
-        except (AttributeError, TypeError):
-            pass
 
     for top_item in list(getattr(strip, "Items", [])):
         top_item.BackColor = bg_color
@@ -177,10 +176,8 @@ def _apply_menu_strip_theme(
 
         dropdown = getattr(top_item, "DropDown", None)
         if dropdown is not None:
-            try:
+            with contextlib.suppress(AttributeError, TypeError):
                 dropdown.RenderMode = resolved.forms.ToolStripRenderMode.System
-            except (AttributeError, TypeError):
-                pass
             dropdown.BackColor = bg_color
             dropdown.ForeColor = fg_color
             dropdown.ShowCheckMargin = False
@@ -195,10 +192,8 @@ def _apply_menu_strip_theme(
                     except Exception:
                         _LOGGER.debug("MenuStrip dropdown chrome failed.", exc_info=True)
 
-                try:
+                with contextlib.suppress(AttributeError, TypeError):
                     dropdown.Opened += _on_opened
-                except (AttributeError, TypeError):
-                    pass
 
         for sub_item in list(getattr(top_item, "DropDownItems", [])):
             sub_key = id(sub_item)
@@ -224,13 +219,13 @@ def _apply_menu_strip_theme(
                 continue
 
             sub_item.BackColor = bg_color
-            sub_item.ForeColor = fg_color if bool(getattr(sub_item, "Enabled", True)) else disabled_color
+            sub_item.ForeColor = (
+                fg_color if bool(getattr(sub_item, "Enabled", True)) else disabled_color
+            )
             if sub_key not in state["hooked_items"]:
                 state["hooked_items"].add(sub_key)
 
-                def _on_sub_paint(
-                    sender: Any, event_args: Any, st: dict[str, Any] = state
-                ) -> None:
+                def _on_sub_paint(sender: Any, event_args: Any, st: dict[str, Any] = state) -> None:
                     try:
                         paint_menu_item(
                             event_args.Graphics,
