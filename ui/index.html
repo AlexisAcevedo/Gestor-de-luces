@@ -89,6 +89,17 @@
             ES
           </button>
         </div>
+
+        <button
+          type="button"
+          class="btn btn-compact"
+          id="shortcuts-help-btn"
+          aria-keyshortcuts="?"
+          aria-label="Keyboard shortcuts"
+          title="Keyboard shortcuts (?)"
+          data-i18n-aria-label="shortcuts.openLabel"
+          data-i18n-title="shortcuts.openTitle"
+        >?</button>
       </div>
     </header>
 
@@ -100,7 +111,7 @@
             <div class="brand-lockup">
               <span class="aperture-dot" aria-hidden="true"></span>
               <div>
-                <h1 class="console-title" data-i18n="rail.title">Photometric Console</h1>
+                <h2 class="console-title" data-i18n="rail.title">Photometric Console</h2>
                 <p class="console-subtitle" data-i18n="rail.subtitle">Local UDP 38899 Direct Control</p>
               </div>
             </div>
@@ -174,17 +185,6 @@
               <input type="checkbox" id="auto-sync-toggle">
               <span data-i18n="rail.autoSync">Auto-sync (3s)</span>
             </label>
-
-            <button
-              type="button"
-              class="btn btn-compact"
-              id="shortcuts-help-btn"
-              aria-keyshortcuts="?"
-              aria-label="Keyboard shortcuts"
-              title="Keyboard shortcuts (?)"
-              data-i18n-aria-label="shortcuts.openLabel"
-              data-i18n-title="shortcuts.openTitle"
-            >?</button>
           </div>
           <p class="status-banner" id="status-banner" role="status" aria-live="polite" data-i18n="rail.statusReady">
             Ready for local UDP telemetry.
@@ -195,6 +195,7 @@
 
     <!-- Central Photometric Stage: Live state readout, dimming, and mode panels -->
     <main class="photometric-stage" aria-label="Light parameter controls" data-i18n-aria-label="stage.ariaLabel">
+      <h1 class="sr-only" data-i18n="app.windowTitle">WiZ Architectural Lighting Console</h1>
       <!-- Live Photometric Header (Primary Hero Control) -->
       <header class="stage-header">
         <div class="stage-identity">
@@ -275,11 +276,11 @@
         </div>
 
         <div class="preset-strip" role="group" aria-label="Quick dimming presets" data-i18n-aria-label="dimming.presetsAria">
-          <button type="button" class="chip-btn brightness-preset" data-brightness="10">10%</button>
-          <button type="button" class="chip-btn brightness-preset" data-brightness="25">25%</button>
-          <button type="button" class="chip-btn brightness-preset" data-brightness="50">50%</button>
-          <button type="button" class="chip-btn brightness-preset" data-brightness="75">75%</button>
-          <button type="button" class="chip-btn brightness-preset" data-brightness="100">100%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="10" aria-pressed="false">10%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="25" aria-pressed="false">25%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="50" aria-pressed="false">50%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="75" aria-pressed="false">75%</button>
+          <button type="button" class="chip-btn brightness-preset" data-brightness="100" aria-pressed="false">100%</button>
         </div>
       </section>
 
@@ -426,27 +427,27 @@
           </div>
 
           <div class="kelvin-presets-grid" role="group" aria-label="Architectural white presets" data-i18n-aria-label="kelvin.presetsAria">
-            <button type="button" class="kelvin-card" data-kelvin="2200">
+            <button type="button" class="kelvin-card" data-kelvin="2200" aria-pressed="false">
               <span class="kelvin-value">2200 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset2200">Candlelight</span>
             </button>
-            <button type="button" class="kelvin-card" data-kelvin="2700">
+            <button type="button" class="kelvin-card" data-kelvin="2700" aria-pressed="false">
               <span class="kelvin-value">2700 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset2700">Warm White</span>
             </button>
-            <button type="button" class="kelvin-card" data-kelvin="3500">
+            <button type="button" class="kelvin-card" data-kelvin="3500" aria-pressed="false">
               <span class="kelvin-value">3500 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset3500">Neutral Halogen</span>
             </button>
-            <button type="button" class="kelvin-card" data-kelvin="4200">
+            <button type="button" class="kelvin-card" data-kelvin="4200" aria-pressed="false">
               <span class="kelvin-value">4200 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset4200">Daylight</span>
             </button>
-            <button type="button" class="kelvin-card" data-kelvin="5000">
+            <button type="button" class="kelvin-card" data-kelvin="5000" aria-pressed="false">
               <span class="kelvin-value">5000 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset5000">Studio Gallery</span>
             </button>
-            <button type="button" class="kelvin-card" data-kelvin="6500">
+            <button type="button" class="kelvin-card" data-kelvin="6500" aria-pressed="false">
               <span class="kelvin-value">6500 K</span>
               <span class="kelvin-name" data-i18n="kelvin.preset6500">Cool Daylight</span>
             </button>
@@ -551,18 +552,18 @@
       >
         <div class="scenes-toolbar">
           <div class="category-pills" id="scene-category-bar" role="group" aria-label="Filter scenes by category" data-i18n-aria-label="scenes.filterAria">
-            <button type="button" class="chip-btn scene-filter" data-category="favorites" id="scene-filter-favorites">
+            <button type="button" class="chip-btn scene-filter" data-category="favorites" id="scene-filter-favorites" aria-pressed="false">
               <svg class="icon icon-star" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <path d="M10 2.75l2.18 4.42 4.88.71-3.53 3.44.83 4.86L10 13.88l-4.36 2.3.83-4.86-3.53-3.44 4.88-.71L10 2.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
               </svg>
               <span id="scene-cat-favorites-label" data-i18n="scenes.catFavorites">Favorites</span>
             </button>
-            <button type="button" class="chip-btn scene-filter active" data-category="all" data-i18n="scenes.catAll">All (36)</button>
-            <button type="button" class="chip-btn scene-filter" data-category="white" data-i18n="scenes.catWhite">White</button>
-            <button type="button" class="chip-btn scene-filter" data-category="ambient" data-i18n="scenes.catAmbient">Ambient</button>
-            <button type="button" class="chip-btn scene-filter" data-category="nature" data-i18n="scenes.catNature">Nature</button>
-            <button type="button" class="chip-btn scene-filter" data-category="dynamic" data-i18n="scenes.catDynamic">Dynamic</button>
-            <button type="button" class="chip-btn scene-filter" data-category="holiday" data-i18n="scenes.catHoliday">Holiday</button>
+            <button type="button" class="chip-btn scene-filter active" data-category="all" aria-pressed="true" data-i18n="scenes.catAll">All (36)</button>
+            <button type="button" class="chip-btn scene-filter" data-category="white" aria-pressed="false" data-i18n="scenes.catWhite">White</button>
+            <button type="button" class="chip-btn scene-filter" data-category="ambient" aria-pressed="false" data-i18n="scenes.catAmbient">Ambient</button>
+            <button type="button" class="chip-btn scene-filter" data-category="nature" aria-pressed="false" data-i18n="scenes.catNature">Nature</button>
+            <button type="button" class="chip-btn scene-filter" data-category="dynamic" aria-pressed="false" data-i18n="scenes.catDynamic">Dynamic</button>
+            <button type="button" class="chip-btn scene-filter" data-category="holiday" aria-pressed="false" data-i18n="scenes.catHoliday">Holiday</button>
           </div>
 
           <div class="speed-control-box" id="scene-speed-container">
@@ -672,6 +673,7 @@
                   type="button"
                   class="chip-btn ambilight-mode-btn active"
                   data-color-mode="vibrant"
+                  aria-pressed="true"
                   data-i18n="ambi.modeVibrant"
                 >
                   Vibrant / Dominant
@@ -680,6 +682,7 @@
                   type="button"
                   class="chip-btn ambilight-mode-btn"
                   data-color-mode="average"
+                  aria-pressed="false"
                   data-i18n="ambi.modeAverage"
                 >
                   Average Screen Color
@@ -708,6 +711,7 @@
                   data-target-slider="ambilight-smoothing-slider"
                   data-value="0.15"
                   data-align="start"
+                  aria-pressed="false"
                   data-i18n="ambi.scaleCinematic"
                 >
                   0.15 Cinematic
@@ -718,6 +722,7 @@
                   data-target-slider="ambilight-smoothing-slider"
                   data-value="0.38"
                   data-align="center"
+                  aria-pressed="true"
                   data-i18n="ambi.scaleBalanced"
                 >
                   0.38 Balanced
@@ -728,6 +733,7 @@
                   data-target-slider="ambilight-smoothing-slider"
                   data-value="0.75"
                   data-align="end"
+                  aria-pressed="false"
                   data-i18n="ambi.scaleFast"
                 >
                   0.75 Fast Response
@@ -861,6 +867,7 @@
                   type="button"
                   class="chip-btn music-palette-btn active"
                   data-palette-mode="spectrum"
+                  aria-pressed="true"
                 >
                   <span class="palette-swatch-dot palette-dot-spectrum" aria-hidden="true"></span>
                   <span data-i18n="music.paletteSpectrum">Spectrum (Bass/Mid/Treble)</span>
@@ -869,6 +876,7 @@
                   type="button"
                   class="chip-btn music-palette-btn"
                   data-palette-mode="club"
+                  aria-pressed="false"
                 >
                   <span class="palette-swatch-dot palette-dot-club" aria-hidden="true"></span>
                   <span data-i18n="music.paletteClub">Club Pulse (Warm/Neon)</span>
@@ -877,6 +885,7 @@
                   type="button"
                   class="chip-btn music-palette-btn"
                   data-palette-mode="chill"
+                  aria-pressed="false"
                 >
                   <span class="palette-swatch-dot palette-dot-chill" aria-hidden="true"></span>
                   <span data-i18n="music.paletteChill">Aurora Chill (Ocean/Teal)</span>
@@ -905,6 +914,7 @@
                   data-target-slider="music-sensitivity-slider"
                   data-value="0.4"
                   data-align="start"
+                  aria-pressed="false"
                   data-i18n="music.scaleSubtle"
                 >
                   0.4x Subtle
@@ -915,6 +925,7 @@
                   data-target-slider="music-sensitivity-slider"
                   data-value="1.0"
                   data-align="center"
+                  aria-pressed="true"
                   data-i18n="music.scaleBalanced"
                 >
                   1.0x Balanced
@@ -925,6 +936,7 @@
                   data-target-slider="music-sensitivity-slider"
                   data-value="2.5"
                   data-align="end"
+                  aria-pressed="false"
                   data-i18n="music.scaleHighGain"
                 >
                   2.5x High Gain
@@ -953,6 +965,7 @@
                   data-target-slider="music-smoothing-slider"
                   data-value="0.20"
                   data-align="start"
+                  aria-pressed="false"
                   data-i18n="music.scaleSmooth"
                 >
                   0.20 Smooth
@@ -963,6 +976,7 @@
                   data-target-slider="music-smoothing-slider"
                   data-value="0.50"
                   data-align="center"
+                  aria-pressed="true"
                   data-i18n="music.scalePunchy"
                 >
                   0.50 Punchy
@@ -973,6 +987,7 @@
                   data-target-slider="music-smoothing-slider"
                   data-value="0.85"
                   data-align="end"
+                  aria-pressed="false"
                   data-i18n="music.scaleInstant"
                 >
                   0.85 Instant Beat
@@ -1013,10 +1028,10 @@
 
         <div class="sleep-timer-controls">
           <div class="preset-strip" role="group" aria-label="Sleep timer quick durations" data-i18n-aria-label="sleep.quickPresetsAria">
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="15">15 min</button>
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="30">30 min</button>
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="45">45 min</button>
-            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="60">60 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="15" aria-pressed="false">15 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="30" aria-pressed="false">30 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="45" aria-pressed="false">45 min</button>
+            <button type="button" class="chip-btn sleep-preset-btn" data-minutes="60" aria-pressed="false">60 min</button>
           </div>
 
           <div class="sleep-custom-actions">
@@ -1124,7 +1139,8 @@
       <div class="dialog-body">
         <dl class="shortcuts-list">
           <div><dt><kbd>Space</kbd></dt><dd data-i18n="shortcuts.power">Turn selected fixtures on / off</dd></div>
-          <div><dt><kbd>&uarr;</kbd> <kbd>&darr;</kbd></dt><dd data-i18n="shortcuts.brightness">Brightness &plusmn;5% (Shift: &plusmn;10%)</dd></div>
+          <div><dt><kbd>Alt</kbd>+<kbd>&uarr;</kbd> <kbd>&darr;</kbd></dt><dd data-i18n="shortcuts.brightness">Brightness &plusmn;5% (Shift: &plusmn;10%)</dd></div>
+          <div><dt><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd></dt><dd data-i18n="shortcuts.colorWheel">Adjust hue / saturation on focused color wheel</dd></div>
           <div><dt><kbd>1</kbd>&ndash;<kbd>6</kbd></dt><dd data-i18n="shortcuts.tabs">Switch emission mode tab</dd></div>
           <div><dt><kbd>?</kbd></dt><dd data-i18n="shortcuts.help">Show this help</dd></div>
         </dl>

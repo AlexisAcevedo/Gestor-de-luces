@@ -382,6 +382,9 @@ export function updateSliderFill(inputEl) {
         const targetVal = parseFloat(btn.getAttribute("data-value") || "");
         const isMatch = !Number.isNaN(targetVal) && Math.abs(targetVal - safeVal) < 0.009;
         btn.classList.toggle("active", isMatch);
+        if (typeof btn.setAttribute === "function") {
+          btn.setAttribute("aria-pressed", String(isMatch));
+        }
       });
   }
 }
@@ -469,5 +472,31 @@ export async function withButtonBusy(btn, fn) {
       btn.disabled = Boolean(btn.dataset && btn.dataset.stateDisabled === "true");
       btn.removeAttribute("aria-busy");
     }
+  }
+}
+
+/* Preserva el foco en controles con `data-focus-key` cuando una lista se re-renderiza */
+export function captureFocusKey(container) {
+  if (!container || typeof document === "undefined") return null;
+  let node = document.activeElement;
+  while (node) {
+    if (node === container) {
+      return typeof document.activeElement.getAttribute === "function"
+        ? document.activeElement.getAttribute("data-focus-key")
+        : null;
+    }
+    node = node.parentNode;
+  }
+  return null;
+}
+
+export function restoreFocusKey(container, key) {
+  if (!container || !key || typeof container.querySelector !== "function") return;
+  const target = container.querySelector(`[data-focus-key="${key}"]`);
+  if (!target || typeof target.focus !== "function") return;
+  try {
+    target.focus({ preventScroll: true });
+  } catch {
+    target.focus();
   }
 }

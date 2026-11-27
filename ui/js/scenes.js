@@ -8,10 +8,12 @@ import {
   SCENE_CHROMATIC_MAP,
   appState,
   bindSliderInteraction,
+  captureFocusKey,
   clampInt,
   formatSceneDisplayName,
   getPrimaryBulb,
   kelvinToCssColor,
+  restoreFocusKey,
   rgbToHex,
   saveFavoriteSceneIds,
   setFieldError,
@@ -93,6 +95,7 @@ export function renderScenesGrid() {
   const grid = document.getElementById("scenes-grid");
   updateSceneCategoryCounts();
   if (!grid) return;
+  const focusKey = captureFocusKey(grid);
 
   const primary = getPrimaryBulb();
   const activeSceneId = primary && primary.state.mode === "scene" ? primary.state.scene_id : null;
@@ -141,6 +144,8 @@ export function renderScenesGrid() {
 
     const trigger = createEl("button", "scene-card-trigger");
     trigger.type = "button";
+    trigger.setAttribute("data-focus-key", `scene-trigger:${scene.scene_id}`);
+    trigger.setAttribute("aria-pressed", String(isSceneActive));
 
     const top = createEl("span", "scene-card-top");
     const idGroup = createEl("span", "scene-card-id-group");
@@ -161,6 +166,7 @@ export function renderScenesGrid() {
 
     const favBtn = createEl("button", `scene-fav-btn${isFav ? " is-fav" : ""}`);
     favBtn.type = "button";
+    favBtn.setAttribute("data-focus-key", `scene-fav:${scene.scene_id}`);
     favBtn.setAttribute("aria-pressed", String(isFav));
     const favLabel = t(isFav ? "scenes.favRemoveAria" : "scenes.favAddAria", { name: displayName });
     favBtn.title = favLabel;
@@ -196,6 +202,7 @@ export function renderScenesGrid() {
     return card;
   });
   grid.replaceChildren(...cards);
+  restoreFocusKey(grid, focusKey);
 }
 
 /* Renderiza la galeria de presets personalizados guardados en JSON */
@@ -209,6 +216,7 @@ export function renderCustomScenesGrid() {
     tabLabel.textContent = t("tabs.customWithCount", { count: visiblePresets.length });
   }
   if (!grid) return;
+  const focusKey = captureFocusKey(grid);
 
   if (visiblePresets.length === 0) {
     const empty = createEl("div", "empty-fixtures-state");
@@ -240,6 +248,7 @@ export function renderCustomScenesGrid() {
 
     const topArea = createEl("button", "custom-scene-top");
     topArea.type = "button";
+    topArea.setAttribute("data-focus-key", `preset-top:${preset.id}`);
     topArea.setAttribute("aria-label", t("custom.applyAria", { name: preset.name }));
 
     const swatch = createEl("span", "custom-scene-swatch");
@@ -266,6 +275,7 @@ export function renderCustomScenesGrid() {
     const isFavorite = Boolean(preset.is_favorite);
     const favoriteBtn = createEl("button", `btn btn-compact btn-favorite${isFavorite ? " is-favorite" : ""}`);
     favoriteBtn.type = "button";
+    favoriteBtn.setAttribute("data-focus-key", `preset-fav:${preset.id}`);
     favoriteBtn.setAttribute("aria-pressed", String(isFavorite));
     favoriteBtn.title = isFavorite ? t("custom.favoriteRemoveTitle") : t("custom.favoriteAddTitle");
     favoriteBtn.append(
@@ -282,14 +292,17 @@ export function renderCustomScenesGrid() {
 
     const applyBtn = createEl("button", "btn btn-compact btn-primary", t("custom.applyBtn"));
     applyBtn.type = "button";
+    applyBtn.setAttribute("data-focus-key", `preset-apply:${preset.id}`);
     applyBtn.addEventListener("click", triggerApply);
 
     const editBtn = createEl("button", "btn btn-compact btn-secondary", t("custom.editBtn"));
     editBtn.type = "button";
+    editBtn.setAttribute("data-focus-key", `preset-edit:${preset.id}`);
     editBtn.addEventListener("click", () => openCustomSceneDialog(preset));
 
     const deleteBtn = createEl("button", "btn btn-compact btn-ghost", t("custom.deleteBtn"));
     deleteBtn.type = "button";
+    deleteBtn.setAttribute("data-focus-key", `preset-delete:${preset.id}`);
     deleteBtn.addEventListener("click", () => {
       flushPendingPresetDelete();
       const commit = () =>
@@ -330,6 +343,7 @@ export function renderCustomScenesGrid() {
     return card;
   });
   grid.replaceChildren(...cards);
+  restoreFocusKey(grid, focusKey);
 }
 
 /* Abre el dialogo modal para crear un nuevo preset o editar uno existente */
@@ -372,7 +386,11 @@ export function bindSceneEvents({ activateTab }) {
   document.querySelectorAll(".scene-filter").forEach((btn) => {
     btn.addEventListener("click", () => {
       appState.sceneCategory = btn.dataset.category || "all";
-      document.querySelectorAll(".scene-filter").forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".scene-filter").forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
+      });
       renderScenesGrid();
     });
   });

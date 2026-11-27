@@ -113,7 +113,9 @@ export function renderAmbilightPanel() {
   }
 
   document.querySelectorAll(".ambilight-mode-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.colorMode === (ambi.color_mode || "vibrant"));
+    const active = btn.dataset.colorMode === (ambi.color_mode || "vibrant");
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
   });
 
   const alphaSlider = document.getElementById("ambilight-smoothing-slider");
@@ -210,7 +212,9 @@ export function bindAmbilightEvents() {
   document.querySelectorAll(".ambilight-mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".ambilight-mode-btn").forEach((b) => {
-        b.classList.toggle("active", b === btn);
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
       });
       appState.ambilight.color_mode = btn.dataset.colorMode || "vibrant";
       if (appState.ambilight.active) {

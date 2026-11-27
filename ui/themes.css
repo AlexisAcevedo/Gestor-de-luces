@@ -82,8 +82,8 @@
 
     /* Tipografia y tintas de alto contraste */
     --ink-1: #181715;
-    --ink-2: #5C5852;
-    --ink-3: #8C877E;
+    --ink-2: #4A4640;
+    --ink-3: #5E5951;
     --ink-on-dark-key: #FAF8F4;
 
     /* Alias semanticos heredados */
@@ -117,8 +117,8 @@
     --status-online: #1F8A5B;
     --status-offline: #C83E37;
     --braun-signal: #D9531E;
-    --accent-favorite: #C27803;
-    --accent-favorite-bg: rgba(194, 120, 3, 0.12);
+    --accent-favorite: #9A5B00;
+    --accent-favorite-bg: rgba(154, 91, 0, 0.12);
     --danger-bg: #FFF1F0;
     --danger-border: rgba(200, 62, 55, 0.35);
     --danger-ink: #9E2620;
@@ -133,6 +133,8 @@
     --slider-thumb-border: rgba(20, 18, 15, 0.24);
     --power-btn-bg: linear-gradient(180deg, #2B2926 0%, #181715 100%);
     --power-btn-ink: #FAF8F4;
+    --primary-btn-bg: var(--power-btn-bg);
+    --primary-btn-ink: var(--power-btn-ink);
     --fft-bass-gradient: linear-gradient(90deg, #D9531E, #F59E0B);
     --fft-mid-gradient: linear-gradient(90deg, #1F8A5B, #0EA5E9);
     --fft-treble-gradient: linear-gradient(90deg, #2563EB, #7C3AED);
@@ -170,8 +172,8 @@
 
     /* Tipografia y tintas sobre fondo oscuro */
     --ink-1: #F3F5F8;
-    --ink-2: #9AA3B5;
-    --ink-3: #646E82;
+    --ink-2: #B6C0D2;
+    --ink-3: #96A1B5;
     --ink-on-dark-key: #F3F5F8;
 
     /* Alias semanticos heredados */
@@ -222,6 +224,8 @@
     --slider-thumb-border: rgba(0, 0, 0, 0.45);
     --power-btn-bg: radial-gradient(circle at 32% 28%, rgba(56, 66, 86, 0.95), rgba(22, 26, 35, 0.98));
     --power-btn-ink: #F3F5F8;
+    --primary-btn-bg: linear-gradient(180deg, #E8ECF4 0%, #D4DCEB 100%);
+    --primary-btn-ink: #0F131A;
     --fft-bass-gradient: linear-gradient(90deg, #F97316, #EF4444);
     --fft-mid-gradient: linear-gradient(90deg, #10B981, #06B6D4);
     --fft-treble-gradient: linear-gradient(90deg, #6366F1, #EC4899);
@@ -653,8 +657,8 @@
   html[data-theme="atmospheric-dark"] #console-shell[data-power="on"] .power-button {
     background: linear-gradient(
       180deg var(--in-oklab),
-      color-mix(in oklab, var(--beam-color) 48%, rgba(32, 37, 48, 0.88)) 0%,
-      color-mix(in oklab, var(--beam-color) 28%, rgba(22, 25, 32, 0.94)) 100%
+      color-mix(in oklab, var(--beam-color) 24%, rgba(30, 35, 46, 0.94)) 0%,
+      color-mix(in oklab, var(--beam-color) 14%, rgba(20, 24, 33, 0.98)) 100%
     );
     border-color: color-mix(in oklab, var(--beam-color) 62%, rgba(255, 255, 255, 0.38));
     color: #FFFFFF;

@@ -102,6 +102,7 @@
 
       /* Panel 1: RGB */
       "rgb.wheelAria": "Interactive HSV color wheel",
+      "rgb.wheelValueText": "Hue {hue}°, Saturation {saturation}%",
       "rgb.manualCaption": "Precision RGB & hex values",
       "rgb.redLabel": "Red (0-255)",
       "rgb.greenLabel": "Green (0-255)",
@@ -266,6 +267,7 @@
       "shortcuts.title": "Keyboard shortcuts",
       "shortcuts.power": "Turn selected fixtures on / off",
       "shortcuts.brightness": "Brightness \u00b15% (Shift: \u00b110%)",
+      "shortcuts.colorWheel": "Adjust hue / saturation on focused color wheel",
       "shortcuts.tabs": "Switch emission mode tab",
       "shortcuts.help": "Show this help",
       "shortcuts.close": "Close",
@@ -412,6 +414,7 @@
 
       /* Panel 1: RGB */
       "rgb.wheelAria": "Rueda de color HSV interactiva",
+      "rgb.wheelValueText": "Tono {hue}°, Saturación {saturation}%",
       "rgb.manualCaption": "Valores RGB y código hex de precisión",
       "rgb.redLabel": "Rojo (0-255)",
       "rgb.greenLabel": "Verde (0-255)",
@@ -576,6 +579,7 @@
       "shortcuts.title": "Atajos de teclado",
       "shortcuts.power": "Encender / apagar las luminarias seleccionadas",
       "shortcuts.brightness": "Brillo \u00b15% (Shift: \u00b110%)",
+      "shortcuts.colorWheel": "Ajustar tono / saturación en la rueda enfocada",
       "shortcuts.tabs": "Cambiar de pesta\u00f1a de modo",
       "shortcuts.help": "Mostrar esta ayuda",
       "shortcuts.close": "Cerrar",

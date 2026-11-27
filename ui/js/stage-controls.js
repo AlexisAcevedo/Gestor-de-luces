@@ -47,7 +47,10 @@ export function positionReticleFromRgb(r, g, b) {
   reticle.style.left = `${radius + Math.cos(rad) * dist}px`;
   reticle.style.top = `${radius + Math.sin(rad) * dist}px`;
   canvas.setAttribute("aria-valuenow", String(Math.round(hsv.h)));
-  canvas.setAttribute("aria-valuetext", `Hue ${Math.round(hsv.h)}°, Saturation ${Math.round(hsv.s * 100)}%`);
+  canvas.setAttribute(
+    "aria-valuetext",
+    t("rgb.wheelValueText", { hue: Math.round(hsv.h), saturation: Math.round(hsv.s * 100) })
+  );
 }
 
 function updateApertureGlow(aperture, isOn, brightness) {
@@ -160,7 +163,9 @@ export function renderStageHeaderAndControls() {
     updateSliderFill(brightnessSlider);
   }
   document.querySelectorAll(".brightness-preset").forEach((btn) => {
-    btn.classList.toggle("active", Number(btn.dataset.brightness) === st.brightness);
+    const isMatch = Number(btn.dataset.brightness) === st.brightness;
+    btn.classList.toggle("active", isMatch);
+    btn.setAttribute("aria-pressed", String(isMatch));
   });
 
   let beamCss = "var(--beam-standby)";
@@ -230,7 +235,9 @@ export function renderStageHeaderAndControls() {
     updateSliderFill(kelvinSlider);
   }
   document.querySelectorAll(".kelvin-card").forEach((card) => {
-    card.classList.toggle("active", st.mode === "temperature" && Number(card.dataset.kelvin) === activeKelvin);
+    const isMatch = st.mode === "temperature" && Number(card.dataset.kelvin) === activeKelvin;
+    card.classList.toggle("active", isMatch);
+    card.setAttribute("aria-pressed", String(isMatch));
   });
 
   const speedContainer = document.getElementById("scene-speed-container");

@@ -348,7 +348,7 @@ export function bindEvents() {
     });
   });
 
-  /* Pestanas de modo con soporte de teclado Left/Right */
+  /* Pestanas de modo con soporte de teclado Left/Right/Home/End */
   const tabList = Array.from(document.querySelectorAll(".mode-tab"));
   tabList.forEach((tab, idx) => {
     tab.addEventListener("click", () => activateTab(tab.dataset.mode, false));
@@ -358,6 +358,12 @@ export function bindEvents() {
         const dir = event.key === "ArrowRight" ? 1 : -1;
         const nextIdx = (idx + dir + tabList.length) % tabList.length;
         activateTab(tabList[nextIdx].dataset.mode, true);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        if (tabList.length > 0) activateTab(tabList[0].dataset.mode, true);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        if (tabList.length > 0) activateTab(tabList[tabList.length - 1].dataset.mode, true);
       }
     });
   });
