@@ -138,7 +138,9 @@ export function renderMusicPanel() {
   }
 
   document.querySelectorAll(".music-palette-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.paletteMode === (music.palette_mode || "spectrum"));
+    const active = btn.dataset.paletteMode === (music.palette_mode || "spectrum");
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
   });
 
   const sensSlider = document.getElementById("music-sensitivity-slider");
@@ -226,7 +228,9 @@ export function bindMusicEvents() {
   document.querySelectorAll(".music-palette-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".music-palette-btn").forEach((b) => {
-        b.classList.toggle("active", b === btn);
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
       });
       appState.musicSync.palette_mode = btn.dataset.paletteMode || "spectrum";
       if (appState.musicSync.active) {

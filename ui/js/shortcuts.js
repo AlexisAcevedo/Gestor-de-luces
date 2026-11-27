@@ -91,10 +91,19 @@ export function setupGlobalShortcuts({ activateTab }) {
   if (helpBtn) helpBtn.addEventListener("click", openHelp);
 
   document.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
     if (document.querySelector("dialog[open]")) return;
     const target = event.target;
     if (isTypingTarget(target)) return;
+
+    if (event.altKey) {
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const step = event.shiftKey ? SHORTCUT_BRIGHTNESS_STEP * 2 : SHORTCUT_BRIGHTNESS_STEP;
+        event.preventDefault();
+        nudgeBrightness(event.key === "ArrowUp" ? step : -step);
+      }
+      return;
+    }
 
     if (event.key === "?") {
       event.preventDefault();
@@ -108,13 +117,6 @@ export function setupGlobalShortcuts({ activateTab }) {
         event.preventDefault();
         activateTab(tab.dataset.mode, false);
       }
-      return;
-    }
-
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      const step = event.shiftKey ? SHORTCUT_BRIGHTNESS_STEP * 2 : SHORTCUT_BRIGHTNESS_STEP;
-      event.preventDefault();
-      nudgeBrightness(event.key === "ArrowUp" ? step : -step);
       return;
     }
 

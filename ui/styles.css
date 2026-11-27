@@ -282,6 +282,10 @@
 
   .theme-btn,
   .lang-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
     padding: 4px 10px;
     background-color: transparent;
     color: var(--ink-2);
@@ -292,6 +296,13 @@
     font-weight: 600;
     cursor: pointer;
     transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+  }
+
+  #shortcuts-help-btn {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    flex-shrink: 0;
   }
 
   .theme-btn:hover,
@@ -443,8 +454,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
     padding: 0;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
@@ -1571,10 +1584,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 24px;
-    min-height: 24px;
-    width: 24px;
-    height: 24px;
+    min-width: 26px;
+    min-height: 26px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
@@ -2011,7 +2024,10 @@
   }
 
   .scale-preset-btn {
-    padding: 2px 6px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 6px;
     background: transparent;
     color: var(--ink-3);
     border: 1px solid transparent;
@@ -2244,8 +2260,8 @@
   }
 
   .btn-primary {
-    background: var(--power-btn-bg);
-    color: var(--power-btn-ink);
+    background: var(--primary-btn-bg, var(--power-btn-bg));
+    color: var(--primary-btn-ink, var(--power-btn-ink));
     box-shadow: var(--shadow-keycap);
   }
 
@@ -2277,6 +2293,7 @@
   }
 
   .chip-btn {
+    min-height: 26px;
     padding: 4px 10px;
     background-color: var(--surface-3);
     color: var(--text-secondary);

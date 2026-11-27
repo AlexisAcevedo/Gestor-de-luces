@@ -3,7 +3,10 @@
  */
 
 import { getBackendApi, invokeApi } from "./bridge-client.js";
-import { appState, clampInt, formatCountdown, isValidIpv4, setFieldError, t, withButtonBusy } from "./store.js";
+import {
+  appState, captureFocusKey, clampInt, formatCountdown, isValidIpv4,
+  restoreFocusKey, setFieldError, t, withButtonBusy
+} from "./store.js";
 import { setStatusMessage } from "./toasts.js";
 
 let sleepTimerWasActive = false;
@@ -59,9 +62,12 @@ export function renderFixtureList() {
   }
 
   if (selectAllCheckbox) {
-    selectAllCheckbox.checked =
-      appState.bulbs.length > 0 && appState.bulbs.every((b) => appState.selectedIps.includes(b.ip));
+    const selectedCount = appState.bulbs.filter((b) => appState.selectedIps.includes(b.ip)).length;
+    selectAllCheckbox.checked = appState.bulbs.length > 0 && selectedCount === appState.bulbs.length;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < appState.bulbs.length;
   }
+
+  const focusKey = captureFocusKey(container);
 
   if (appState.bulbs.length === 0) {
     const empty = document.createElement("div");
@@ -88,6 +94,7 @@ export function renderFixtureList() {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = isSelected;
+    checkbox.setAttribute("data-focus-key", `fixture-select:${bulb.ip}`);
     checkbox.setAttribute("aria-label", t("rail.selectFixtureAria", { name: bulb.name }));
     checkbox.addEventListener("change", () => {
       let nextIps = appState.selectedIps.slice();
@@ -110,6 +117,7 @@ export function renderFixtureList() {
     const renameBtn = document.createElement("button");
     renameBtn.type = "button";
     renameBtn.className = "btn-icon-rename";
+    renameBtn.setAttribute("data-focus-key", `fixture-rename:${bulb.ip}`);
     const renameTooltip = t("rail.renameAria", { name: bulb.name });
     renameBtn.title = renameTooltip;
     renameBtn.setAttribute("aria-label", renameTooltip);
@@ -147,6 +155,7 @@ export function renderFixtureList() {
     const powerBtn = document.createElement("button");
     powerBtn.type = "button";
     powerBtn.className = "btn-fixture-power";
+    powerBtn.setAttribute("data-focus-key", `fixture-power:${bulb.ip}`);
     powerBtn.setAttribute("aria-pressed", String(isBulbOn));
     const powerLabel = t(isBulbOn ? "rail.powerToggleOnAria" : "rail.powerToggleOffAria", { name: bulb.name });
     powerBtn.title = powerLabel;
@@ -168,6 +177,7 @@ export function renderFixtureList() {
     return card;
   });
   container.replaceChildren(...cards);
+  restoreFocusKey(container, focusKey);
 }
 
 /* Activa o detiene el sondeo cada 1s mientras el temporizador de apagado este corriendo */
@@ -398,7 +408,11 @@ export function bindFixtureEvents() {
     btn.addEventListener("click", () => {
       const mins = clampInt(btn.dataset.minutes, 1, 240);
       if (sleepMinutesInput) sleepMinutesInput.value = String(mins);
-      document.querySelectorAll(".sleep-preset-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".sleep-preset-btn").forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
+      });
       invokeApi(() => getBackendApi().start_sleep_timer(mins, null), () => t("status.sleepStarted", { minutes: mins }));
     });
   });
@@ -415,7 +429,10 @@ export function bindFixtureEvents() {
   const cancelTimerBtn = document.getElementById("cancel-sleep-timer-btn");
   if (cancelTimerBtn) {
     cancelTimerBtn.addEventListener("click", () => {
-      document.querySelectorAll(".sleep-preset-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".sleep-preset-btn").forEach((b) => {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      });
       invokeApi(() => getBackendApi().cancel_sleep_timer(), () => t("status.sleepCancelled"));
     });
   }
