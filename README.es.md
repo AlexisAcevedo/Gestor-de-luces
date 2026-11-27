@@ -28,7 +28,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 2. Catálogo de Escenas Nativas y Presets Personalizados:
    - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (10% a 200%).
-   - Presets de iluminación personalizados por el usuario, almacenados localmente con recuperación y eliminación en un clic.
+   - Presets guardados por el usuario en disco local con aplicación en un clic, edición y eliminación protegida por un aviso **Deshacer** de 5 segundos en capa superior (`popover="manual"`).
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
    - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).
@@ -44,7 +44,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo
      WinForms `NotifyIcon` pintado con el tema activo (con respaldo `pystray` si WinForms no
      puede cargar).
-   - Menú de presets rápidos, alternancia de encendido general y minimización elegante a la bandeja al cerrar la ventana.
+   - Menú unificado (`Mostrar ventana` / `Ocultar ventana`, `Presets favoritos`, `Salir`), alternancia de encendido general y minimización elegante a la bandeja al cerrar o minimizar la ventana, con aviso único (`tray_hint_seen` persistido en `settings.json`).
    - El item de encendido/apagado actúa sobre el estado real del foco: relee los focos objetivo antes de invertir, y la etiqueta, el tooltip y el color del icono se refrescan desde los focos en cada sondeo, así que una luz cambiada desde la llave de pared o la app del teléfono no invierte el próximo clic.
    - Ocultarse en la bandeja no deja residuo en alt+tab (la ventana del bombeo de la bandeja es una ventana de herramienta) y salir desde el menú cierra limpio.
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
@@ -53,12 +53,13 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Cuenta regresiva configurable (1 a 240 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
 
 7. Consola de Escritorio Bilingüe y Multitema:
-   - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo y dinámico en la UI, el menú de la bandeja y la barra de menú de la ventana.
-   - Cambio de tema en tiempo de ejecución entre **Architectural Stone** (tema claro predeterminado inspirado en botoneras de hardware Braun/Lutron) y **Atmospheric Dark** (cristal esmerilado y halo fotométrico dinámico en espacio `oklab`), persistido en `settings.json` con sincronización automática de la barra de título de Windows DWM.
+   - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).
+   - Cambio de tema en tiempo de ejecución entre **Architectural Stone** (tema claro predeterminado inspirado en botoneras de hardware Braun/Lutron) y **Atmospheric Dark** (cristal esmerilado y halo fotométrico dinámico en espacio `oklab`), persistido en `settings.json` con sincronización automática de la barra de título Windows DWM y la paleta del `MenuStrip` nativo.
 
 8. Integración con el Escritorio de Windows:
    - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable. La app lleva además identidad propia en la barra de tareas (`AppUserModelID`), así que el botón muestra ese icono y se ancla como aplicación en vez de como el intérprete de Python, incluso corriendo desde el fuente.
-   - Barra de menú nativa: **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de). Acerca de informa el nombre visible, la versión, la licencia (MIT), el autor y el repositorio.
+   - Barra de menú nativa tematizada (claro/oscuro): **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de). Acerca de informa el nombre visible localizado, la versión, la licencia (MIT), el autor y el repositorio.
+   - Ergonomía y atajos accesibles: `Space` para encendido, `Alt+Flecha Arriba/Abajo` para brillo (dejando las flechas simples para el desplazamiento vertical), `1`–`6` y `Inicio`/`Fin` entre pestañas de modo, y acceso de ayuda `?` en la barra superior.
    - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
    - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).
    - Se distribuye como instalador por usuario o como ZIP portable (ver [Empaquetado y Distribución](#empaquetado-y-distribución)).
@@ -329,7 +330,7 @@ Los módulos del frontend bajo `ui/js` se prueban aparte con el runner integrado
 npm test
 ```
 
-Ejecuta las suites bajo `tests/js/` sobre los módulos ES del frontend (`bridge-client`, `app`, `ambilight`, `music`, `fixtures`, `stage-controls`, `toasts`, `store`, `scenes`, `theme-boot`) junto con verificaciones de accesibilidad del DOM y rendimiento CSS bajo un **piso de 60 % de cobertura de líneas** verificado por `--test-coverage-lines`. El job `js tests` de `.github/workflows/ci.yml` corre el mismo comando en cada push y pull request.
+Ejecuta las suites bajo `tests/js/` sobre los módulos ES del frontend (`bridge-client`, `app`, `ambilight`, `music`, `fixtures`, `stage-controls`, `toasts`, `store`, `scenes`, `theme-boot`) junto con las suites de regresión de layout/toasts, flujos UX/Undo, accesibilidad WCAG AA, paridad i18n y arranque sin destello (`stage1-layout-toasts` hasta `stage5-native-boot`) bajo un **piso de 60 % de cobertura de líneas** verificado por `--test-coverage-lines`. El job `js tests` de `.github/workflows/ci.yml` corre el mismo comando en cada push y pull request.
 
 El análisis estático de seguridad (`bandit`) y la auditoría de vulnerabilidades en dependencias (`pip-audit`) se ejecutan como comprobaciones **bloqueantes** en el CI en cada push y pull request (ver `.github/workflows/ci.yml`). El reporte JSON de bandit se publica como artefacto del workflow.
 

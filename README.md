@@ -28,7 +28,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 2. Firmware Scene Catalog & Custom Presets:
    - Full catalog of all 36 native WiZ firmware scenes with dynamic speed regulation (10% to 200%).
-   - User-defined custom lighting presets saved to local storage with one-click recall and deletion.
+   - User-defined custom presets saved to local storage with one-click recall, editing, and deletion protected by a 5-second **Undo** toast in top-layer (`popover="manual"`).
 
 3. Ambient Screen Sync (Ambilight):
    - Real-time display screen sampling using pure-Python Win32 GDI screen capture (`mss`).
@@ -43,21 +43,22 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 5. System Tray & Background Residency:
    - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`
      menu painted with the active theme (with a `pystray` fallback when WinForms cannot load).
-   - Quick presets menu, master power toggle, and graceful minimize-to-tray on window close.
+   - Unified menu actions (`Show window` / `Hide window`, `Favorite presets`, `Exit`), master power toggle, and graceful minimize-to-tray on window close or minimize with a one-time notice (`tray_hint_seen` persisted in `settings.json`).
    - The on/off item acts on the bulb's real state: it re-reads the target bulbs before flipping, and the label, tooltip and icon colour are refreshed from the bulbs on every poll, so a light switched from the wall or the phone app does not invert the next click.
-   - Hiding to the tray leaves nothing behind in alt+tab (the tray message-pump window is a tool window) and quitting from the menu exits cleanly.
+   - Hiding to the tray leaves nothing behind in alt+tab (the tray message-pump window is a tool window) and exiting from the menu shuts down cleanly.
    - Deadlock-free WinForms and PyWebView synchronization.
 
 6. Progressive Sleep Timer:
    - Configurable countdown timer (1 to 240 minutes) with progressive brightness dimming down to zero before powering off.
 
 7. Bilingual & Multi-Theme Desktop Console:
-   - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, System Tray and the window menu bar.
-   - Runtime theme switching between **Architectural Stone** (default Light theme inspired by Braun/Lutron hardware keypads) and **Atmospheric Dark** (frosted glass and dynamic `oklab` photometric halo), persisted in `settings.json` with automatic Windows DWM titlebar synchronization.
+   - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).
+   - Runtime theme switching between **Architectural Stone** (default Light theme inspired by Braun/Lutron hardware keypads) and **Atmospheric Dark** (frosted glass and dynamic `oklab` photometric halo), persisted in `settings.json` with automatic Windows DWM titlebar and WinForms `MenuStrip` palette synchronization.
 
 8. Windows Desktop Integration:
    - Compact widget geometry (opens at `620x760`, then resizes to the content of the active section) and custom light-bulb icon for the window, taskbar, tray and executable. The app also carries its own taskbar identity (`AppUserModelID`), so the button shows that icon and pins as an application instead of as the Python interpreter, even when it runs from source.
-   - Native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About). About reports the display name, the version, the licence (MIT), the author and the repository.
+   - Theme-aware native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About), painted to match Light/Dark mode. About reports the localized display name, the version, the licence (MIT), the author and the repository.
+   - Accessible keyboard ergonomics: `Space` for power, `Alt+Up/Down` for brightness (leaving bare arrow keys free for scrolling), `1`–`6` and `Home`/`End` across mode tabs, and `?` shortcuts help from the top bar.
    - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
    - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one (with `--multi-instance` override for side-by-side diagnostics).
    - Distributed as a per-user installer or a portable ZIP (see [Packaging & Distribution](#packaging--distribution)).
@@ -328,7 +329,7 @@ The frontend modules under `ui/js` are tested separately with Node's built-in te
 npm test
 ```
 
-This runs the `tests/js/` suites covering the frontend ES modules (`bridge-client`, `app`, `ambilight`, `music`, `fixtures`, `stage-controls`, `toasts`, `store`, `scenes`, `theme-boot`) plus DOM accessibility and CSS compositor checks under a **60 % line-coverage floor** enforced by `--test-coverage-lines`. The `js tests` job of `.github/workflows/ci.yml` runs the same command on every push and pull request.
+This runs the `tests/js/` suites covering the frontend ES modules (`bridge-client`, `app`, `ambilight`, `music`, `fixtures`, `stage-controls`, `toasts`, `store`, `scenes`, `theme-boot`) plus regression suites for layout/toasts, UX validation/Undo, WCAG AA accessibility, i18n key parity, and zero-flash boot (`stage1-layout-toasts` through `stage5-native-boot`) under a **60 % line-coverage floor** enforced by `--test-coverage-lines`. The `js tests` job of `.github/workflows/ci.yml` runs the same command on every push and pull request.
 
 Static security analysis (`bandit`) and dependency vulnerability audits (`pip-audit`) run as **blocking** CI gates on every push and pull request (see `.github/workflows/ci.yml`). The bandit JSON report is published as a workflow artifact.
 
