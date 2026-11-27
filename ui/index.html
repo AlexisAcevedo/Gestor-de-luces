@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="toast-region" id="toast-region" role="region" aria-live="polite" aria-relevant="additions" data-i18n-aria-label="toast.regionLabel" aria-label="Notifications"></div>
+  <div class="toast-region" id="toast-region" popover="manual" role="region" aria-live="polite" aria-relevant="additions" data-i18n-aria-label="toast.regionLabel" aria-label="Notifications"></div>
   <div class="console-shell" id="console-shell" data-power="off" data-look="architectural-stone">
     <!-- Top Compact Controller Bar: Fixture Pill Drawer Trigger + Theme Switcher + Quick Language Switcher -->
     <header class="compact-topbar">
@@ -38,7 +38,6 @@
           class="theme-switcher"
           role="group"
           aria-label="Interface theme"
-          data-i18n-aria="theme.switcherAria"
           data-i18n-aria-label="theme.switcherAria"
         >
           <button
@@ -726,7 +725,7 @@
               </div>
             </div>
 
-            <div class="ambilight-Toggle-row">
+            <div class="ambilight-toggle-row">
               <label class="checkbox-control" for="ambilight-auto-brightness">
                 <input type="checkbox" id="ambilight-auto-brightness" checked>
                 <span data-i18n="ambi.autoBrightness">Track screen brightness automatically (ITU-R BT.709 luminance)</span>
@@ -971,7 +970,7 @@
               </div>
             </div>
 
-            <div class="ambilight-Toggle-row">
+            <div class="ambilight-toggle-row">
               <label class="checkbox-control" for="music-audio-brightness">
                 <input type="checkbox" id="music-audio-brightness" checked>
                 <span data-i18n="music.audioBrightness">Modulate brightness with audio volume</span>

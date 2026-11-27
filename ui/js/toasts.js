@@ -17,9 +17,38 @@ const TOAST_OK_MS = 2200;
 let okToastEl = null;
 let okToastTimer = null;
 
+function syncToastPopover(region, { promote = false } = {}) {
+  if (!region) return;
+  const hasToasts = Boolean(region.children && region.children.length > 0);
+  if (hasToasts) {
+    if (typeof region.showPopover !== "function") return;
+    try {
+      if (typeof region.matches === "function" && region.matches(":popover-open")) {
+        if (!promote) return;
+        if (typeof region.hidePopover === "function") {
+          region.hidePopover();
+        }
+      }
+      region.showPopover();
+    } catch {
+      /* Ignore browsers or test environments without full Popover API support */
+    }
+    return;
+  }
+  if (typeof region.hidePopover === "function") {
+    try {
+      region.hidePopover();
+    } catch {
+      /* Ignore when popover is already closed */
+    }
+  }
+}
+
 function dismissToast(el) {
-  if (el && el.parentNode) el.parentNode.removeChild(el);
+  const region = el ? el.parentNode : null;
+  if (el && region) region.removeChild(el);
   if (el === okToastEl) okToastEl = null;
+  syncToastPopover(region);
 }
 
 export function showToast({ kind, message, retry }) {
@@ -34,6 +63,7 @@ export function showToast({ kind, message, retry }) {
       okToastEl = buildToast("ok", message, null);
       region.appendChild(okToastEl);
     }
+    syncToastPopover(region, { promote: true });
     okToastTimer = setTimeout(() => dismissToast(okToastEl), TOAST_OK_MS);
     return;
   }
@@ -42,8 +72,12 @@ export function showToast({ kind, message, retry }) {
   const duplicate = Array.from(region.querySelectorAll(".toast-error .toast-message")).find(
     (node) => node.textContent === message
   );
-  if (duplicate) return;
+  if (duplicate) {
+    syncToastPopover(region, { promote: true });
+    return;
+  }
   region.appendChild(buildToast("error", message, retry));
+  syncToastPopover(region, { promote: true });
 }
 
 function buildToast(kind, message, retry) {
