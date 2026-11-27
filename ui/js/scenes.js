@@ -7,16 +7,40 @@ import {
   SCENE_CATEGORY_COLORS,
   SCENE_CHROMATIC_MAP,
   appState,
+  bindSliderInteraction,
   clampInt,
   formatSceneDisplayName,
   getPrimaryBulb,
   kelvinToCssColor,
   rgbToHex,
   saveFavoriteSceneIds,
+  setFieldError,
   t,
-  updateSliderFill
+  updateSliderFill,
+  withButtonBusy
 } from "./store.js";
-import { setStatusMessage } from "./toasts.js";
+import { setStatusMessage, showToast } from "./toasts.js";
+
+let pendingPresetDelete = null;
+
+export function resetPendingPresetDeleteForTests() {
+  if (pendingPresetDelete) {
+    clearTimeout(pendingPresetDelete.timerId);
+    pendingPresetDelete = null;
+  }
+}
+
+export function flushPendingPresetDelete() {
+  if (!pendingPresetDelete) return;
+  clearTimeout(pendingPresetDelete.timerId);
+  const { commit } = pendingPresetDelete;
+  pendingPresetDelete = null;
+  commit();
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("beforeunload", flushPendingPresetDelete);
+}
 
 const STAR_PATH_D =
   "M10 2.75l2.18 4.42 4.88.71-3.53 3.44.83 4.86L10 13.88l-4.36 2.3.83-4.86-3.53-3.44 4.88-.71L10 2.75Z";
@@ -178,19 +202,22 @@ export function renderScenesGrid() {
 export function renderCustomScenesGrid() {
   const grid = document.getElementById("custom-scenes-grid");
   const tabLabel = document.getElementById("custom-tab-label");
+  const visiblePresets = pendingPresetDelete
+    ? appState.customScenes.filter((p) => p.id !== pendingPresetDelete.preset.id)
+    : appState.customScenes;
   if (tabLabel) {
-    tabLabel.textContent = t("tabs.customWithCount", { count: appState.customScenes.length });
+    tabLabel.textContent = t("tabs.customWithCount", { count: visiblePresets.length });
   }
   if (!grid) return;
 
-  if (appState.customScenes.length === 0) {
+  if (visiblePresets.length === 0) {
     const empty = createEl("div", "empty-fixtures-state");
     empty.append(createEl("p", null, t("custom.emptyTitle")), createEl("p", null, t("custom.emptySubtitle")));
     grid.replaceChildren(empty);
     return;
   }
 
-  const cards = appState.customScenes.map((preset) => {
+  const cards = visiblePresets.map((preset) => {
     const card = createEl("article", "custom-scene-card");
     let swatchCss = "#FFF1E0";
     let summaryText = `${preset.brightness}%`;
@@ -264,10 +291,38 @@ export function renderCustomScenesGrid() {
     const deleteBtn = createEl("button", "btn btn-compact btn-ghost", t("custom.deleteBtn"));
     deleteBtn.type = "button";
     deleteBtn.addEventListener("click", () => {
-      invokeApi(
-        () => getBackendApi().delete_custom_scene(preset.id),
-        () => t("status.presetDeleted", { name: preset.name })
-      );
+      flushPendingPresetDelete();
+      const commit = () =>
+        invokeApi(() => getBackendApi().delete_custom_scene(preset.id), null, { silent: true });
+      const timerId = setTimeout(() => {
+        if (!pendingPresetDelete || pendingPresetDelete.preset.id !== preset.id) return;
+        pendingPresetDelete = null;
+        commit();
+      }, 5000);
+      pendingPresetDelete = { preset, timerId, commit };
+      renderCustomScenesGrid();
+      const deletedMsg = t("status.presetDeleted", { name: preset.name });
+      setStatusMessage(deletedMsg);
+      showToast({
+        kind: "ok",
+        message: deletedMsg,
+        actionLabel: t("toast.undo"),
+        durationMs: 5000,
+        onAction: () => {
+          if (!pendingPresetDelete || pendingPresetDelete.preset.id !== preset.id) return;
+          clearTimeout(pendingPresetDelete.timerId);
+          pendingPresetDelete = null;
+          renderCustomScenesGrid();
+          setStatusMessage(t("status.presetRestored", { name: preset.name }));
+        },
+        onDismiss: () => {
+          if (!pendingPresetDelete || pendingPresetDelete.preset.id !== preset.id) return;
+          clearTimeout(pendingPresetDelete.timerId);
+          const fn = pendingPresetDelete.commit;
+          pendingPresetDelete = null;
+          fn();
+        }
+      });
     });
 
     actions.append(favoriteBtn, applyBtn, editBtn, deleteBtn);
@@ -307,6 +362,7 @@ export function openCustomSceneDialog(existingPreset) {
     if (submitBtn) submitBtn.textContent = t("dialog.presetSaveSubmit");
   }
 
+  setFieldError(nameInput, document.getElementById("custom-scene-error"), "");
   dialog.showModal();
   nameInput.focus();
   if (existingPreset) nameInput.select();
@@ -324,6 +380,7 @@ export function bindSceneEvents({ activateTab }) {
   const speedSlider = document.getElementById("scene-speed-slider");
   const speedOutput = document.getElementById("scene-speed-output");
   if (speedSlider && speedOutput) {
+    bindSliderInteraction(speedSlider);
     speedSlider.addEventListener("input", () => {
       speedOutput.textContent = speedSlider.value;
       updateSliderFill(speedSlider);
@@ -346,10 +403,17 @@ export function bindSceneEvents({ activateTab }) {
   const openSaveSceneBtn = document.getElementById("open-save-scene-dialog-btn");
   if (openSaveSceneBtn) openSaveSceneBtn.addEventListener("click", () => openCustomSceneDialog(null));
 
+  const customSceneNameInput = document.getElementById("custom-scene-name-input");
+  const customSceneError = document.getElementById("custom-scene-error");
+  if (customSceneNameInput) {
+    customSceneNameInput.addEventListener("input", () => setFieldError(customSceneNameInput, customSceneError, ""));
+  }
+
   const customSceneForm = document.getElementById("custom-scene-form");
   const customSceneDialog = document.getElementById("custom-scene-dialog");
+  const customSceneSubmitBtn = document.getElementById("custom-scene-submit-btn");
   if (customSceneForm && customSceneDialog) {
-    customSceneForm.addEventListener("submit", (event) => {
+    customSceneForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const idInput = document.getElementById("custom-scene-id-input");
       const nameInput = document.getElementById("custom-scene-name-input");
@@ -359,19 +423,26 @@ export function bindSceneEvents({ activateTab }) {
       const captureCurrent = Boolean(overwriteCheckbox && overwriteCheckbox.checked);
       if (!name) return;
 
-      customSceneDialog.close();
-      if (sceneId) {
-        invokeApi(
-          () => getBackendApi().update_custom_scene(sceneId, name, captureCurrent),
-          () => t("status.presetUpdated", { name })
-        );
-      } else {
+      setFieldError(nameInput, customSceneError, "");
+      const ok = await withButtonBusy(customSceneSubmitBtn, () => {
+        if (sceneId) {
+          return invokeApi(
+            () => getBackendApi().update_custom_scene(sceneId, name, captureCurrent),
+            () => t("status.presetUpdated", { name })
+          );
+        }
         const primary = getPrimaryBulb();
-        invokeApi(
+        return invokeApi(
           () => getBackendApi().save_custom_scene(name, primary ? primary.ip : null),
           () => t("status.presetSaved", { name })
         );
-        activateTab("custom", false);
+      });
+      if (ok) {
+        customSceneDialog.close();
+        if (!sceneId) activateTab("custom", false);
+      } else {
+        setFieldError(nameInput, customSceneError, t("dialog.presetSaveFailed"));
+        if (nameInput) nameInput.focus();
       }
     });
   }

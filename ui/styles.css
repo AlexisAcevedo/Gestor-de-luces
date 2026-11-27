@@ -1161,6 +1161,49 @@
     outline-offset: 1px;
   }
 
+  .field-group input[aria-invalid="true"] {
+    box-shadow:
+      0 0 0 1.5px var(--danger-border),
+      var(--shadow-well-recessed);
+  }
+
+  .field-error {
+    margin: 2px 0 0;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    color: var(--danger-ink);
+  }
+
+  .stage-empty-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    background: var(--surface-2);
+    border-color: var(--border-structural);
+  }
+
+  .stage-empty-message {
+    margin: 0;
+    flex: 1 1 220px;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: var(--text-primary);
+  }
+
+  .stage-empty-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .console-shell[data-has-targets="false"] .dimming-well,
+  .console-shell[data-has-targets="false"] .mode-panel {
+    opacity: 0.55;
+  }
+
   .hex-input-row {
     display: flex;
     gap: 8px;
@@ -2277,6 +2320,19 @@
   .btn-power:hover,
   #master-power-btn:hover {
     box-shadow: var(--shadow-keycap-hover);
+  }
+
+  .btn:disabled,
+  .chip-btn:disabled,
+  .btn-power:disabled,
+  .btn-fixture-power:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  [aria-busy="true"] {
+    cursor: progress;
   }
 
   /* Dialogos modales nativos (<dialog>) */

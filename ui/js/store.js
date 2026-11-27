@@ -391,3 +391,83 @@ export function updateAllSlidersFill() {
     updateSliderFill(slider);
   });
 }
+
+const IPV4_PATTERN =
+  /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/* Valida que una cadena tenga exactamente cuatro octetos IPv4 validos (0-255) */
+export function isValidIpv4(value) {
+  return IPV4_PATTERN.test(String(value || "").trim());
+}
+
+/* Sincroniza el mensaje de error inline y los atributos ARIA de validez en un campo */
+export function setFieldError(inputEl, errorEl, message) {
+  const text = message ? String(message) : "";
+  if (errorEl) {
+    errorEl.textContent = text;
+    errorEl.hidden = !text;
+  }
+  if (inputEl) {
+    if (text) {
+      inputEl.setAttribute("aria-invalid", "true");
+      if (errorEl && errorEl.id) inputEl.setAttribute("aria-describedby", errorEl.id);
+    } else {
+      inputEl.removeAttribute("aria-invalid");
+      if (errorEl && errorEl.id && inputEl.getAttribute("aria-describedby") === errorEl.id) {
+        inputEl.removeAttribute("aria-describedby");
+      }
+    }
+  }
+}
+
+const draggingSliders = new WeakSet();
+const pointerReleasedSliders = new WeakSet();
+
+/* Protege un deslizador durante el arrastre o la edicion por teclado, sin bloquear tras soltar el puntero */
+export function bindSliderInteraction(slider) {
+  if (!slider || typeof slider.addEventListener !== "function") return;
+  slider.addEventListener("pointerdown", () => {
+    draggingSliders.add(slider);
+    pointerReleasedSliders.delete(slider);
+  });
+  const release = () => {
+    draggingSliders.delete(slider);
+    pointerReleasedSliders.add(slider);
+  };
+  slider.addEventListener("pointerup", release);
+  slider.addEventListener("pointercancel", release);
+  slider.addEventListener("keydown", () => {
+    pointerReleasedSliders.delete(slider);
+  });
+  slider.addEventListener("blur", () => {
+    draggingSliders.delete(slider);
+    pointerReleasedSliders.delete(slider);
+  });
+}
+
+export function isSliderProtected(slider) {
+  if (!slider) return false;
+  if (draggingSliders.has(slider)) return true;
+  return (
+    typeof document !== "undefined" &&
+    document.activeElement === slider &&
+    !pointerReleasedSliders.has(slider)
+  );
+}
+
+/* Deshabilita temporalmente un boton mientras espera una operacion asincrona */
+export async function withButtonBusy(btn, fn) {
+  if (btn && btn.disabled) return false;
+  if (btn) {
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+  }
+  try {
+    return await fn();
+  } finally {
+    if (btn) {
+      btn.disabled = Boolean(btn.dataset && btn.dataset.stateDisabled === "true");
+      btn.removeAttribute("aria-busy");
+    }
+  }
+}

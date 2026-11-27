@@ -4,9 +4,9 @@
 
 import { getBackendApi, invokeApi } from "./bridge-client.js";
 import {
-  SCENE_CATEGORY_COLORS, SCENE_CHROMATIC_MAP, appState, clampInt, formatSceneDisplayName,
-  getPrimaryBulb, hsvToRgb, kelvinToCssColor, parseHexToRgb, rgbToHex, rgbToHsv, t,
-  updateAllSlidersFill, updateSliderFill
+  SCENE_CATEGORY_COLORS, SCENE_CHROMATIC_MAP, appState, bindSliderInteraction, clampInt,
+  formatSceneDisplayName, getPrimaryBulb, hsvToRgb, isSliderProtected, kelvinToCssColor,
+  parseHexToRgb, rgbToHex, rgbToHsv, t, updateAllSlidersFill, updateSliderFill, withButtonBusy
 } from "./store.js";
 
 const isFocused = (el) => Boolean(el && document.activeElement === el);
@@ -72,35 +72,71 @@ export function renderStageHeaderAndControls() {
   const telemetryMeta = document.getElementById("telemetry-meta");
   const masterPowerBtn = document.getElementById("master-power-btn");
   const masterPowerLabel = document.getElementById("master-power-label");
+  const quickSavePresetBtn = document.getElementById("quick-save-preset-btn");
   const brightnessSlider = document.getElementById("brightness-slider");
   const brightnessOutput = document.getElementById("brightness-output");
+  const emptyBanner = document.getElementById("stage-empty-banner");
+  const emptyMessage = document.getElementById("stage-empty-message");
+  const emptyScanBtn = document.getElementById("stage-empty-scan-btn");
+  const emptyAddBtn = document.getElementById("stage-empty-add-btn");
+  const emptySelectAllBtn = document.getElementById("stage-empty-select-all-btn");
 
-  const primary = getPrimaryBulb();
+  const setControlDisabled = (disabled) => {
+    if (masterPowerBtn) {
+      if (masterPowerBtn.dataset) masterPowerBtn.dataset.stateDisabled = String(disabled);
+      masterPowerBtn.disabled = disabled;
+    }
+    if (quickSavePresetBtn) quickSavePresetBtn.disabled = disabled;
+    if (brightnessSlider) brightnessSlider.disabled = disabled;
+    document.querySelectorAll(".brightness-preset").forEach((btn) => {
+      btn.disabled = disabled;
+    });
+  };
+
+  const hasBulbs = appState.bulbs.length > 0;
+  const selectedBulbs = appState.bulbs.filter((b) => appState.selectedIps.includes(b.ip));
+  const hasSelection = selectedBulbs.length > 0;
+  const primary = hasSelection ? selectedBulbs[0] : null;
   const aperture = document.getElementById("photometric-aperture");
   const drawerPillLabel = document.getElementById("drawer-pill-label");
   const drawerPillDot = document.getElementById("drawer-pill-dot");
-  if (!primary) {
-    if (shell) shell.setAttribute("data-power", "off");
+  if (!hasBulbs || !primary) {
+    if (shell) {
+      shell.setAttribute("data-power", "off");
+      shell.setAttribute("data-has-targets", "false");
+    }
     document.documentElement.style.setProperty("--beam-color", "var(--beam-standby)");
     updateApertureGlow(aperture, false, 0);
-    if (targetSummary) targetSummary.textContent = t("stage.noFixture");
-    if (drawerPillLabel) drawerPillLabel.textContent = t("stage.noFixture");
+    setControlDisabled(true);
+    const labelText = hasBulbs ? t("stage.noneSelected") : t("stage.noFixture");
+    if (targetSummary) {
+      targetSummary.textContent = labelText;
+      targetSummary.title = "";
+    }
+    if (drawerPillLabel) drawerPillLabel.textContent = labelText;
     if (drawerPillDot) drawerPillDot.classList.add("is-offline");
-    if (statePill) statePill.textContent = t("stage.stateOffline");
+    if (statePill) statePill.textContent = hasBulbs ? t("stage.stateNoneSelected") : t("stage.stateOffline");
+    if (telemetryMeta) telemetryMeta.textContent = "";
+    if (emptyBanner) emptyBanner.hidden = false;
+    if (emptyMessage) emptyMessage.textContent = hasBulbs ? t("stage.emptyNoSelection") : t("stage.emptyNoBulbs");
+    if (emptyScanBtn) emptyScanBtn.hidden = hasBulbs;
+    if (emptyAddBtn) emptyAddBtn.hidden = hasBulbs;
+    if (emptySelectAllBtn) emptySelectAllBtn.hidden = !hasBulbs;
     updateAllSlidersFill();
     return;
   }
 
-  const selectedCount = appState.selectedIps.length || appState.bulbs.length;
+  if (shell) shell.setAttribute("data-has-targets", "true");
+  if (emptyBanner) emptyBanner.hidden = true;
+  setControlDisabled(false);
+
+  const selectedCount = selectedBulbs.length;
   if (drawerPillDot) drawerPillDot.classList.toggle("is-offline", !primary.is_online);
   if (drawerPillLabel) {
     drawerPillLabel.textContent = selectedCount > 1 ? `${primary.name} (+${selectedCount - 1})` : primary.name;
   }
   if (targetSummary) {
-    const targets = appState.selectedIps.length
-      ? appState.bulbs.filter((b) => appState.selectedIps.includes(b.ip))
-      : appState.bulbs;
-    const names = targets.map((b) => b.name);
+    const names = selectedBulbs.map((b) => b.name);
     if (selectedCount === 1) {
       targetSummary.textContent = primary.name;
     } else if (selectedCount <= 3 && names.length === selectedCount) {
@@ -118,7 +154,7 @@ export function renderStageHeaderAndControls() {
     masterPowerBtn.setAttribute("aria-pressed", String(isOn));
     masterPowerLabel.textContent = isOn ? t("stage.turnOff") : t("stage.turnOn");
   }
-  if (brightnessSlider && brightnessOutput && !isFocused(brightnessSlider)) {
+  if (brightnessSlider && brightnessOutput && !isSliderProtected(brightnessSlider)) {
     brightnessSlider.value = String(st.brightness);
     brightnessOutput.textContent = `${st.brightness}%`;
     updateSliderFill(brightnessSlider);
@@ -129,7 +165,21 @@ export function renderStageHeaderAndControls() {
 
   let beamCss = "var(--beam-standby)";
   let modeReadout = t("stage.stateOff");
-  if (isOn) {
+  const isAmbiActive = Boolean(appState.ambilight && appState.ambilight.active);
+  const isMusicActive = Boolean(appState.musicSync && appState.musicSync.active);
+  if (isAmbiActive || isMusicActive) {
+    modeReadout = t(isAmbiActive ? "stage.stateStreamingAmbi" : "stage.stateStreamingMusic");
+    const streamColor = isAmbiActive ? appState.ambilight.last_color : appState.musicSync.last_color;
+    if (isOn) {
+      if (streamColor && typeof streamColor.r === "number") {
+        beamCss = `rgb(${streamColor.r}, ${streamColor.g}, ${streamColor.b})`;
+      } else if (st.mode === "rgb" && st.color) {
+        beamCss = `rgb(${st.color.r}, ${st.color.g}, ${st.color.b})`;
+      } else {
+        beamCss = kelvinToCssColor(st.temperature || 4200);
+      }
+    }
+  } else if (isOn) {
     if (st.mode === "rgb" && st.color) {
       beamCss = `rgb(${st.color.r}, ${st.color.g}, ${st.color.b})`;
       modeReadout = t("stage.stateOnRgb", { r: st.color.r, g: st.color.g, b: st.color.b, brightness: st.brightness });
@@ -174,7 +224,7 @@ export function renderStageHeaderAndControls() {
   const activeKelvin = st.temperature || 4200;
   const kelvinSlider = document.getElementById("kelvin-slider");
   const kelvinOutput = document.getElementById("kelvin-output");
-  if (kelvinSlider && kelvinOutput && !isFocused(kelvinSlider)) {
+  if (kelvinSlider && kelvinOutput && !isSliderProtected(kelvinSlider)) {
     kelvinSlider.value = String(activeKelvin);
     kelvinOutput.textContent = `${activeKelvin} K`;
     updateSliderFill(kelvinSlider);
@@ -193,7 +243,7 @@ export function renderStageHeaderAndControls() {
   if (speedContainer) speedContainer.classList.toggle("is-disabled", !isDynamicSpeedSupported);
   if (speedSlider && speedOutput) {
     speedSlider.disabled = !isDynamicSpeedSupported;
-    if (!isFocused(speedSlider)) {
+    if (!isSliderProtected(speedSlider)) {
       speedSlider.value = String(st.speed || 100);
       speedOutput.textContent = String(st.speed || 100);
       updateSliderFill(speedSlider);
@@ -207,13 +257,16 @@ export function bindStageControlEvents() {
     masterPowerBtn.addEventListener("click", () => {
       const primary = getPrimaryBulb();
       const nextPower = primary ? !primary.state.is_on : true;
-      invokeApi(() => getBackendApi().set_power(nextPower, null, null), () => t(nextPower ? "status.masterTurnedOn" : "status.masterTurnedOff"));
+      withButtonBusy(masterPowerBtn, () =>
+        invokeApi(() => getBackendApi().set_power(nextPower, null, null), () => t(nextPower ? "status.masterTurnedOn" : "status.masterTurnedOff"))
+      );
     });
   }
 
   const brightnessSlider = document.getElementById("brightness-slider");
   const brightnessOutput = document.getElementById("brightness-output");
   if (brightnessSlider && brightnessOutput) {
+    bindSliderInteraction(brightnessSlider);
     brightnessSlider.addEventListener("input", () => {
       brightnessOutput.textContent = `${brightnessSlider.value}%`;
       updateSliderFill(brightnessSlider);
@@ -370,6 +423,7 @@ export function bindStageControlEvents() {
 
   const kelvinSlider = document.getElementById("kelvin-slider"), kelvinOutput = document.getElementById("kelvin-output");
   if (kelvinSlider && kelvinOutput) {
+    bindSliderInteraction(kelvinSlider);
     kelvinSlider.addEventListener("input", () => {
       const k = clampInt(kelvinSlider.value, 2200, 6500);
       kelvinOutput.textContent = `${k} K`;

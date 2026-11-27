@@ -5,11 +5,14 @@
 import { getBackendApi, invokeApi } from "./bridge-client.js";
 import {
   appState,
+  bindSliderInteraction,
   clampInt,
   computeLiveFps,
+  isSliderProtected,
   rgbToHex,
   t,
-  updateSliderFill
+  updateSliderFill,
+  withButtonBusy
 } from "./store.js";
 
 /* Sondea cada 250ms la telemetria acustica (Bass/Mid/Treble/RMS) mientras Music Sync este activo */
@@ -101,7 +104,8 @@ export function renderMusicPanel() {
     if (colorReadout) {
       colorReadout.textContent = `RGB (${lastColor.r}, ${lastColor.g}, ${lastColor.b}) · ${hex}`;
     }
-    if (music.active) {
+    const shell = document.getElementById("console-shell");
+    if (music.active && (!shell || shell.getAttribute("data-power") !== "off")) {
       document.documentElement.style.setProperty("--beam-color", cssRgb);
     }
   }
@@ -139,7 +143,7 @@ export function renderMusicPanel() {
 
   const sensSlider = document.getElementById("music-sensitivity-slider");
   const sensOutput = document.getElementById("music-sensitivity-output");
-  if (sensSlider && sensOutput && typeof music.sensitivity === "number" && document.activeElement !== sensSlider) {
+  if (sensSlider && sensOutput && typeof music.sensitivity === "number" && !isSliderProtected(sensSlider)) {
     sensSlider.value = String(music.sensitivity);
     sensOutput.textContent = `${Number(music.sensitivity).toFixed(1)}x`;
     updateSliderFill(sensSlider);
@@ -147,7 +151,7 @@ export function renderMusicPanel() {
 
   const alphaSlider = document.getElementById("music-smoothing-slider");
   const alphaOutput = document.getElementById("music-smoothing-output");
-  if (alphaSlider && alphaOutput && typeof music.smoothing_alpha === "number" && document.activeElement !== alphaSlider) {
+  if (alphaSlider && alphaOutput && typeof music.smoothing_alpha === "number" && !isSliderProtected(alphaSlider)) {
     alphaSlider.value = String(music.smoothing_alpha);
     alphaOutput.textContent = Number(music.smoothing_alpha).toFixed(2);
     updateSliderFill(alphaSlider);
@@ -181,7 +185,7 @@ export function bindMusicEvents() {
 
   const startOrUpdateMusicSync = (statusMsg) => {
     const p = readMusicParamsFromDom();
-    invokeApi(
+    return invokeApi(
       () =>
         getBackendApi().start_music_sync(
           p.paletteMode,
@@ -199,11 +203,12 @@ export function bindMusicEvents() {
   const toggleMusicBtn = document.getElementById("toggle-music-btn");
   if (toggleMusicBtn) {
     toggleMusicBtn.addEventListener("click", () => {
-      if (appState.musicSync && appState.musicSync.active) {
-        invokeApi(() => getBackendApi().stop_music_sync(), () => t("status.musicStopped"));
-      } else {
-        startOrUpdateMusicSync(() => t("status.musicStarted"));
-      }
+      withButtonBusy(toggleMusicBtn, () => {
+        if (appState.musicSync && appState.musicSync.active) {
+          return invokeApi(() => getBackendApi().stop_music_sync(), () => t("status.musicStopped"));
+        }
+        return startOrUpdateMusicSync(() => t("status.musicStarted"));
+      });
     });
   }
 
@@ -235,6 +240,7 @@ export function bindMusicEvents() {
   const musicSensSlider = document.getElementById("music-sensitivity-slider");
   const musicSensOutput = document.getElementById("music-sensitivity-output");
   if (musicSensSlider && musicSensOutput) {
+    bindSliderInteraction(musicSensSlider);
     musicSensSlider.addEventListener("input", () => {
       musicSensOutput.textContent = `${Number(musicSensSlider.value).toFixed(1)}x`;
       updateSliderFill(musicSensSlider);
@@ -255,6 +261,7 @@ export function bindMusicEvents() {
   const musicAlphaSlider = document.getElementById("music-smoothing-slider");
   const musicAlphaOutput = document.getElementById("music-smoothing-output");
   if (musicAlphaSlider && musicAlphaOutput) {
+    bindSliderInteraction(musicAlphaSlider);
     musicAlphaSlider.addEventListener("input", () => {
       musicAlphaOutput.textContent = Number(musicAlphaSlider.value).toFixed(2);
       updateSliderFill(musicAlphaSlider);

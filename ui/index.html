@@ -237,6 +237,16 @@
         </div>
       </header>
 
+      <!-- Empty / No-Selection Banner -->
+      <section class="control-well stage-empty-banner" id="stage-empty-banner" aria-live="polite" hidden>
+        <p class="stage-empty-message" id="stage-empty-message"></p>
+        <div class="stage-empty-actions">
+          <button type="button" class="btn btn-secondary btn-compact" id="stage-empty-scan-btn" data-i18n="rail.scanBtn">Scan network</button>
+          <button type="button" class="btn btn-ghost btn-compact" id="stage-empty-add-btn" data-i18n="rail.addByIpBtn">Add by IP</button>
+          <button type="button" class="btn btn-primary btn-compact" id="stage-empty-select-all-btn" data-i18n="rail.selectAll" hidden>Select all fixtures</button>
+        </div>
+      </section>
+
       <!-- Master Dimming Well (Primary Stage Control) -->
       <section class="control-well dimming-well" aria-labelledby="dimming-heading">
         <div class="well-header">
@@ -1052,6 +1062,7 @@
             autocomplete="off"
             spellcheck="false"
           >
+          <p class="field-error" id="add-bulb-error" role="alert" hidden></p>
         </div>
 
         <div class="field-group">
@@ -1093,6 +1104,7 @@
             required
             autocomplete="off"
           >
+          <p class="field-error" id="rename-bulb-error" role="alert" hidden></p>
         </div>
       </div>
 
@@ -1144,6 +1156,7 @@
             required
             autocomplete="off"
           >
+          <p class="field-error" id="custom-scene-error" role="alert" hidden></p>
         </div>
 
         <div class="field-group" id="custom-scene-overwrite-row" hidden>
