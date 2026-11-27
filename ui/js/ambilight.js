@@ -55,14 +55,24 @@ export function renderAmbilightPanel() {
 
   const monitorSelect = document.getElementById("ambilight-monitor-select");
   if (monitorSelect && Array.isArray(appState.monitors) && appState.monitors.length > 0) {
+    const resolveMonitorLabel = (mon) => {
+      if (mon.is_placeholder) return t("ambi.defaultDisplay");
+      if (typeof mon.width === "number" && typeof mon.height === "number" && mon.width > 0 && mon.height > 0) {
+        if (Number(mon.index) === 0) {
+          return t("ambi.allDisplays", { width: mon.width, height: mon.height });
+        }
+        return t("ambi.displayItem", { index: mon.index, width: mon.width, height: mon.height });
+      }
+      return mon.label;
+    };
     const currentOptions = Array.from(monitorSelect.options).map((o) => `${o.value}:${o.textContent}`).join("|");
-    const nextOptions = appState.monitors.map((m) => `${m.index}:${m.label}`).join("|");
+    const nextOptions = appState.monitors.map((m) => `${m.index}:${resolveMonitorLabel(m)}`).join("|");
     if (currentOptions !== nextOptions) {
       monitorSelect.replaceChildren();
       appState.monitors.forEach((mon) => {
         const opt = document.createElement("option");
         opt.value = String(mon.index);
-        opt.textContent = mon.label;
+        opt.textContent = resolveMonitorLabel(mon);
         monitorSelect.appendChild(opt);
       });
     }
@@ -218,8 +228,9 @@ export function bindAmbilightEvents() {
       });
       appState.ambilight.color_mode = btn.dataset.colorMode || "vibrant";
       if (appState.ambilight.active) {
+        const modeLabel = t(appState.ambilight.color_mode === "average" ? "ambi.modeAverage" : "ambi.modeVibrant");
         startOrUpdateAmbilight(() =>
-          t("status.ambiModeChanged", { mode: appState.ambilight.color_mode })
+          t("status.ambiModeChanged", { mode: modeLabel })
         );
       }
     });

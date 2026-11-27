@@ -174,7 +174,7 @@ export const appState = {
     fps: 0
   },
   monitors: [
-    { index: 1, label: "Display 1 (1920x1080)", width: 1920, height: 1080 }
+    { index: 1, label: "Display 1 (Primary)", width: 1920, height: 1080, is_placeholder: true }
   ],
   musicSync: {
     active: false,
@@ -202,10 +202,11 @@ export const appState = {
     {
       index: -1,
       name: "System Audio Loopback",
-      label: "Default System Output (WASAPI Loopback)",
+      label: "Default System Output",
       sample_rate: 48000,
       channels: 2,
-      is_default: true
+      is_default: true,
+      is_placeholder: true
     }
   ],
   activeTab: "temperature",

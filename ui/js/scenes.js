@@ -238,7 +238,7 @@ export function renderCustomScenesGrid() {
       const bScene = appState.scenes.find((s) => s.scene_id === preset.built_in_scene_id);
       const cat = bScene ? bScene.category : "dynamic";
       swatchCss = SCENE_CATEGORY_COLORS[cat] || "#C084FC";
-      const sName = bScene ? bScene.name : `#${preset.built_in_scene_id}`;
+      const sName = bScene ? formatSceneDisplayName(bScene) : `#${preset.built_in_scene_id}`;
       summaryText = t("custom.summaryScene", { scene: sName, brightness: preset.brightness });
     } else {
       const k = preset.temperature || 4200;
