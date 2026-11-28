@@ -206,6 +206,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   if (envelope.context_status && typeof envelope.context_status === "object") {
     appState.contextStatus = envelope.context_status;
   }
+  if (envelope.local_api && typeof envelope.local_api === "object") {
+    appState.localApi = envelope.local_api;
+  }
   if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
     const prev = appState.globalHotkeys || {};
     appState.globalHotkeys = {
@@ -314,6 +317,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     envelope.session_triggers ||
     envelope.context_automation ||
     envelope.context_status ||
+    envelope.local_api ||
     langChanged
   ) {
     renderAutomationPanel();

@@ -181,6 +181,18 @@ class LightControlService:
         """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
         return self._settings.set_transition_seconds(seconds)
 
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        return self._settings.get_local_api_config()
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        return self._settings.set_local_api_config(config)
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        return self._settings.rotate_local_api_token()
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()
@@ -202,9 +214,14 @@ class LightControlService:
         """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco."""
         return await self._inventory.discover_bulbs(wait_time=wait_time)
 
-    async def add_manual_bulb(self, ip: str, name: str | None = None) -> Bulb:
+    async def add_manual_bulb(
+        self,
+        ip: str,
+        name: str | None = None,
+        protocol: str = "wiz",
+    ) -> Bulb:
         """Registra un foco manualmente por su IP y verifica su estado en la red."""
-        return await self._inventory.add_manual_bulb(ip, name=name)
+        return await self._inventory.add_manual_bulb(ip, name=name, protocol=protocol)
 
     def rename_bulb(self, ip: str, new_name: str) -> Bulb:
         """Cambia el nombre amigable de un foco registrado y guarda el cambio."""

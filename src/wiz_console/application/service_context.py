@@ -28,6 +28,7 @@ from wiz_console.application.transition_engine import (
 from wiz_console.domain.automation import (
     CircadianConfig,
     ContextAutomationConfig,
+    LocalApiConfig,
     SessionTriggersConfig,
     WakeupRampConfig,
 )
@@ -157,6 +158,7 @@ class ServiceContext:
         self.wakeup_ramp_config: dict[str, Any] = WakeupRampConfig().to_dict()
         self.session_triggers: dict[str, Any] = SessionTriggersConfig().to_dict()
         self.context_automation: dict[str, Any] = ContextAutomationConfig().to_dict()
+        self.local_api: dict[str, Any] = LocalApiConfig().to_dict()
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -169,6 +171,9 @@ class ServiceContext:
                     )
                     continue
                 self.bulbs[saved_bulb.ip] = saved_bulb
+                registrar = getattr(self.controller, "register_bulb", None)
+                if callable(registrar):
+                    registrar(saved_bulb.ip, saved_bulb.protocol)
             self.selected_ips = list(self.bulbs.keys())
 
         if self.scene_repo is not None:
@@ -237,6 +242,13 @@ class ServiceContext:
                     ).to_dict()
                 except ValueError:
                     self.context_automation = ContextAutomationConfig().to_dict()
+            if "local_api" in loaded_settings:
+                try:
+                    self.local_api = LocalApiConfig.from_dict(
+                        loaded_settings["local_api"]
+                    ).to_dict()
+                except ValueError:
+                    self.local_api = LocalApiConfig().to_dict()
             raw_selected = loaded_settings.get("selected_ips")
             if isinstance(raw_selected, list) and self.bulbs:
                 restored = [ip for ip in raw_selected if isinstance(ip, str) and ip in self.bulbs]
@@ -341,6 +353,7 @@ class ServiceContext:
                 "session_triggers": dict(self.session_triggers),
                 "context_automation": dict(self.context_automation),
                 "transition_seconds": self.transition_seconds,
+                "local_api": dict(self.local_api),
             }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True

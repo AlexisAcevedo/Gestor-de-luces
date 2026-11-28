@@ -138,6 +138,18 @@ export function renderStageHeaderAndControls() {
   setControlDisabled(false);
 
   const selectedCount = selectedBulbs.length;
+  const rgbUnsupported =
+    selectedBulbs.length > 0 &&
+    selectedBulbs.every((b) => b.capabilities && b.capabilities.supports_rgb === false);
+  const rgbTab = document.getElementById("tab-btn-rgb");
+  const applyRgbBtn = document.getElementById("apply-rgb-btn");
+  if (rgbTab) {
+    rgbTab.title = rgbUnsupported ? t("stage.rgbUnsupportedHint") : "";
+    if (rgbTab.setAttribute) rgbTab.setAttribute("data-unsupported", String(rgbUnsupported));
+  }
+  if (applyRgbBtn) {
+    applyRgbBtn.disabled = rgbUnsupported;
+  }
   if (drawerPillDot) drawerPillDot.classList.toggle("is-offline", !primary.is_online);
   if (drawerPillLabel) {
     drawerPillLabel.textContent = selectedCount > 1 ? `${primary.name} (+${selectedCount - 1})` : primary.name;

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from wiz_console.application.service_context import ServiceContext
 from wiz_console.application.transition_engine import normalize_transition_seconds
+from wiz_console.domain.automation import LocalApiConfig
 from wiz_console.domain.scenes import get_builtin_scene
 from wiz_console.domain.value_objects import (
     SUPPORTED_LANGUAGES,
@@ -129,3 +131,30 @@ class SettingsService:
         self._ctx.transition_seconds = normalize_transition_seconds(seconds)
         self._ctx.persist_settings()
         return float(self._ctx.transition_seconds)
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        return dict(self._ctx.local_api)
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        parsed = LocalApiConfig.from_dict(config)
+        token = parsed.token or self._ctx.local_api.get("token", "")
+        if parsed.enabled and not token:
+            token = secrets.token_urlsafe(32)
+        updated = LocalApiConfig(enabled=parsed.enabled, port=parsed.port, token=token)
+        self._ctx.local_api = updated.to_dict()
+        self._ctx.persist_settings()
+        return self.get_local_api_config()
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh 32-byte Bearer token for the Local HTTP API."""
+        current = LocalApiConfig.from_dict(self._ctx.local_api)
+        updated = LocalApiConfig(
+            enabled=current.enabled,
+            port=current.port,
+            token=secrets.token_urlsafe(32),
+        )
+        self._ctx.local_api = updated.to_dict()
+        self._ctx.persist_settings()
+        return self.get_local_api_config()

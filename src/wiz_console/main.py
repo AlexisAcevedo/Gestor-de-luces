@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from wiz_console.adapters.ambilight.mss_sampler import MssScreenSampler
+from wiz_console.adapters.api.local_http_api import LocalHttpApiServer
 from wiz_console.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
+from wiz_console.adapters.govee.lan_controller import GoveeLanController
 from wiz_console.adapters.platform.windows import (
     DARK_TITLEBAR_ENABLED,
     THEME_WINDOW_CHROME,
@@ -34,6 +36,7 @@ from wiz_console.adapters.platform.windows import (
     apply_app_user_model_id,
     show_message_box,
 )
+from wiz_console.adapters.registry import CompositeLightController
 from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
@@ -190,7 +193,12 @@ def build_application(
     scene_repo = JsonSceneRepository(data_dir=storage_dir)
     settings_repo = JsonSettingsRepository(data_dir=storage_dir)
     zone_repo = JsonZoneRepository(data_dir=storage_dir)
-    controller = WizUdpController()
+    controller = CompositeLightController(
+        {
+            "wiz": WizUdpController(),
+            "govee": GoveeLanController(),
+        }
+    )
     service = LightControlService(
         controller=controller,
         bulb_repository=bulb_repo,
@@ -332,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
             autostart=autostart,
             hotkeys=_default_hotkeys(),
             session_monitor=_default_session_monitor(),
+            local_api=LocalHttpApiServer(bridge),
         )
         apply_app_user_model_id()
         app.create_window()

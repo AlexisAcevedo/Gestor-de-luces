@@ -426,3 +426,38 @@ class ContextAutomationConfig:
             on_air=OnAirConfig.from_dict(raw_on_air if isinstance(raw_on_air, Mapping) else None),
             rules=parsed_rules,
         )
+
+
+@dataclass
+class LocalApiConfig:
+    """Opt-in loopback-only local HTTP API configuration."""
+
+    enabled: bool = False
+    port: int = 18899
+    token: str = ""
+
+    def __post_init__(self) -> None:
+        self.enabled = bool(self.enabled)
+        self.port = parse_strict_int(self.port, field="port")
+        if not (1024 <= self.port <= 65535):
+            raise ValueError("Local API port must be between 1024 and 65535.")
+        self.token = str(self.token or "").strip()[:128]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize local API config for JSON persistence and IPC."""
+        return {
+            "enabled": self.enabled,
+            "port": self.port,
+            "token": self.token,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> LocalApiConfig:
+        """Reconstruct `LocalApiConfig` from persisted or IPC mapping."""
+        if not isinstance(data, Mapping):
+            return cls()
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            port=data.get("port", 18899),
+            token=str(data.get("token", "")),
+        )

@@ -26,6 +26,10 @@ from typing import Any
 
 import pytest
 
+from wiz_console.adapters.api.local_http_api import (
+    LOCAL_API_THREAD_NAME,
+    LocalHttpApiServer,
+)
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 from wiz_console.adapters.system.windows_hotkeys import (
     HOTKEY_THREAD_NAME,
@@ -71,6 +75,7 @@ APP_THREAD_NAMES = frozenset(
         SINGLE_INSTANCE_THREAD_NAME,
         HOTKEY_THREAD_NAME,
         SESSION_THREAD_NAME,
+        LOCAL_API_THREAD_NAME,
     }
 )
 #: Hilos que arranca la aplicacion de escritorio y que no deben sobrevivir al cierre.
@@ -78,6 +83,7 @@ DESKTOP_THREAD_NAMES = APP_THREAD_NAMES - {
     SINGLE_INSTANCE_THREAD_NAME,
     HOTKEY_THREAD_NAME,
     SESSION_THREAD_NAME,
+    LOCAL_API_THREAD_NAME,
 }
 
 DEADLINE_SECONDS = 10.0
@@ -281,6 +287,9 @@ class _FakeLightControlService:
 
     def get_transition_seconds(self) -> float:
         return 0.0
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        return {"enabled": False, "port": 18899, "token": ""}
 
     def stop_ambilight(self) -> None:
         return None
@@ -571,3 +580,29 @@ def test_stopping_session_monitor_leaves_no_session_thread() -> None:
         "stop() left the session monitor pump thread alive",
     )
     assert sess_thread.is_alive() is False
+
+
+def test_stopping_local_api_server_leaves_no_api_thread() -> None:
+    """`stop()` shuts down the loopback server and joins `WizConsoleLocalApi` cleanly."""
+    import secrets
+
+    bridge = WebviewBridge(service=_FakeLightControlService())
+    server = LocalHttpApiServer(bridge)
+    try:
+        ephemeral_token = secrets.token_urlsafe(12)
+        bound_port = server.start(port=0, token=ephemeral_token)
+        assert bound_port > 0
+        _wait_until(
+            lambda: LOCAL_API_THREAD_NAME in _live_thread_names(),
+            "the local HTTP API thread never started",
+        )
+        api_thread = _thread_named(LOCAL_API_THREAD_NAME)
+        assert api_thread.daemon is True
+    finally:
+        server.stop()
+        bridge.shutdown()
+
+    _wait_until(
+        lambda: LOCAL_API_THREAD_NAME not in _live_thread_names(),
+        "stop() left the local HTTP API thread alive",
+    )
