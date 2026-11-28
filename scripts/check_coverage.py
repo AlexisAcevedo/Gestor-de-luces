@@ -1,4 +1,4 @@
-"""Falla el job de CI cuando un paquete de `gestor_luces` baja de su umbral de cobertura.
+"""Falla el job de CI cuando un paquete de `wiz_console` baja de su umbral de cobertura.
 
 Tarea T-6.6 del endurecimiento: un porcentaje global se puede maquillar (subir el total
 agregando tests triviales en una capa y dejar otra sin probar), asi que los umbrales son
@@ -31,14 +31,14 @@ PACKAGE_THRESHOLDS: dict[str, float] = {
 #: Paquetes que solo se informan: contrato sin logica y cableado de composicion.
 REPORT_ONLY_PACKAGES = frozenset({"ports", "desktop"})
 
-#: Clave con la que se agrupan los modulos sueltos de `src/gestor_luces/` (main, cli, ...).
+#: Clave con la que se agrupan los modulos sueltos de `src/wiz_console/` (main, cli, ...).
 TOP_LEVEL_KEY = "(top-level)"
 
-_SOURCE_MARKER = "gestor_luces/"
+_SOURCE_MARKER = "wiz_console/"
 
 
 def package_key(path: str) -> str:
-    """Devuelve el paquete de `src/gestor_luces/` al que pertenece un archivo del reporte."""
+    """Devuelve el paquete de `src/wiz_console/` al que pertenece un archivo del reporte."""
     normalized = path.replace("\\", "/")
     if _SOURCE_MARKER not in normalized:
         return TOP_LEVEL_KEY

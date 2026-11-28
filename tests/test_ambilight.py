@@ -19,19 +19,19 @@ from typing import Any
 
 import numpy as np
 
-from gestor_luces.adapters.ambilight import (
+from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import wait_until_async
+from wiz_console.adapters.ambilight import (
     MssScreenSampler,
     extract_color_and_brightness_from_bgra,
 )
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.ambilight_stream import AmbilightStreamManager
-from gestor_luces.application.rate_limiter import StreamRateLimiter
-from gestor_luces.application.service import LightControlService
-from gestor_luces.domain.value_objects import Color
-from gestor_luces.ports.repositories import ScreenSampler
-from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
-from tests.waits import wait_until_async
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.ambilight_stream import AmbilightStreamManager
+from wiz_console.application.rate_limiter import StreamRateLimiter
+from wiz_console.application.service import LightControlService
+from wiz_console.domain.value_objects import Color
+from wiz_console.ports.repositories import ScreenSampler
 
 
 @dataclass

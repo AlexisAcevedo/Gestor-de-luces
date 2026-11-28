@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pywizlight.scenes import SCENES as PYWIZLIGHT_SCENES
 
-from gestor_luces.domain import (
+from wiz_console.domain import (
     Brightness,
     BuiltInScene,
     Bulb,

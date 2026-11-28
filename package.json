@@ -1,8 +1,8 @@
 {
-  "name": "gestor-de-luces-ui",
+  "name": "wiz-console-ui",
   "private": true,
   "type": "module",
-  "description": "Frontend test harness for the Gestor de Luces WebView UI (browser ES modules under ui/js).",
+  "description": "Frontend test harness for the WiZ Architectural Lighting Console WebView UI (browser ES modules under ui/js).",
   "scripts": {
     "test": "node --test --experimental-test-coverage --test-coverage-include=ui/js/store.js --test-coverage-include=ui/js/scenes.js --test-coverage-include=ui/js/bridge-client.js --test-coverage-include=ui/js/app.js --test-coverage-include=ui/js/ambilight.js --test-coverage-include=ui/js/music.js --test-coverage-include=ui/js/fixtures.js --test-coverage-include=ui/js/stage-controls.js --test-coverage-include=ui/js/toasts.js --test-coverage-lines=60 tests/js/*.test.js"
   }

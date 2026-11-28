@@ -27,20 +27,20 @@ def _entry(covered: int, statements: int) -> dict[str, object]:
 
 def test_package_key_groups_by_package_and_falls_back_to_top_level() -> None:
     """Un archivo dentro de un paquete cuenta para ese paquete; uno suelto va a `(top-level)`."""
-    assert package_key("D:\\wt\\src\\gestor_luces\\domain\\models.py") == "domain"
-    assert package_key("D:\\gestor_luces\\src\\gestor_luces\\domain\\models.py") == "domain"
-    assert package_key("/wt/src/gestor_luces/adapters/tray/winforms_menu.py") == "adapters"
-    assert package_key("src/gestor_luces/main.py") == TOP_LEVEL_KEY
+    assert package_key("D:\\wt\\src\\wiz_console\\domain\\models.py") == "domain"
+    assert package_key("D:\\wiz_console\\src\\wiz_console\\domain\\models.py") == "domain"
+    assert package_key("/wt/src/wiz_console/adapters/tray/winforms_menu.py") == "adapters"
+    assert package_key("src/wiz_console/main.py") == TOP_LEVEL_KEY
     assert package_key("src/otro_paquete/x.py") == TOP_LEVEL_KEY
 
 
 def test_package_coverages_sums_the_files_of_each_package() -> None:
     """Las lineas se suman por paquete, no se promedian por archivo."""
     files = {
-        "src/gestor_luces/domain/models.py": _entry(50, 50),
-        "src/gestor_luces/domain/scenes.py": _entry(40, 50),
-        "src/gestor_luces/adapters/a.py": _entry(10, 20),
-        "src/gestor_luces/main.py": _entry(1, 4),
+        "src/wiz_console/domain/models.py": _entry(50, 50),
+        "src/wiz_console/domain/scenes.py": _entry(40, 50),
+        "src/wiz_console/adapters/a.py": _entry(10, 20),
+        "src/wiz_console/main.py": _entry(1, 4),
     }
     assert package_coverages(files) == {
         "domain": (90, 100),
@@ -97,9 +97,9 @@ def test_main_fails_on_a_missing_report_and_on_a_package_below_its_floor(
         json.dumps(
             {
                 "files": {
-                    "src/gestor_luces/domain/models.py": _entry(80, 100),
-                    "src/gestor_luces/application/x.py": _entry(80, 100),
-                    "src/gestor_luces/adapters/y.py": _entry(60, 100),
+                    "src/wiz_console/domain/models.py": _entry(80, 100),
+                    "src/wiz_console/application/x.py": _entry(80, 100),
+                    "src/wiz_console/adapters/y.py": _entry(60, 100),
                 }
             }
         ),
@@ -115,9 +115,9 @@ def test_main_fails_on_a_missing_report_and_on_a_package_below_its_floor(
         json.dumps(
             {
                 "files": {
-                    "src/gestor_luces/domain/models.py": _entry(95, 100),
-                    "src/gestor_luces/application/x.py": _entry(80, 100),
-                    "src/gestor_luces/adapters/y.py": _entry(60, 100),
+                    "src/wiz_console/domain/models.py": _entry(95, 100),
+                    "src/wiz_console/application/x.py": _entry(80, 100),
+                    "src/wiz_console/adapters/y.py": _entry(60, 100),
                 }
             }
         ),

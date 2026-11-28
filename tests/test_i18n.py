@@ -14,23 +14,23 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.storage.json_repositories import (
+from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
     JsonSettingsRepository,
 )
-from gestor_luces.adapters.tray import (
+from wiz_console.adapters.tray import (
     TrayController,
     TrayPreset,
     build_tray_menu_spec,
     build_tray_title,
 )
-from gestor_luces.adapters.tray.menu_model import _TRAY_STRINGS
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.main import resolve_ui_directory
-from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.tray.menu_model import _TRAY_STRINGS
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.main import resolve_ui_directory
 
 
 class _RecordingTrayView:

@@ -13,18 +13,18 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.platform.windows import window_chrome
-from gestor_luces.adapters.system import single_instance as single_instance_module
-from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
-from gestor_luces.adapters.system.windows_autostart import (
+from wiz_console.adapters.platform.windows import window_chrome
+from wiz_console.adapters.system import single_instance as single_instance_module
+from wiz_console.adapters.system.single_instance import SingleInstanceGuard
+from wiz_console.adapters.system.windows_autostart import (
     DEFAULT_VALUE_NAME,
     RUN_KEY_PATH,
     WindowsRegistryAutostart,
     build_autostart_command,
 )
-from gestor_luces.adapters.tray import winforms_host, winforms_paint
-from gestor_luces.adapters.tray import winforms_icon as winforms_icon_module
-from gestor_luces.adapters.tray.winforms_icon import IconCache, _build_icon_image
+from wiz_console.adapters.tray import winforms_host, winforms_paint
+from wiz_console.adapters.tray import winforms_icon as winforms_icon_module
+from wiz_console.adapters.tray.winforms_icon import IconCache, _build_icon_image
 
 
 class _FakeHandle:

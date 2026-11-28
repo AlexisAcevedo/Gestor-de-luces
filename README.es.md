@@ -1,4 +1,4 @@
-# Gestor de Luces
+# WiZ Architectural Lighting Console
 
 [English](README.md) | [Español](README.es.md)
 
@@ -149,9 +149,9 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │       ├── ui_redesign_spec.md     # Especificación de rediseño de UI (EN)
 │       └── ui_redesign_spec.es.md  # Especificación de rediseño de UI (ES)
 ├── src/
-│   └── gestor_luces/
+│   └── wiz_console/
 │       ├── __init__.py
-│       ├── __main__.py              # Punto de entrada del paquete (python -m gestor_luces)
+│       ├── __main__.py              # Punto de entrada del paquete (python -m wiz_console)
 │       ├── main.py              # Raíz de composición y punto de entrada de la app
 │       ├── cli.py               # Herramienta de sondeo y diagnóstico de red por CLI
 │       ├── resources.py         # Resolución de assets y versión (dev y congelado con PyInstaller)
@@ -269,9 +269,9 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
 Inicia la consola de escritorio completa:
 
 ```bash
-python -m gestor_luces
+python -m wiz_console
 # o bien:
-python -m gestor_luces.main
+python -m wiz_console.main
 ```
 
 Parámetros opcionales aceptados por `main.py`:
@@ -282,26 +282,26 @@ Parámetros opcionales aceptados por `main.py`:
 
 ### 2. Modo Diagnóstico por Consola (CLI)
 
-El módulo `gestor_luces.cli` permite realizar descubrimientos de red, consultas de estado y pruebas de control por línea de comandos sin inicializar la interfaz gráfica:
+El módulo `wiz_console.cli` permite realizar descubrimientos de red, consultas de estado y pruebas de control por línea de comandos sin inicializar la interfaz gráfica:
 
 ```bash
 # Descubrir todos los focos presentes en la subred local:
-python -m gestor_luces.cli discover
+python -m wiz_console.cli discover
 
 # Consultar el estado en tiempo real de un foco específico:
-python -m gestor_luces.cli status --ip 192.168.100.6
+python -m wiz_console.cli status --ip 192.168.100.6
 
 # Encender el foco con un 80% de brillo:
-python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
+python -m wiz_console.cli on --ip 192.168.100.6 --brightness 80
 
 # Establecer un color RGB:
-python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
+python -m wiz_console.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Ajustar la temperatura de color (CCT en Kelvin):
-python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
+python -m wiz_console.cli kelvin --ip 192.168.100.6 2700
 
 # Apagar el foco:
-python -m gestor_luces.cli off --ip 192.168.100.6
+python -m wiz_console.cli off --ip 192.168.100.6
 ```
 
 ---
@@ -320,7 +320,7 @@ pytest
 
 Las pruebas de workflows detectan automáticamente Git Bash en Windows (descartando los stubs de WSL y WindowsApps), por lo que la suite completa de `pytest` se ejecuta sin problemas desde PowerShell sin exclusiones `--ignore`.
 
-La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
+La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=wiz_console --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
 
 Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
 

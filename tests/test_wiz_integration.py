@@ -8,13 +8,13 @@ getPilot y emita flujos continuos limitados por frecuencia sobre sockets UDP rea
 
 from __future__ import annotations
 
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.rate_limiter import StreamRateLimiter
-from gestor_luces.application.service import LightControlService
-from gestor_luces.domain.models import Bulb
-from gestor_luces.domain.value_objects import Color, LightMode
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 from tests.waits import wait_until
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.rate_limiter import StreamRateLimiter
+from wiz_console.application.service import LightControlService
+from wiz_console.domain.models import Bulb
+from wiz_console.domain.value_objects import Color, LightMode
 
 
 class InMemoryBulbRepository:

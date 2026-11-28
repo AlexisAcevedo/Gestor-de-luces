@@ -11,19 +11,19 @@ from typing import Any
 
 import pytest
 
-from gestor_luces import main as main_module
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application import ambilight_stream as ambilight_stream_module
-from gestor_luces.application import music_stream as music_stream_module
-from gestor_luces.application.ambilight_stream import AmbilightStreamManager
-from gestor_luces.application.music_stream import MusicSyncStreamManager
-from gestor_luces.application.rate_limiter import StreamRateLimiter
-from gestor_luces.application.service import LightControlService
-from gestor_luces.application.sleep_timer import SleepTimerManager
-from gestor_luces.domain.models import Bulb, LightState
-from gestor_luces.domain.value_objects import Color
 from tests.waits import wait_until_async
+from wiz_console import main as main_module
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application import ambilight_stream as ambilight_stream_module
+from wiz_console.application import music_stream as music_stream_module
+from wiz_console.application.ambilight_stream import AmbilightStreamManager
+from wiz_console.application.music_stream import MusicSyncStreamManager
+from wiz_console.application.rate_limiter import StreamRateLimiter
+from wiz_console.application.service import LightControlService
+from wiz_console.application.sleep_timer import SleepTimerManager
+from wiz_console.domain.models import Bulb, LightState
+from wiz_console.domain.value_objects import Color
 
 
 class _StubController:

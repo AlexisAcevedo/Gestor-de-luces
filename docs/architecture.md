@@ -2,7 +2,7 @@
 
 [English](architecture.md) | [Español](architecture.es.md)
 
-This document details the architectural foundation, structural layers, threading topologies, and concurrency synchronization mechanics employed in **Gestor de Luces**.
+This document details the architectural foundation, structural layers, threading topologies, and concurrency synchronization mechanics employed in **WiZ Architectural Lighting Console** (`wiz_console`).
 
 ---
 
@@ -50,12 +50,12 @@ The core principle behind this project is **strict isolation of business invaria
 
 ### Layer Separation
 
-1. **Domain Layer (`gestor_luces.domain`)**:
+1. **Domain Layer (`wiz_console.domain`)**:
    - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), endpoint validation (`validate_local_endpoint`), and global UI preference invariants in `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`), and `DEFAULT_THEME` (`"architectural-stone"`)).
    - Completely devoid of dependencies on external packages, operating system APIs, network libraries, or serialization frameworks.
    - Enforces business validation rules (e.g., RGB integers between 0 and 255, Kelvin bounds between 2,200K and 6,500K, local unicast IPv4 endpoint checks rejecting unspecified/broadcast/multicast addresses, and supported language/theme tokens).
 
-2. **Ports Layer (`gestor_luces.ports`)**:
+2. **Ports Layer (`wiz_console.ports`)**:
    - Defines structural typing contracts using Python's `typing.Protocol` with `@runtime_checkable` across `light_control.py`, `repositories.py`, and `autostart.py`.
    - Driving and driven contracts decouple the desktop shell and infrastructure drivers without a monolithic `interfaces.py` barrel:
      - `LightControlServicePort` (`ports/light_control.py`): Desktop-facing application service contract injected into `DesktopApplication`.
@@ -65,7 +65,7 @@ The core principle behind this project is **strict isolation of business invaria
      - `AudioSampler`: Contract for sampling system audio energy and frequency spectrum (`sample_frame`, `sample_audio_metrics`, `list_audio_devices`, `close`).
      - `AutostartManager` (`ports/autostart.py`): Registry autostart contract.
 
-3. **Application Layer (`gestor_luces.application`)**:
+3. **Application Layer (`wiz_console.application`)**:
    - Coordinates business workflows through `LightControlService` (`service.py`), delegating to bounded capability services (`bulb_control_service.py`, `bulb_inventory_service.py`, `scene_service.py`, `timer_service.py`, `ambilight_service.py`, `music_service.py`, `settings_service.py`) over a shared `service_context.py`.
    - Receives lazy sampler factories (`screen_sampler_factory`, `audio_sampler_factory`) injected from the composition root (`main.py`) so inner layers (`domain`, `ports`, `application`) never import `adapters` (enforced via AST static verification in `tests/test_security_hardening.py`).
    - Splits resource teardown between `close_audio_sampler()` (released while `BridgeLifecycle` closes active streams) and `close_all_resources()` during full shutdown, with rotating log files (`RotatingFileHandler`) and stream error backoff.
@@ -75,7 +75,7 @@ The core principle behind this project is **strict isolation of business invaria
      - `AmbilightStreamManager`: Runs dedicated screen-sampling streaming cycles.
      - `MusicSyncStreamManager`: Orchestrates WASAPI loopback audio sampling, FFT transformation, and color mapping.
 
-4. **Adapters Layer (`gestor_luces.adapters`)**:
+4. **Adapters Layer (`wiz_console.adapters`)**:
    - Implements ports with real-world infrastructure:
      - `adapters.wiz.udp_controller`: Manages UDP broadcast discovery and unicast JSON-RPC datagrams via `pywizlight`.
      - `adapters.storage.json_repositories`: Implements filesystem atomic persistence into `%LOCALAPPDATA%\WizConsole` (migrating legacy `%LOCALAPPDATA%\GestorDeLuces` files automatically on first launch).
@@ -210,7 +210,7 @@ With `RenderMode = System` the view still got ~20 px rows, a 1 px border in the 
 
 ### Case Study: Window Hide and Restore Lifecycle
 
-When the user closes or minimizes the main window, `gestor_luces` intercepts `window.events.closing` / `window.events.minimized`:
+When the user closes or minimizes the main window, `wiz_console` intercepts `window.events.closing` / `window.events.minimized`:
 - The window is hidden (`window.hide()`) rather than destroyed, allowing the application to continue running in the background. On the first user-initiated close/minimize hide, `_maybe_show_tray_hint()` dispatches a non-blocking localized tray notification (`tray_hint_title` / `tray_hint_message`) and persists `tray_hint_seen: true` in `settings.json` so subsequent hides remain silent.
 - When the user clicks "Show window" or double-clicks the tray icon, `TrayController` schedules `window.show()` and `window.restore()` safely onto the main thread using thread-safe event posting.
 - Hiding is not enough to leave the task switcher, and the window that hosts the tray message pump is a second one: the main form is genuinely hidden, but the hidden 0×0 tray `Form` stays `IsWindowVisible` for the whole session on purpose. `ShowInTaskbar = false` only removes the taskbar button, so `winforms_host.create_host_form` forces the handle and applies `WS_EX_TOOLWINDOW` before the pump shows it; a visible top-level window without that style is exactly what alt+tab lists as a leftover entry.
@@ -272,7 +272,7 @@ To prevent JSON corruption, tampering, or unbounded reads, repositories in `adap
 `adapters/ui_webview/app_menu.py` is a pure model of the window menu (File: Show/Hide, Start with Windows, Exit; Help: Keyboard shortcuts, About) and localized window title (`build_window_title`). The About entry opens a native message box that reports the display name, the resolved version, the licence, the author and the repository from module constants, so it reads the same from source and from a frozen build (which ships neither `pyproject.toml` nor importlib metadata). `DesktopApplication.start()` passes the menus to `webview.start(menu=...)` and `create_window()` initializes the localized window title. pywebview 6.2.1 menus are static (no checkable items, no update API, and unstyled system `MenuStrip` chrome), so `DesktopApplication` updates labels/checks in place via `menu_sync._sync_native_menu`, updates the native window title via `sync_window_title()`, and themes the live `MenuStrip`, its top-level items, dropdowns, and separators via `menu_sync._sync_native_menu_theme` using `THEME_PALETTES` and idempotent `ToolStripItem.Paint` + `Opened` chrome handlers (avoiding `ProfessionalColorTable` subclassing under `pythonnet 3.2.1`). Exit follows the same shutdown path as the tray's `Exit` action.
 
 ### Autostart (`--minimized`)
-The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), which writes the `WizConsole` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The registered command is `<exe> --minimized` when frozen and `pythonw -m gestor_luces.main --minimized` in development. On every launch, `refresh_if_stale` migrates any legacy `GestorDeLuces` entry to `WizConsole` and rewrites stale paths (for example after moving the portable folder). The registry is injectable, so tests never touch `HKCU`.
+The `AutostartManager` port (`ports/autostart.py`) is implemented by `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), which writes the `WizConsole` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The registered command is `<exe> --minimized` when frozen and `pythonw -m wiz_console.main --minimized` in development. On every launch, `refresh_if_stale` migrates any legacy `GestorDeLuces` entry to `WizConsole` and rewrites stale paths (for example after moving the portable folder). The registry is injectable, so tests never touch `HKCU`.
 
 ### Single Instance
 `adapters/system/single_instance.py` (`SingleInstanceGuard`) combines a named mutex with a named event protected by an explicit SDDL DACL (`SY`/`BA`/`OW`), guarding Win32 handles against `ERROR_ACCESS_DENIED` and `WAIT_FAILED` while cleaning up handles deterministically on release. A second launch signals the event and exits; the first instance reacts by showing its window (unless bypassed via `--multi-instance` for side-by-side diagnostics).

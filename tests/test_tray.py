@@ -19,11 +19,13 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.storage.json_repositories import (
+from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import POLL_SECONDS
+from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
 )
-from gestor_luces.adapters.tray import (
+from wiz_console.adapters.tray import (
     TrayController,
     TrayMenuEntry,
     TrayPreset,
@@ -33,7 +35,7 @@ from gestor_luces.adapters.tray import (
     resolve_entry_action,
     resolve_icon_rgb,
 )
-from gestor_luces.adapters.tray.menu_model import (
+from wiz_console.adapters.tray.menu_model import (
     ACTION_APPLY_PRESET,
     ACTION_CANCEL_SLEEP_TIMER,
     ACTION_HIDE_WINDOW,
@@ -49,18 +51,16 @@ from gestor_luces.adapters.tray.menu_model import (
     closest_brightness_level,
     select_tray_presets,
 )
-from gestor_luces.adapters.tray.pystray_tray import (
+from wiz_console.adapters.tray.pystray_tray import (
     PystrayTrayView,
     _owner_popup_icon_class,
     create_pystray_view,
 )
-from gestor_luces.adapters.tray.tray_icon import REFRESH_THREAD_NAME
-from gestor_luces.adapters.tray.tray_view import WINDOW_TOGGLE_ACTION, TrayView
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
-from tests.waits import POLL_SECONDS
+from wiz_console.adapters.tray.tray_icon import REFRESH_THREAD_NAME
+from wiz_console.adapters.tray.tray_view import WINDOW_TOGGLE_ACTION, TrayView
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
 
 
 async def _wait_for(predicate: Callable[[], bool], timeout: float = 2.0) -> None:

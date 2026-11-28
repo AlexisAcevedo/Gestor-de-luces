@@ -15,22 +15,22 @@ from typing import Any
 
 import pytest
 
-from gestor_luces import main as main_module
-from gestor_luces.adapters.platform.windows.window_geometry import (
+from tests.waits import POLL_SECONDS
+from wiz_console import main as main_module
+from wiz_console.adapters.platform.windows.window_geometry import (
     _compute_initial_window_geometry,
     _fit_native_window_height,
 )
-from gestor_luces.adapters.tray.tray_icon import (
+from wiz_console.adapters.tray.tray_icon import (
     ICON_THREAD_NAME,
     REFRESH_THREAD_NAME,
     TrayController,
 )
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.desktop import app as desktop_app
-from gestor_luces.desktop.app import DesktopApplication
-from tests.waits import POLL_SECONDS
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.desktop import app as desktop_app
+from wiz_console.desktop.app import DesktopApplication
 
 
 def _wait_until(predicate: Callable[[], bool], description: str, timeout: float = 5.0) -> None:
@@ -370,16 +370,16 @@ def test_create_window_clamps_min_size_to_small_screen(tmp_path: Path) -> None:
 
 def test_desktop_app_uses_port_and_dead_interfaces_module_removed() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    assert not (repo_root / "src" / "gestor_luces" / "ports" / "interfaces.py").exists()
+    assert not (repo_root / "src" / "wiz_console" / "ports" / "interfaces.py").exists()
 
-    app_py = repo_root / "src" / "gestor_luces" / "desktop" / "app.py"
+    app_py = repo_root / "src" / "wiz_console" / "desktop" / "app.py"
     tree = ast.parse(app_py.read_text(encoding="utf-8"), filename=str(app_py))
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                assert not alias.name.startswith("gestor_luces.application")
+                assert not alias.name.startswith("wiz_console.application")
         elif isinstance(node, ast.ImportFrom) and node.module:
-            assert not node.module.startswith("gestor_luces.application")
+            assert not node.module.startswith("wiz_console.application")
 
 
 # --- BridgeLifecycle shutdown races & timed-out future cancellation ---
@@ -416,7 +416,7 @@ def test_bridge_shutdown_handles_unstarted_and_already_closed_loop(
 
     monkeypatch.setattr(asyncio.BaseEventLoop, "run_forever", delayed_run_forever)
     # Prevent constructor from blocking for full 5s _LOOP_START_TIMEOUT.
-    monkeypatch.setattr("gestor_luces.adapters.ui_webview.lifecycle._LOOP_START_TIMEOUT", 0.05)
+    monkeypatch.setattr("wiz_console.adapters.ui_webview.lifecycle._LOOP_START_TIMEOUT", 0.05)
 
     bridge = WebviewBridge(service=LightControlService(controller=WizUdpController([])))
     try:
