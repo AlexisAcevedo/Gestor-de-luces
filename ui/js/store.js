@@ -151,6 +151,7 @@ export const appState = {
   theme: DEFAULT_THEME,
   bulbs: [],
   selectedIps: [],
+  zones: [],
   autoSync: false,
   scenes: SCENE_CATALOG.slice(),
   favoriteSceneIds: loadFavoriteSceneIds(),

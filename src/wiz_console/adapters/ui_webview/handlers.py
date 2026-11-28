@@ -301,12 +301,21 @@ class BridgeHandlers:
 
     # --- Presets personalizados -----------------------------------------------------
 
-    def save_custom_scene(self, name: str, source_ip: str | None = None) -> dict[str, Any]:
+    def save_custom_scene(
+        self,
+        name: str,
+        source_ip: str | None = None,
+        capture_all_targets: bool = False,
+    ) -> dict[str, Any]:
         """Guarda el estado luminico actual como un nuevo preset personalizado en JSON."""
         return self._call(
             lambda: self._service.save_custom_scene_from_current(
                 name=_req_str(name, field="name"),
                 source_ip=_opt_stripped(source_ip, field="source_ip"),
+                capture_all_targets=_req_bool(
+                    capture_all_targets,
+                    field="capture_all_targets",
+                ),
             )
         )
 
@@ -315,19 +324,60 @@ class BridgeHandlers:
         scene_id: str,
         name: str,
         capture_current: bool = False,
+        capture_all_targets: bool = False,
     ) -> dict[str, Any]:
         """Renombra un preset personalizado y opcionalmente sobreescribe su estado luminico."""
 
         def _apply() -> Any:
             cleaned_id = _req_str(scene_id, field="scene_id").strip()
             cleaned_name = _req_str(name, field="name").strip()
+            checked_multi = _req_bool(capture_all_targets, field="capture_all_targets")
             if _req_bool(capture_current, field="capture_current"):
                 return self._service.save_custom_scene_from_current(
-                    name=cleaned_name, scene_id=cleaned_id
+                    name=cleaned_name,
+                    scene_id=cleaned_id,
+                    capture_all_targets=checked_multi,
                 )
             return self._service.rename_custom_scene(scene_id=cleaned_id, new_name=cleaned_name)
 
         return self._call(_apply)
+
+    def save_zone(
+        self,
+        name: str,
+        bulb_ips: list[str],
+        zone_id: str | None = None,
+        icon: str = "room",
+    ) -> dict[str, Any]:
+        """Create or update a bulb zone / room group."""
+
+        def _apply() -> Any:
+            cleaned_name = _req_str(name, field="name")
+            if not isinstance(bulb_ips, list):
+                raise ValueError("bulb_ips must be a list of IP strings.")
+            cleaned_ips = [_req_str(ip, field="bulb_ip") for ip in bulb_ips]
+            cleaned_zone_id = _opt_stripped(zone_id, field="zone_id")
+            cleaned_icon = _opt_stripped(icon, field="icon") or "room"
+            return self._service.create_or_update_zone(
+                name=cleaned_name,
+                bulb_ips=cleaned_ips,
+                zone_id=cleaned_zone_id,
+                icon=cleaned_icon,
+            )
+
+        return self._call(_apply)
+
+    def delete_zone(self, zone_id: str) -> dict[str, Any]:
+        """Delete a persisted zone by ID."""
+        return self._call(
+            lambda: self._service.delete_zone(zone_id=_req_str(zone_id, field="zone_id").strip())
+        )
+
+    def select_zone(self, zone_id: str) -> dict[str, Any]:
+        """Select all bulbs belonging to a zone as active targets."""
+        return self._call(
+            lambda: self._service.select_zone(zone_id=_req_str(zone_id, field="zone_id").strip())
+        )
 
     def delete_custom_scene(self, scene_id: str) -> dict[str, Any]:
         """Elimina una escena personalizada guardada."""

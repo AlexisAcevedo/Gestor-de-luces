@@ -252,6 +252,109 @@ export function renderFixtureList() {
   restoreFocusKey(container, focusKey);
 }
 
+export function renderZonesStrip() {
+  const listEl = document.getElementById("zone-list");
+  if (!listEl) return;
+  const focusKey = captureFocusKey(listEl);
+  const zones = Array.isArray(appState.zones) ? appState.zones : [];
+  if (zones.length === 0) {
+    const hint = document.createElement("p");
+    hint.className = "zone-empty";
+    hint.textContent = t("zones.emptyHint");
+    listEl.replaceChildren(hint);
+    return;
+  }
+
+  const selectedSorted = appState.selectedIps.slice().sort().join(",");
+  const chips = zones.map((zone) => {
+    const row = document.createElement("div");
+    row.className = "zone-chip-row";
+
+    const zoneSorted = (zone.bulb_ips || []).filter((ip) => appState.bulbs.some((b) => b.ip === ip)).sort().join(",");
+    const isActive = Boolean(zoneSorted) && zoneSorted === selectedSorted;
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "zone-chip-trigger";
+    trigger.setAttribute("data-focus-key", `zone-select:${zone.id}`);
+    trigger.setAttribute("aria-pressed", String(isActive));
+    trigger.textContent = `${zone.name} (${(zone.bulb_ips || []).length})`;
+    trigger.addEventListener("click", () => {
+      const api = getBackendApi();
+      if (!api || typeof api.select_zone !== "function") return;
+      invokeApi(() => api.select_zone(zone.id), () => t("status.zoneSelected", { name: zone.name }));
+    });
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "zone-chip-action";
+    editBtn.setAttribute("data-focus-key", `zone-edit:${zone.id}`);
+    editBtn.setAttribute("aria-label", t("zones.editAria", { name: zone.name }));
+    editBtn.title = t("zones.editAria", { name: zone.name });
+    editBtn.appendChild(createSvgIcon("M13.5 3.5l3 3-9.25 9.25H4.25v-3L13.5 3.5Z", "1.4"));
+    editBtn.addEventListener("click", () => openZoneDialog(zone));
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "zone-chip-action";
+    delBtn.setAttribute("data-focus-key", `zone-del:${zone.id}`);
+    delBtn.setAttribute("aria-label", t("zones.deleteAria", { name: zone.name }));
+    delBtn.title = t("zones.deleteAria", { name: zone.name });
+    delBtn.appendChild(createSvgIcon("M5 6h10M8 6V4.5h4V6m-5.5 0 .75 10h5.5l.75-10", "1.4"));
+    delBtn.addEventListener("click", () => {
+      const api = getBackendApi();
+      if (!api || typeof api.delete_zone !== "function") return;
+      invokeApi(() => api.delete_zone(zone.id), () => t("status.zoneDeleted", { name: zone.name }));
+    });
+
+    row.append(trigger, editBtn, delBtn);
+    return row;
+  });
+  listEl.replaceChildren(...chips);
+  restoreFocusKey(listEl, focusKey);
+}
+
+export function openZoneDialog(existingZone = null) {
+  const dialog = document.getElementById("zone-dialog");
+  const titleEl = document.getElementById("zone-dialog-title");
+  const idInput = document.getElementById("zone-id-input");
+  const nameInput = document.getElementById("zone-name-input");
+  const bulbsList = document.getElementById("zone-bulbs-list");
+  const errorEl = document.getElementById("zone-dialog-error");
+  if (!dialog || !idInput || !nameInput || !bulbsList) return;
+
+  if (existingZone) {
+    idInput.value = existingZone.id;
+    nameInput.value = existingZone.name;
+    if (titleEl) titleEl.textContent = t("dialog.zoneEditTitle");
+  } else {
+    idInput.value = "";
+    nameInput.value = "";
+    if (titleEl) titleEl.textContent = t("dialog.zoneAddTitle");
+  }
+
+  const assignedSet = new Set(existingZone ? (existingZone.bulb_ips || []) : appState.selectedIps);
+  const rows = appState.bulbs.map((bulb) => {
+    const label = document.createElement("label");
+    label.className = "checkbox-control";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.setAttribute("type", "checkbox");
+    cb.name = "zone_bulb";
+    cb.value = bulb.ip;
+    cb.checked = assignedSet.has(bulb.ip);
+    const text = document.createElement("span");
+    text.textContent = `${bulb.name} (${bulb.ip})`;
+    label.append(cb, text);
+    return label;
+  });
+  bulbsList.replaceChildren(...rows);
+  setFieldError(nameInput, errorEl, "");
+  dialog.showModal();
+  nameInput.focus();
+  if (existingZone) nameInput.select();
+}
+
 export function syncAutoSyncPolling(enabled) {
   const active = Boolean(enabled);
   appState.autoSync = active;
@@ -516,6 +619,55 @@ export function bindFixtureEvents() {
         b.setAttribute("aria-pressed", "false");
       });
       invokeApi(() => getBackendApi().cancel_sleep_timer(), () => t("status.sleepCancelled"));
+    });
+  }
+
+  const openAddZoneBtn = document.getElementById("open-add-zone-btn");
+  if (openAddZoneBtn) {
+    openAddZoneBtn.addEventListener("click", () => openZoneDialog(null));
+  }
+
+  const zoneNameInput = document.getElementById("zone-name-input");
+  const zoneDialogError = document.getElementById("zone-dialog-error");
+  if (zoneNameInput) {
+    zoneNameInput.addEventListener("input", () => setFieldError(zoneNameInput, zoneDialogError, ""));
+  }
+
+  const zoneForm = document.getElementById("zone-form");
+  const zoneDialog = document.getElementById("zone-dialog");
+  const zoneSubmitBtn = document.getElementById("zone-submit-btn");
+  if (zoneForm && zoneDialog) {
+    zoneForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const idInput = document.getElementById("zone-id-input");
+      const nameInput = document.getElementById("zone-name-input");
+      const bulbsList = document.getElementById("zone-bulbs-list");
+      const zoneId = idInput ? idInput.value.trim() : "";
+      const name = nameInput ? nameInput.value.trim() : "";
+      const checkedIps = bulbsList
+        ? Array.from(bulbsList.querySelectorAll('input[type="checkbox"]'))
+            .filter((cb) => cb.checked)
+            .map((cb) => cb.value)
+        : [];
+      if (!name) return;
+      if (checkedIps.length === 0) {
+        setFieldError(nameInput, zoneDialogError, t("dialog.zoneNoBulbsSelected"));
+        return;
+      }
+
+      setFieldError(nameInput, zoneDialogError, "");
+      const ok = await withButtonBusy(zoneSubmitBtn, () =>
+        invokeApi(
+          () => getBackendApi().save_zone(name, checkedIps, zoneId || null, "room"),
+          () => t("status.zoneSaved", { name })
+        )
+      );
+      if (ok) {
+        zoneDialog.close();
+      } else {
+        setFieldError(nameInput, zoneDialogError, t("dialog.zoneSaveFailed"));
+        if (nameInput) nameInput.focus();
+      }
     });
   }
 }

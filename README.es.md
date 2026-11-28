@@ -27,9 +27,10 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Selección de color RGB con previsualización en vivo e ingreso hexadecimal.
    - Eliminación de luminarias protegida por un aviso **Deshacer** de 5 segundos y reconciliación automática por dirección MAC al descubrir focos, conservando alias y selección ante cambios de IP por DHCP.
 
-2. Catálogo de Escenas Nativas y Presets Personalizados:
+2. Catálogo de Escenas Nativas, Zonas y Presets Personalizados:
    - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (10% a 200%).
-   - Presets guardados por el usuario en disco local con aplicación en un clic, edición y eliminación protegida por un aviso **Deshacer** de 5 segundos en capa superior (`popover="manual"`).
+   - **Zonas / Habitaciones** (`zones.json`) definidas por el usuario para agrupar luminarias con selección en un clic y reconciliación automática ante cambios de IP por DHCP o bajas.
+   - Presets guardados en disco local —con captura opcional heterogénea por luminaria (`bulb_states`) combinando color, CCT, escenas nativas y encendido— con aplicación en un clic, edición y eliminación protegida por **Deshacer** de 5 segundos en capa superior (`popover="manual"`).
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
    - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).

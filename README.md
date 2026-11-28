@@ -27,9 +27,10 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - RGB color selection with live palette preview and hexadecimal input.
    - Fixture removal protected by a 5-second **Undo** toast, plus automatic MAC-based reconciliation on discovery so DHCP IP changes preserve custom fixture names and target selection.
 
-2. Firmware Scene Catalog & Custom Presets:
+2. Firmware Scene Catalog, Zones & Custom Presets:
    - Full catalog of all 36 native WiZ firmware scenes with dynamic speed regulation (10% to 200%).
-   - User-defined custom presets saved to local storage with one-click recall, editing, and deletion protected by a 5-second **Undo** toast in top-layer (`popover="manual"`).
+   - User-defined **Zones** (`zones.json`) grouping multiple fixtures for one-click selection and automatic DHCP/removal reconciliation.
+   - User-defined custom presets saved to local storage — supporting optional heterogeneous per-bulb states (`bulb_states`) across color, CCT, firmware scenes, and power — with one-click recall, editing, and deletion protected by a 5-second **Undo** toast in top-layer (`popover="manual"`).
 
 3. Ambient Screen Sync (Ambilight):
    - Real-time display screen sampling using pure-Python Win32 GDI screen capture (`mss`).

@@ -155,6 +155,14 @@
           </div>
         </header>
 
+        <div class="zones-section" id="zones-section">
+          <div class="zones-header">
+            <span class="zones-title" data-i18n="zones.title">Zones</span>
+            <button type="button" class="btn btn-compact btn-ghost" id="open-add-zone-btn" data-i18n="zones.newBtn">+ New Zone</button>
+          </div>
+          <div class="zone-list" id="zone-list" role="group" aria-label="Fixture zones" data-i18n-aria-label="zones.listAria"></div>
+        </div>
+
         <div
           class="fixture-list"
           id="fixture-list"
@@ -1255,11 +1263,55 @@
             <span data-i18n="dialog.presetOverwrite">Overwrite preset parameters with current live bulb state</span>
           </label>
         </div>
+
+        <div class="field-group" id="custom-scene-multibulb-row" hidden>
+          <label class="checkbox-control" for="custom-scene-multibulb-input">
+            <input type="checkbox" id="custom-scene-multibulb-input">
+            <span data-i18n="dialog.presetMultibulb">Capture individual per-bulb state for multi-bulb recall</span>
+          </label>
+        </div>
       </div>
 
       <footer class="dialog-footer">
         <button type="button" class="btn btn-ghost" data-close-dialog="custom-scene-dialog" data-i18n="dialog.cancel">Cancel</button>
         <button type="submit" class="btn btn-primary" id="custom-scene-submit-btn" data-i18n="dialog.presetSaveSubmit">Save Preset</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal Dialog: Create or Edit Zone (Light-dismiss enabled via closedby="any") -->
+  <dialog id="zone-dialog" class="console-dialog" closedby="any" aria-labelledby="zone-dialog-title">
+    <form id="zone-form" method="dialog" class="dialog-surface">
+      <header class="dialog-header">
+        <h2 id="zone-dialog-title" class="dialog-title" data-i18n="dialog.zoneAddTitle">Create Zone</h2>
+      </header>
+
+      <div class="dialog-body">
+        <input type="hidden" id="zone-id-input">
+        <div class="field-group">
+          <label for="zone-name-input" data-i18n="dialog.zoneNameLabel">Zone Name</label>
+          <input
+            type="text"
+            id="zone-name-input"
+            placeholder="Living Room"
+            data-i18n-placeholder="dialog.zoneNamePlaceholder"
+            maxlength="80"
+            required
+            autocomplete="off"
+          >
+        </div>
+
+        <fieldset class="zone-bulbs-fieldset" id="zone-bulbs-fieldset">
+          <legend data-i18n="dialog.zoneBulbsLegend">Fixtures in Zone</legend>
+          <div class="zone-bulbs-list" id="zone-bulbs-list"></div>
+        </fieldset>
+
+        <p class="field-error" id="zone-dialog-error" role="alert" hidden></p>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-close-dialog="zone-dialog" data-i18n="dialog.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="zone-submit-btn" data-i18n="dialog.zoneSaveSubmit">Save Zone</button>
       </footer>
     </form>
   </dialog>

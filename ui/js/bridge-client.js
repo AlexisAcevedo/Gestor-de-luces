@@ -14,6 +14,7 @@ export function createBrowserMockApi() {
     state: { is_on: true, brightness: 85, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
   }];
   let mockSelected = ["192.168.0.34"];
+  let mockZones = [];
   let mockCustomScenes = [
     { id: "preset01", name: "Editorial Warmth", mode: "temperature", brightness: 70, color: null, temperature: 2700, built_in_scene_id: null, speed: 100, is_favorite: true },
     { id: "preset02", name: "Cyan Backlight", mode: "rgb", brightness: 85, color: { r: 0, g: 180, b: 255, hex: "#00b4ff" }, temperature: null, built_in_scene_id: null, speed: 100, is_favorite: false }
@@ -95,6 +96,7 @@ export function createBrowserMockApi() {
       global_hotkey_errors: {},
       bulbs: JSON.parse(JSON.stringify(mockBulbs)), selected_ips: mockSelected.slice(),
       scenes: SCENE_CATALOG.slice(), custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
+      zones: JSON.parse(JSON.stringify(mockZones)),
       sleep_timer: {
         active: mockSleepTimer.active, remaining_seconds: mockSleepTimer.remaining_seconds,
         total_seconds: mockSleepTimer.total_seconds, target_ips: mockSleepTimer.target_ips.slice()
@@ -231,17 +233,38 @@ export function createBrowserMockApi() {
       });
       return buildMockEnvelope();
     },
-    save_custom_scene: (name) => {
-      const refBulb = mockBulbs.find((b) => mockSelected.includes(b.ip)) || mockBulbs[0];
+    save_custom_scene: (name, sourceIp, captureAllTargets = false) => {
+      const refBulb = mockBulbs.find((b) => (sourceIp ? b.ip === sourceIp : mockSelected.includes(b.ip))) || mockBulbs[0];
       const st = refBulb ? refBulb.state : { mode: "temperature", brightness: 100, color: null, temperature: 4200, scene_id: null, speed: 100 };
-      mockCustomScenes.push({
+      const targets = resolveTargets(null);
+      let bulbStates = null;
+      if (captureAllTargets && targets.length >= 2) {
+        bulbStates = {};
+        targets.forEach((ip) => {
+          const b = mockBulbs.find((entry) => entry.ip === ip);
+          if (b) {
+            bulbStates[ip] = {
+              is_on: Boolean(b.state.is_on),
+              mode: b.state.mode,
+              brightness: b.state.brightness,
+              color: b.state.color ? Object.assign({}, b.state.color) : null,
+              temperature: b.state.temperature,
+              built_in_scene_id: b.state.scene_id,
+              speed: b.state.speed || 100
+            };
+          }
+        });
+      }
+      const created = {
         id: Math.random().toString(16).slice(2, 10), name: String(name || "Preset").trim(),
         mode: st.mode, brightness: st.brightness, color: st.color ? Object.assign({}, st.color) : null,
         temperature: st.temperature, built_in_scene_id: st.scene_id, speed: st.speed || 100
-      });
+      };
+      if (bulbStates && Object.keys(bulbStates).length >= 2) created.bulb_states = bulbStates;
+      mockCustomScenes.push(created);
       return buildMockEnvelope();
     },
-    update_custom_scene: (sceneId, name, captureCurrent) => {
+    update_custom_scene: (sceneId, name, captureCurrent, captureAllTargets = false) => {
       const target = mockCustomScenes.find((s) => s.id === sceneId);
       if (target) {
         target.name = String(name || target.name).trim();
@@ -255,8 +278,40 @@ export function createBrowserMockApi() {
               speed: refBulb.state.speed || 100
             });
           }
+          const targets = resolveTargets(null);
+          if (captureAllTargets && targets.length >= 2) {
+            target.bulb_states = {};
+            targets.forEach((ip) => {
+              const b = mockBulbs.find((entry) => entry.ip === ip);
+              if (b) target.bulb_states[ip] = Object.assign({}, b.state);
+            });
+          } else {
+            delete target.bulb_states;
+          }
         }
       }
+      return buildMockEnvelope();
+    },
+    save_zone: (name, bulbIps, zoneId, icon) => {
+      const id = zoneId || Math.random().toString(16).slice(2, 10);
+      const next = {
+        id,
+        name: String(name || "Zone").trim(),
+        bulb_ips: Array.isArray(bulbIps) ? bulbIps.slice() : [],
+        icon: String(icon || "room")
+      };
+      const idx = mockZones.findIndex((z) => z.id === id);
+      if (idx >= 0) mockZones[idx] = next;
+      else mockZones.push(next);
+      return buildMockEnvelope();
+    },
+    delete_zone: (zoneId) => {
+      mockZones = mockZones.filter((z) => z.id !== zoneId);
+      return buildMockEnvelope();
+    },
+    select_zone: (zoneId) => {
+      const z = mockZones.find((entry) => entry.id === zoneId);
+      if (z) mockSelected = z.bulb_ips.slice();
       return buildMockEnvelope();
     },
     delete_custom_scene: (sceneId) => {

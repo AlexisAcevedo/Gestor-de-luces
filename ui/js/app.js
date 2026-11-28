@@ -10,7 +10,8 @@ import {
   getBackendApi, invokeApi, resolveBackendApi, setBackendUpgradeHandler, setEnvelopeHandler
 } from "./bridge-client.js";
 import {
-  bindFixtureEvents, renderFixtureList, renderSleepTimer, syncAutoSyncPolling, syncSleepTimerPolling
+  bindFixtureEvents, renderFixtureList, renderSleepTimer, renderZonesStrip,
+  syncAutoSyncPolling, syncSleepTimerPolling
 } from "./fixtures.js";
 import { bindMusicEvents, renderMusicPanel, syncMusicPolling } from "./music.js";
 import { bindSceneEvents, renderCustomScenesGrid, renderScenesGrid } from "./scenes.js";
@@ -30,8 +31,8 @@ import { setStatusMessage, showToast } from "./toasts.js";
 
 const lastRendered = {
   language: null, persistedLanguage: null, theme: null, persistedTheme: null,
-  bulbsKey: null, scenesKey: null, customKey: null, sleepKey: null, ambiKey: null, musicKey: null,
-  legacyFavsMigrated: false
+  bulbsKey: null, zonesKey: null, scenesKey: null, customKey: null, sleepKey: null,
+  ambiKey: null, musicKey: null, legacyFavsMigrated: false
 };
 
 export function resetUiSyncCache() {
@@ -123,6 +124,7 @@ export function syncThemeUi(theme, { persist = true } = {}) {
 }
 
 function renderAllPanels() {
+  renderZonesStrip();
   renderFixtureList();
   renderStageHeaderAndControls();
   renderSleepTimer();
@@ -139,6 +141,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   const wasMusicActive = Boolean(appState.musicSync && appState.musicSync.active);
   const hasBulbs = Array.isArray(envelope.bulbs);
   const hasSelected = Array.isArray(envelope.selected_ips);
+  const hasZones = Array.isArray(envelope.zones);
   const hasScenes = Array.isArray(envelope.scenes) && envelope.scenes.length > 0;
   const hasCustom = Array.isArray(envelope.custom_scenes);
   const hasSleep = Boolean(envelope.sleep_timer && typeof envelope.sleep_timer === "object");
@@ -202,6 +205,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
   if (hasBulbs) appState.bulbs = envelope.bulbs;
   if (hasSelected) appState.selectedIps = envelope.selected_ips;
+  if (hasZones) appState.zones = envelope.zones;
   if (hasScenes) appState.scenes = envelope.scenes;
   if (hasCustom) appState.customScenes = envelope.custom_scenes;
   if (hasSleep) appState.sleepTimer = envelope.sleep_timer;
@@ -223,7 +227,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
 
   if (langChanged) {
-    lastRendered.bulbsKey = lastRendered.scenesKey = lastRendered.customKey = null;
+    lastRendered.bulbsKey = lastRendered.zonesKey = lastRendered.scenesKey = lastRendered.customKey = null;
     lastRendered.sleepKey = lastRendered.ambiKey = lastRendered.musicKey = null;
   }
 
@@ -235,6 +239,13 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
       bulbsChanged = true;
       renderFixtureList();
       renderStageHeaderAndControls();
+    }
+  }
+  if (hasZones || bulbsChanged || langChanged) {
+    const nextKey = JSON.stringify([appState.zones, appState.selectedIps, appState.bulbs.map((b) => b.ip)]);
+    if (nextKey !== lastRendered.zonesKey) {
+      lastRendered.zonesKey = nextKey;
+      renderZonesStrip();
     }
   }
   if (hasScenes || hasFavScenes || bulbsChanged || langChanged) {

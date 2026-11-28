@@ -172,6 +172,117 @@
     padding: 2px;
   }
 
+  .zones-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 2px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .zones-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .zones-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+  }
+
+  .zone-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .zone-empty {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .zone-chip-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+  }
+
+  .zone-chip-trigger {
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 4px 6px;
+    min-height: 24px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+  }
+
+  .zone-chip-trigger[aria-pressed="true"] {
+    background-color: var(--accent);
+    color: var(--primary-btn-ink, #fff);
+  }
+
+  .zone-chip-action {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    min-width: 24px;
+    min-height: 24px;
+    padding: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+  }
+
+  .zone-bulbs-fieldset {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .zone-bulbs-fieldset legend {
+    padding: 0 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .zone-bulbs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .custom-scene-multibulb-badge {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-3);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    width: fit-content;
+  }
+
   .rail-footer {
     display: flex;
     flex-direction: column;

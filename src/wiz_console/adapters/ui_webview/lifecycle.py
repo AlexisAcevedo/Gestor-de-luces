@@ -219,6 +219,7 @@ class BridgeLifecycle:
         selected_ips = self._service.get_target_ips()
         scenes = [scene.to_dict() for scene in list_builtin_scenes()]
         custom_scenes = [scene.to_dict() for scene in self._service.list_custom_scenes()]
+        zones = [zone.to_dict() for zone in self._service.list_zones()]
         sleep_timer = self._service.get_sleep_timer_status()
         ambilight = self._service.get_ambilight_status()
         monitors = list(self._monitors_cache)
@@ -241,6 +242,7 @@ class BridgeLifecycle:
             "selected_ips": selected_ips,
             "scenes": scenes,
             "custom_scenes": custom_scenes,
+            "zones": zones,
             "sleep_timer": sleep_timer,
             "ambilight": ambilight,
             "monitors": monitors,

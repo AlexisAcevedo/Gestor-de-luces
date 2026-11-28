@@ -226,6 +226,9 @@ class _FakeLightControlService:
     def list_custom_scenes(self) -> list[Any]:
         return []
 
+    def list_zones(self) -> list[Any]:
+        return []
+
     def get_sleep_timer_status(self) -> dict[str, Any]:
         return {"active": False}
 

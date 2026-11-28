@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from wiz_console.domain.models import Bulb
+from wiz_console.domain.models import Bulb, Zone
 from wiz_console.domain.scenes import CustomScene
 
 
@@ -174,6 +174,30 @@ class LightControlServicePort(Protocol):
         capture_all_targets: bool = False,
     ) -> CustomScene:
         """Captura la fotografia luminica actual del foco de referencia y la guarda como preset."""
+        ...
+
+    # --- Zonas y habitaciones ---
+    def list_zones(self) -> list[Zone]:
+        """Return all persisted bulb zones."""
+        ...
+
+    def create_or_update_zone(
+        self,
+        name: str,
+        bulb_ips: list[str],
+        *,
+        zone_id: str | None = None,
+        icon: str = "room",
+    ) -> Zone:
+        """Create or update a bulb zone and persist it."""
+        ...
+
+    def delete_zone(self, zone_id: str) -> None:
+        """Delete a zone by ID."""
+        ...
+
+    def select_zone(self, zone_id: str) -> list[str]:
+        """Select all registered bulbs assigned to a zone as targets."""
         ...
 
     def rename_custom_scene(self, scene_id: str, new_name: str) -> CustomScene:
