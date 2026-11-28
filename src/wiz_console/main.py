@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from wiz_console.adapters.ambilight.mss_sampler import MssScreenSampler
+from wiz_console.adapters.api.local_http_api import LocalHttpApiServer
 from wiz_console.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
 from wiz_console.adapters.platform.windows import (
     DARK_TITLEBAR_ENABLED,
@@ -332,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
             autostart=autostart,
             hotkeys=_default_hotkeys(),
             session_monitor=_default_session_monitor(),
+            local_api=LocalHttpApiServer(bridge),
         )
         apply_app_user_model_id()
         app.create_window()

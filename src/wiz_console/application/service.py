@@ -181,6 +181,18 @@ class LightControlService:
         """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
         return self._settings.set_transition_seconds(seconds)
 
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        return self._settings.get_local_api_config()
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        return self._settings.set_local_api_config(config)
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        return self._settings.rotate_local_api_token()
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()

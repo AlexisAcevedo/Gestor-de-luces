@@ -63,6 +63,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Interpolación suave (`ease-in-out`) para cambios de color RGB y Kelvin (`0.0s` instantáneo por defecto o `0.5s–5.0s`) con cancelación preventiva por bombilla y precedencia de flujos continuos.
 11. Detección de Capacidades y Diagnóstico Wi-Fi / Firmware:
    - Inferencia automática de capacidades ópticas (`BulbCapabilities` mediante `infer_bulb_capabilities`) junto a insignias de intensidad de señal Wi-Fi (`dBm`) y versión de firmware en el cajón de luminarias con adaptación automática de controles RGB.
+12. CLI Completo y API HTTP Local Opcional (`LocalHttpApiServer`):
+   - Selección por `--name` guardado y subcomandos `brightness`, `scene`, `preset` y `zones` en CLI, junto a una API HTTP local opcional en `127.0.0.1` (`Bearer` validado con `hmac.compare_digest`, límite de 16 KiB, desactivada por defecto).
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).

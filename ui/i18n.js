@@ -272,6 +272,10 @@
       "auto.ruleSceneLabel": "Scene #",
       "auto.addRuleBtn": "Add Rule",
       "auto.removeRule": "Remove",
+      "auto.localApiEnabled": "Enable loopback HTTP API (127.0.0.1)",
+      "auto.localApiPortLabel": "Port",
+      "auto.localApiTokenLabel": "Bearer Token",
+      "auto.rotateTokenBtn": "Rotate Token",
 
       /* Dialogos modales */
       "dialog.cancel": "Cancel",
@@ -431,7 +435,9 @@
       "dimming.transitionAria": "Transition crossfade duration",
       "dimming.transitionInstant": "0s Instant",
       "stage.rgbUnsupportedHint": "Selected fixture supports white tones only (no RGB hardware).",
-      "status.transitionSet": "Transition crossfade set to {seconds}s."
+      "status.transitionSet": "Transition crossfade set to {seconds}s.",
+      "status.localApiSaved": "Loopback HTTP API settings updated.",
+      "status.localApiTokenRotated": "Local HTTP API Bearer token rotated."
     },
 
     es: {
@@ -698,6 +704,10 @@
       "auto.ruleSceneLabel": "Escena #",
       "auto.addRuleBtn": "Agregar regla",
       "auto.removeRule": "Quitar",
+      "auto.localApiEnabled": "Activar API HTTP local (127.0.0.1)",
+      "auto.localApiPortLabel": "Puerto",
+      "auto.localApiTokenLabel": "Token Bearer",
+      "auto.rotateTokenBtn": "Rotar token",
       "dialog.addTitle": "Agregar Luminaria por IP",
       "dialog.addSubtitle": "Conecta directamente un foco WiZ en tu red local cuando el escaneo automático no lo encuentra.",
       "dialog.addIpLabel": "Dirección IP de la Luminaria",
@@ -854,7 +864,9 @@
       "dimming.transitionAria": "Duración de transición gradual",
       "dimming.transitionInstant": "0s Instantánea",
       "stage.rgbUnsupportedHint": "La luminaria seleccionada solo admite tonos blancos (sin hardware RGB).",
-      "status.transitionSet": "Transición gradual ajustada a {seconds}s."
+      "status.transitionSet": "Transición gradual ajustada a {seconds}s.",
+      "status.localApiSaved": "Configuración de API HTTP local actualizada.",
+      "status.localApiTokenRotated": "Token Bearer de la API local rotado."
     }
   };
 

@@ -52,6 +52,7 @@ export function createBrowserMockApi() {
     on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
     rules: []
   };
+  let mockLocalApi = { enabled: false, port: 18899, token: "" };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -121,6 +122,7 @@ export function createBrowserMockApi() {
       context_automation: JSON.parse(JSON.stringify(mockContextAutomation)),
       context_status: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
       transition_seconds: mockTransitionSeconds,
+      local_api: Object.assign({}, mockLocalApi),
       error: null
     });
   }
@@ -465,6 +467,15 @@ export function createBrowserMockApi() {
     },
     set_transition_seconds: (seconds) => {
       mockTransitionSeconds = Math.max(0, Math.min(5, Number(seconds) || 0));
+      return buildMockEnvelope();
+    },
+    set_local_api_config: (config) => {
+      mockLocalApi = Object.assign({}, mockLocalApi, config || {});
+      if (mockLocalApi.enabled && !mockLocalApi.token) mockLocalApi.token = "mock-bearer-token";
+      return buildMockEnvelope();
+    },
+    rotate_local_api_token: () => {
+      mockLocalApi.token = `mock-token-${Date.now()}`;
       return buildMockEnvelope();
     }
   };
