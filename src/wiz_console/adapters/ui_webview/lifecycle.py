@@ -248,6 +248,14 @@ class BridgeLifecycle:
             "monitors": monitors,
             "music_sync": music_sync,
             "audio_devices": audio_devices,
+            "circadian": self._service.get_circadian_config(),
+            "wakeup_ramp": self._service.get_wakeup_ramp_config(),
+            "wakeup_ramp_status": self._service.get_wakeup_ramp_status(),
+            "session_triggers": self._service.get_session_triggers(),
+            "context_automation": self._service.get_context_automation(),
+            "context_status": self._service.get_context_automation_status(),
+            "transition_seconds": self._service.get_transition_seconds(),
+            "local_api": self._service.get_local_api_config(),
             "error": error,
         }
 

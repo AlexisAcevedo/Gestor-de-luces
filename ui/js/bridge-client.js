@@ -41,6 +41,18 @@ export function createBrowserMockApi() {
       toggle_window: "Ctrl+Alt+W"
     }
   };
+  let mockCircadian = { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 };
+  let mockTransitionSeconds = 0;
+  let mockWakeupRamp = { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] };
+  let mockWakeupStatus = { active: false, progress: 0.0 };
+  let mockSessionTriggers = { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false };
+  let mockContextAutomation = {
+    enabled: false,
+    poll_seconds: 5,
+    on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+    rules: []
+  };
+  let mockLocalApi = { enabled: false, port: 18899, token: "" };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -103,6 +115,14 @@ export function createBrowserMockApi() {
       },
       ambilight: JSON.parse(JSON.stringify(mockAmbilight)), monitors: mockMonitors.slice(),
       music_sync: JSON.parse(JSON.stringify(mockMusicSync)), audio_devices: mockAudioDevices.slice(),
+      circadian: Object.assign({}, mockCircadian),
+      wakeup_ramp: Object.assign({}, mockWakeupRamp),
+      wakeup_ramp_status: Object.assign({}, mockWakeupStatus),
+      session_triggers: Object.assign({}, mockSessionTriggers),
+      context_automation: JSON.parse(JSON.stringify(mockContextAutomation)),
+      context_status: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
+      transition_seconds: mockTransitionSeconds,
+      local_api: Object.assign({}, mockLocalApi),
       error: null
     });
   }
@@ -166,18 +186,20 @@ export function createBrowserMockApi() {
       };
       return buildMockEnvelope();
     },
-    add_manual_bulb: (ip, name) => {
+    add_manual_bulb: (ip, name, protocol = "wiz") => {
       const cleaned = String(ip || "").trim();
       if (!cleaned) {
         return Promise.resolve({ ok: false, bulbs: mockBulbs, selected_ips: mockSelected, scenes: SCENE_CATALOG.slice(), error: "IP cannot be empty." });
       }
-      const label = String(name || "").trim() || `WiZ Bulb (${cleaned})`;
+      const proto = String(protocol || "wiz").trim().toLowerCase() === "govee" ? "govee" : "wiz";
+      const label = String(name || "").trim() || `${proto === "govee" ? "Govee Bulb" : "WiZ Bulb"} (${cleaned})`;
       const existing = mockBulbs.find((b) => b.ip === cleaned);
       if (existing) {
         existing.name = label;
+        existing.protocol = proto;
       } else {
         mockBulbs.push({
-          ip: cleaned, mac: "a8bb50001122", name: label, module_name: "ESP01_SHRGB1C_31", is_online: true,
+          ip: cleaned, mac: "a8bb50001122", name: label, module_name: proto === "govee" ? "GOVEE_LAN_RGB" : "ESP01_SHRGB1C_31", protocol: proto, is_online: true,
           state: { is_on: true, brightness: 100, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
         });
         if (!mockSelected.includes(cleaned)) mockSelected.push(cleaned);
@@ -383,23 +405,29 @@ export function createBrowserMockApi() {
       if (mockAmbilight.active) mockAmbilight.frames_sent += 4;
       return Promise.resolve({ ok: true, ambilight: JSON.parse(JSON.stringify(mockAmbilight)), error: null });
     },
-    start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips) => {
+    start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips, bandMap, beatBoost, customPalette) => {
       const targets = resolveTargets(ips);
       const sampled = { r: 240, g: 52, b: 112, hex: "#f03470" };
       mockAmbilight.active = false;
       mockAmbilight.target_ips = [];
+      const cleanedBands = (bandMap && typeof bandMap === "object") ? Object.assign({}, bandMap) : {};
+      const boost = beatBoost == null ? true : Boolean(beatBoost);
+      const custom = (customPalette && typeof customPalette === "object")
+        ? Object.assign({ bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" }, customPalette)
+        : { bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" };
       mockMusicPrefs = {
         device_index: deviceIndex != null ? Number(deviceIndex) : -1,
         palette_mode: String(paletteMode || "spectrum"), sensitivity: Number(sensitivity || 1.0),
         smoothing_alpha: Number(smoothingAlpha || 0.50), audio_brightness: Boolean(audioBrightness),
-        brightness: Number(brightness || 85)
+        brightness: Number(brightness || 85), band_map: cleanedBands, beat_boost: boost, custom_palette: custom
       };
       mockMusicSync = {
         active: true, device_index: mockMusicPrefs.device_index,
         palette_mode: mockMusicPrefs.palette_mode, sensitivity: mockMusicPrefs.sensitivity,
         smoothing_alpha: mockMusicPrefs.smoothing_alpha, audio_brightness: mockMusicPrefs.audio_brightness,
         brightness: mockMusicPrefs.brightness, fixed_brightness: mockMusicPrefs.brightness,
-        rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, last_color: sampled,
+        rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, beat: true, beat_intensity: 0.82,
+        band_map: cleanedBands, beat_boost: boost, custom_palette: custom, last_color: sampled,
         target_ips: targets, frames_sent: mockMusicSync.frames_sent + 1
       };
       mutateTargetBulbs(ips, (st) => {
@@ -414,6 +442,43 @@ export function createBrowserMockApi() {
     get_music_sync_status: () => {
       if (mockMusicSync.active) mockMusicSync.frames_sent += 3;
       return Promise.resolve({ ok: true, music_sync: JSON.parse(JSON.stringify(mockMusicSync)), error: null });
+    },
+    set_circadian_config: (config) => {
+      mockCircadian = Object.assign({}, mockCircadian, config || {});
+      return buildMockEnvelope();
+    },
+    set_wakeup_ramp_config: (config) => {
+      mockWakeupRamp = Object.assign({}, mockWakeupRamp, config || {});
+      return buildMockEnvelope();
+    },
+    trigger_wakeup_ramp: () => {
+      mockWakeupStatus = { active: true, progress: 0.0 };
+      return buildMockEnvelope();
+    },
+    cancel_wakeup_ramp: () => {
+      mockWakeupStatus = { active: false, progress: 0.0 };
+      return buildMockEnvelope();
+    },
+    set_session_triggers: (config) => {
+      mockSessionTriggers = Object.assign({}, mockSessionTriggers, config || {});
+      return buildMockEnvelope();
+    },
+    set_context_automation: (config) => {
+      mockContextAutomation = Object.assign({}, mockContextAutomation, config || {});
+      return buildMockEnvelope();
+    },
+    set_transition_seconds: (seconds) => {
+      mockTransitionSeconds = Math.max(0, Math.min(5, Number(seconds) || 0));
+      return buildMockEnvelope();
+    },
+    set_local_api_config: (config) => {
+      mockLocalApi = Object.assign({}, mockLocalApi, config || {});
+      if (mockLocalApi.enabled && !mockLocalApi.token) mockLocalApi.token = "mock-bearer-token";
+      return buildMockEnvelope();
+    },
+    rotate_local_api_token: () => {
+      mockLocalApi.token = `mock-token-${Date.now()}`;
+      return buildMockEnvelope();
     }
   };
 }
