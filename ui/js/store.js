@@ -153,6 +153,7 @@ export const appState = {
   selectedIps: [],
   zones: [],
   autoSync: false,
+  transitionSeconds: 0,
   scenes: SCENE_CATALOG.slice(),
   favoriteSceneIds: loadFavoriteSceneIds(),
   customScenes: [],
@@ -169,6 +170,7 @@ export const appState = {
     rules: []
   },
   contextStatus: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
+  localApi: { enabled: false, port: 18899, token: "" },
   globalHotkeys: {
     enabled: false,
     supported: false,

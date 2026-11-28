@@ -272,6 +272,10 @@
       "auto.ruleSceneLabel": "Scene #",
       "auto.addRuleBtn": "Add Rule",
       "auto.removeRule": "Remove",
+      "auto.localApiEnabled": "Enable loopback HTTP API (127.0.0.1)",
+      "auto.localApiPortLabel": "Port",
+      "auto.localApiTokenLabel": "Bearer Token",
+      "auto.rotateTokenBtn": "Rotate Token",
 
       /* Dialogos modales */
       "dialog.cancel": "Cancel",
@@ -280,6 +284,9 @@
       "dialog.addIpLabel": "Bulb IP Address",
       "dialog.addNameLabel": "Bulb Name (Optional)",
       "dialog.addNamePlaceholder": "Studio Key Light",
+      "dialog.addProtocolLabel": "LAN Protocol",
+      "dialog.protocolWiz": "Philips WiZ (UDP 38899)",
+      "dialog.protocolGovee": "Govee LAN (UDP 4003)",
       "dialog.addSubmit": "Add Bulb",
       "dialog.invalidIp": "Enter a valid IPv4 address (e.g. 192.168.1.45).",
       "dialog.addFailed": "Could not reach or register that fixture. Check the IP and try again.",
@@ -427,7 +434,13 @@
       "status.wakeupTriggered": "Sunrise wake-up ramp started.",
       "status.wakeupCancelled": "Sunrise wake-up ramp stopped.",
       "status.sessionTriggersSaved": "Windows session trigger settings saved.",
-      "status.contextAutomationSaved": "Context & On-Air rules updated."
+      "status.contextAutomationSaved": "Context & On-Air rules updated.",
+      "dimming.transitionAria": "Transition crossfade duration",
+      "dimming.transitionInstant": "0s Instant",
+      "stage.rgbUnsupportedHint": "Selected fixture supports white tones only (no RGB hardware).",
+      "status.transitionSet": "Transition crossfade set to {seconds}s.",
+      "status.localApiSaved": "Loopback HTTP API settings updated.",
+      "status.localApiTokenRotated": "Local HTTP API Bearer token rotated."
     },
 
     es: {
@@ -694,11 +707,18 @@
       "auto.ruleSceneLabel": "Escena #",
       "auto.addRuleBtn": "Agregar regla",
       "auto.removeRule": "Quitar",
+      "auto.localApiEnabled": "Activar API HTTP local (127.0.0.1)",
+      "auto.localApiPortLabel": "Puerto",
+      "auto.localApiTokenLabel": "Token Bearer",
+      "auto.rotateTokenBtn": "Rotar token",
       "dialog.addTitle": "Agregar Luminaria por IP",
       "dialog.addSubtitle": "Conecta directamente un foco WiZ en tu red local cuando el escaneo automático no lo encuentra.",
       "dialog.addIpLabel": "Dirección IP de la Luminaria",
       "dialog.addNameLabel": "Nombre de la Luminaria (Opcional)",
       "dialog.addNamePlaceholder": "Luz Principal de Estudio",
+      "dialog.addProtocolLabel": "Protocolo LAN",
+      "dialog.protocolWiz": "Philips WiZ (UDP 38899)",
+      "dialog.protocolGovee": "Govee LAN (UDP 4003)",
       "dialog.addSubmit": "Agregar Luminaria",
       "dialog.invalidIp": "Ingresa una dirección IPv4 válida (ej. 192.168.1.45).",
       "dialog.addFailed": "No se pudo contactar o registrar la luminaria. Verifica la IP e intenta de nuevo.",
@@ -846,7 +866,13 @@
       "status.wakeupTriggered": "Rampa de amanecer iniciada.",
       "status.wakeupCancelled": "Rampa de amanecer detenida.",
       "status.sessionTriggersSaved": "Configuración de disparadores de sesión guardada.",
-      "status.contextAutomationSaved": "Reglas contextuales y Al Aire actualizadas."
+      "status.contextAutomationSaved": "Reglas contextuales y Al Aire actualizadas.",
+      "dimming.transitionAria": "Duración de transición gradual",
+      "dimming.transitionInstant": "0s Instantánea",
+      "stage.rgbUnsupportedHint": "La luminaria seleccionada solo admite tonos blancos (sin hardware RGB).",
+      "status.transitionSet": "Transición gradual ajustada a {seconds}s.",
+      "status.localApiSaved": "Configuración de API HTTP local actualizada.",
+      "status.localApiTokenRotated": "Token Bearer de la API local rotado."
     }
   };
 

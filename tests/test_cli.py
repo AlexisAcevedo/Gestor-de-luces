@@ -13,8 +13,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.storage.json_repositories import (
+    JsonBulbRepository,
+    JsonSceneRepository,
+    JsonZoneRepository,
+)
 from wiz_console.adapters.wiz.udp_controller import WizUdpController
-from wiz_console.cli import run_command
+from wiz_console.cli import build_parser, run_command
+from wiz_console.domain.models import Bulb, Zone
+from wiz_console.domain.scenes import CustomScene
+from wiz_console.domain.value_objects import Color, LightMode
 
 
 def test_cli_has_no_own_sockets_nor_pywizlight() -> None:
@@ -85,3 +93,61 @@ def test_cli_discover_returns_same_bulbs_via_shared_controller() -> None:
             return await run_command(controller, args)
 
     assert asyncio.run(_scenario()) == 0
+
+
+async def test_cli_name_lookup_brightness_scene_preset_and_zones(tmp_path: Path) -> None:
+    """CLI resolves bulbs by saved --name and runs brightness, scene, preset, and zones."""
+    async with FakeWizBulbServer(mac="a8bb50000005") as server:
+        bulb_repo = JsonBulbRepository(data_dir=tmp_path)
+        bulb_repo.save_bulbs([Bulb(ip=server.endpoint, mac="a8bb50000005", name="Studio Key")])
+        scene_repo = JsonSceneRepository(data_dir=tmp_path)
+        scene_repo.save_scenes(
+            [
+                CustomScene(
+                    id="focus",
+                    name="Focus Warm",
+                    mode=LightMode.RGB,
+                    color=Color(255, 190, 120),
+                    brightness=80,
+                )
+            ]
+        )
+        zone_repo = JsonZoneRepository(data_dir=tmp_path)
+        zone_repo.save_zones([Zone(id="office", name="Office", bulb_ips=[server.endpoint])])
+
+        controller = WizUdpController(probe_candidates=[server.endpoint])
+        parser = build_parser()
+
+        args_bri = parser.parse_args(
+            ["--data-dir", str(tmp_path), "brightness", "--name", "Studio Key", "65"]
+        )
+        assert await run_command(controller, args_bri) == 0
+        assert server.pilot_state["dimming"] == 65
+
+        args_scene = parser.parse_args(
+            [
+                "--data-dir",
+                str(tmp_path),
+                "scene",
+                "--name",
+                "Studio Key",
+                "12",
+                "--brightness",
+                "75",
+            ]
+        )
+        assert await run_command(controller, args_scene) == 0
+        assert server.pilot_state["sceneId"] == 12
+
+        args_preset = parser.parse_args(
+            ["--data-dir", str(tmp_path), "preset", "--name", "Studio Key", "Focus Warm"]
+        )
+        assert await run_command(controller, args_preset) == 0
+        assert (server.pilot_state["r"], server.pilot_state["g"], server.pilot_state["b"]) == (
+            255,
+            190,
+            120,
+        )
+
+        args_zones = parser.parse_args(["--data-dir", str(tmp_path), "zones", "--select", "Office"])
+        assert await run_command(controller, args_zones) == 0

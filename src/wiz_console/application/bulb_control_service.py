@@ -52,6 +52,7 @@ class BulbControlService:
             self._stop_music_sync()
 
         async def _apply(ip: str) -> Bulb:
+            self._ctx.transition_engine.cancel_bulb(ip)
             bulb = self._ctx.ensure_bulb_entry(ip)
             ok = await self._ctx.controller.set_power(
                 ip, is_on=is_on, brightness=validated_brightness
@@ -78,6 +79,7 @@ class BulbControlService:
         self._ctx.music_sync.update_fixed_brightness(validated)
 
         async def _apply(ip: str) -> Bulb:
+            self._ctx.transition_engine.cancel_bulb(ip)
             bulb = self._ctx.ensure_bulb_entry(ip)
             ok = await self._ctx.controller.set_brightness(ip, brightness=validated)
             bulb.is_online = ok
@@ -111,21 +113,36 @@ class BulbControlService:
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)
-            ok = await self._ctx.controller.set_color(
-                ip,
-                color=color,
-                brightness=validated_brightness,
+            start_color = bulb.state.color if bulb.state.is_on else None
+            start_bri = bulb.state.brightness
+
+            async def _send(step_color: Color, step_bri: int | None) -> bool:
+                ok = await self._ctx.controller.set_color(
+                    ip,
+                    color=step_color,
+                    brightness=step_bri,
+                )
+                bulb.is_online = ok
+                if ok:
+                    bulb.state.is_on = True
+                    bulb.state.mode = LightMode.RGB
+                    bulb.state.color = step_color
+                    bulb.state.temperature = None
+                    bulb.state.scene_id = None
+                    bulb.state.scene_name = None
+                    if step_bri is not None:
+                        bulb.state.brightness = step_bri
+                return ok
+
+            await self._ctx.transition_engine.transition_color(
+                ip=ip,
+                start_color=start_color,
+                start_brightness=start_bri,
+                target_color=color,
+                target_brightness=validated_brightness,
+                duration_s=self._ctx.transition_seconds,
+                apply_fn=_send,
             )
-            bulb.is_online = ok
-            if ok:
-                bulb.state.is_on = True
-                bulb.state.mode = LightMode.RGB
-                bulb.state.color = color
-                bulb.state.temperature = None
-                bulb.state.scene_id = None
-                bulb.state.scene_name = None
-                if validated_brightness is not None:
-                    bulb.state.brightness = validated_brightness
             return bulb
 
         results = await asyncio.gather(*(_apply(ip) for ip in target_ips))
@@ -150,21 +167,36 @@ class BulbControlService:
 
         async def _apply(ip: str) -> Bulb:
             bulb = self._ctx.ensure_bulb_entry(ip)
-            ok = await self._ctx.controller.set_temperature(
-                ip,
-                kelvin=validated_temp,
-                brightness=validated_brightness,
+            start_temp = bulb.state.temperature if bulb.state.is_on else None
+            start_bri = bulb.state.brightness
+
+            async def _send(step_temp: int, step_bri: int | None) -> bool:
+                ok = await self._ctx.controller.set_temperature(
+                    ip,
+                    kelvin=step_temp,
+                    brightness=step_bri,
+                )
+                bulb.is_online = ok
+                if ok:
+                    bulb.state.is_on = True
+                    bulb.state.mode = LightMode.TEMPERATURE
+                    bulb.state.temperature = step_temp
+                    bulb.state.color = None
+                    bulb.state.scene_id = None
+                    bulb.state.scene_name = None
+                    if step_bri is not None:
+                        bulb.state.brightness = step_bri
+                return ok
+
+            await self._ctx.transition_engine.transition_temperature(
+                ip=ip,
+                start_kelvin=start_temp,
+                start_brightness=start_bri,
+                target_kelvin=validated_temp,
+                target_brightness=validated_brightness,
+                duration_s=self._ctx.transition_seconds,
+                apply_fn=_send,
             )
-            bulb.is_online = ok
-            if ok:
-                bulb.state.is_on = True
-                bulb.state.mode = LightMode.TEMPERATURE
-                bulb.state.temperature = validated_temp
-                bulb.state.color = None
-                bulb.state.scene_id = None
-                bulb.state.scene_name = None
-                if validated_brightness is not None:
-                    bulb.state.brightness = validated_brightness
             return bulb
 
         results = await asyncio.gather(*(_apply(ip) for ip in target_ips))
@@ -195,6 +227,7 @@ class BulbControlService:
         self._stop_music_sync()
 
         async def _apply(ip: str) -> Bulb:
+            self._ctx.transition_engine.cancel_bulb(ip)
             bulb = self._ctx.ensure_bulb_entry(ip)
             ok = await self._ctx.controller.set_scene(
                 ip,
