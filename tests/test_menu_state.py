@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.platform.windows.menu_state import (
+from wiz_console.adapters.platform.windows.menu_state import (
     GUI_INMENUMODE,
     GUI_POPUPMENUMODE,
     GUI_SYSTEMMENUMODE,

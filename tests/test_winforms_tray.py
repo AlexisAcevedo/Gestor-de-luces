@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.platform.windows.window_chrome import (
+from wiz_console.adapters.platform.windows.window_chrome import (
     APP_USER_MODEL_ID,
     DWMWA_WINDOW_CORNER_PREFERENCE,
     DWMWCP_ROUND,
@@ -32,21 +32,21 @@ from gestor_luces.adapters.platform.windows.window_chrome import (
     apply_tool_window_style,
     apply_window_icon,
 )
-from gestor_luces.adapters.tray import TrayMenuEntry, TrayPreset, build_tray_menu_spec
-from gestor_luces.adapters.tray.menu_model import (
+from wiz_console.adapters.tray import TrayMenuEntry, TrayPreset, build_tray_menu_spec
+from wiz_console.adapters.tray.menu_model import (
     ACTION_APPLY_PRESET,
     ACTION_CANCEL_SLEEP_TIMER,
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
     ACTION_TOGGLE_POWER,
 )
-from gestor_luces.adapters.tray.tray_view import (
+from wiz_console.adapters.tray.tray_view import (
     ICON_NAME,
     WINDOW_TOGGLE_ACTION,
     resolve_entry_action,
 )
-from gestor_luces.adapters.tray.winforms_host import create_host_form
-from gestor_luces.adapters.tray.winforms_tray import (
+from wiz_console.adapters.tray.winforms_host import create_host_form
+from wiz_console.adapters.tray.winforms_tray import (
     DARK_PALETTE,
     DEFAULT_PALETTE,
     LIGHT_PALETTE,
@@ -69,7 +69,7 @@ from gestor_luces.adapters.tray.winforms_tray import (
 
 ARCHITECTURAL_STONE = "architectural-stone"
 ATMOSPHERIC_DARK = "atmospheric-dark"
-TRAY_VIEW_LOGGER = "gestor_luces.adapters.tray.tray_view"
+TRAY_VIEW_LOGGER = "wiz_console.adapters.tray.tray_view"
 
 
 def _winforms() -> Any:
@@ -147,7 +147,7 @@ def test_create_winforms_view_returns_none_when_winforms_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Sin CLR la vista devuelve None (nunca lanza) y la bandeja cae a pystray."""
-    import gestor_luces.adapters.tray.winforms_tray as winforms_tray
+    import wiz_console.adapters.tray.winforms_tray as winforms_tray
 
     monkeypatch.setattr(winforms_tray, "_load_winforms", lambda: None)
     assert create_winforms_view(lambda action_id, payload: None) is None

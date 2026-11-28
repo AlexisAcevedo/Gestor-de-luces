@@ -25,17 +25,17 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
-from gestor_luces.adapters.tray.menu_model import ACTION_TURN_OFF
-from gestor_luces.adapters.tray.tray_icon import (
+from wiz_console.adapters.system.single_instance import SingleInstanceGuard
+from wiz_console.adapters.tray.menu_model import ACTION_TURN_OFF
+from wiz_console.adapters.tray.tray_icon import (
     ICON_THREAD_NAME,
     REFRESH_THREAD_NAME,
     TrayController,
 )
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
-from gestor_luces.desktop import app as desktop_app
-from gestor_luces.desktop.app import (
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
+from wiz_console.desktop import app as desktop_app
+from wiz_console.desktop.app import (
     HIDE_ON_CLOSE_THREAD_NAME,
     HIDE_ON_MINIMIZE_THREAD_NAME,
     MENU_SYNC_THREAD_NAME,

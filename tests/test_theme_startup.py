@@ -13,13 +13,13 @@ from urllib.parse import urljoin
 import pytest
 import webview.util
 
-from gestor_luces.adapters.ui_webview.bridge import BlockedJsApi, WebviewBridge
-from gestor_luces.adapters.ui_webview.http_server import NoCacheBottleServer
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.desktop import app as desktop_app
-from gestor_luces.desktop.app import DesktopApplication, _build_initial_ui_url
-from gestor_luces.main import _ui_asset_paths, resolve_ui_directory
+from wiz_console.adapters.ui_webview.bridge import BlockedJsApi, WebviewBridge
+from wiz_console.adapters.ui_webview.http_server import NoCacheBottleServer
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.desktop import app as desktop_app
+from wiz_console.desktop.app import DesktopApplication, _build_initial_ui_url
+from wiz_console.main import _ui_asset_paths, resolve_ui_directory
 
 
 class _FakeEvent:
@@ -311,8 +311,8 @@ def test_build_initial_ui_url_supports_language_fragment(tmp_path: Path) -> None
 def test_desktop_application_localizes_window_title_on_boot_and_language_switch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
-    from gestor_luces.adapters.ui_webview.app_menu import APP_DISPLAY_NAME, APP_DISPLAY_NAME_ES
+    from wiz_console.adapters.storage.json_repositories import JsonSettingsRepository
+    from wiz_console.adapters.ui_webview.app_menu import APP_DISPLAY_NAME, APP_DISPLAY_NAME_ES
 
     set_title_calls: list[str] = []
     menu_theme_calls: list[str] = []
@@ -371,7 +371,7 @@ def test_desktop_application_localizes_window_title_on_boot_and_language_switch(
 def test_hide_to_tray_notice_shows_once_and_persists_across_restarts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
+    from wiz_console.adapters.storage.json_repositories import JsonSettingsRepository
 
     monkeypatch.setattr(
         desktop_app, "_set_windows_dark_titlebar_attribute", lambda *_a, **_kw: True

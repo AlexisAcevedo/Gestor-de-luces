@@ -12,14 +12,14 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.cli import run_command
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.cli import run_command
 
 
 def test_cli_has_no_own_sockets_nor_pywizlight() -> None:
     """Garantiza que `cli.py` no abre sockets propios ni usa `pywizlight` directo (T-2.4)."""
-    source = Path("src/gestor_luces/cli.py").read_text(encoding="utf-8")
+    source = Path("src/wiz_console/cli.py").read_text(encoding="utf-8")
     assert "import socket" not in source
     assert "import ipaddress" not in source
     assert "from pywizlight" not in source

@@ -1,4 +1,4 @@
-# Gestor de Luces
+# WiZ Architectural Lighting Console
 
 [English](README.md) | [Español](README.es.md)
 
@@ -148,9 +148,9 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │       ├── ui_redesign_spec.md     # UI redesign specification (EN)
 │       └── ui_redesign_spec.es.md  # UI redesign specification (ES)
 ├── src/
-│   └── gestor_luces/
+│   └── wiz_console/
 │       ├── __init__.py
-│       ├── __main__.py              # Package entrypoint (python -m gestor_luces)
+│       ├── __main__.py              # Package entrypoint (python -m wiz_console)
 │       ├── main.py              # Composition root and application entrypoint
 │       ├── cli.py               # Low-level network probe and CLI diagnostics
 │       ├── resources.py         # Asset/version resolution (dev and PyInstaller-frozen)
@@ -268,9 +268,9 @@ No Python installation is required. Download the latest release from [**GitHub R
 Launch the desktop management console:
 
 ```bash
-python -m gestor_luces
+python -m wiz_console
 # or:
-python -m gestor_luces.main
+python -m wiz_console.main
 ```
 
 Supported CLI flags for `main.py`:
@@ -281,26 +281,26 @@ Supported CLI flags for `main.py`:
 
 ### 2. Low-Level Network CLI Mode
 
-Use `gestor_luces.cli` for direct network discovery, UDP diagnostic probing, and scriptable command execution without starting the graphical container:
+Use `wiz_console.cli` for direct network discovery, UDP diagnostic probing, and scriptable command execution without starting the graphical container:
 
 ```bash
 # Discover all bulbs on the local subnet via UDP broadcast:
-python -m gestor_luces.cli discover
+python -m wiz_console.cli discover
 
 # Query real-time status of a specific bulb:
-python -m gestor_luces.cli status --ip 192.168.100.6
+python -m wiz_console.cli status --ip 192.168.100.6
 
 # Turn a bulb on at 80% brightness:
-python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
+python -m wiz_console.cli on --ip 192.168.100.6 --brightness 80
 
 # Set bulb color using RGB:
-python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
+python -m wiz_console.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Set Correlated Color Temperature (CCT):
-python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
+python -m wiz_console.cli kelvin --ip 192.168.100.6 2700
 
 # Turn a bulb off:
-python -m gestor_luces.cli off --ip 192.168.100.6
+python -m wiz_console.cli off --ip 192.168.100.6
 ```
 
 ---
@@ -319,7 +319,7 @@ pytest
 
 Workflow tests auto-detect Git Bash on Windows (skipping WSL/WindowsApps shims), so the full `pytest` suite runs cleanly from PowerShell without `--ignore` exclusions.
 
-Coverage is gated **per package**, not as one global percentage: `domain` at least 90 %, `application` at least 75 % and `adapters` at least 55 % (`scripts/check_coverage.py`, run by CI). The percentage in the coverage badge is published by `.github/workflows/coverage-badge.yml` on every push to `main`, so it is never edited by hand. Measure it locally with `pytest --cov=gestor_luces --cov-report=term-missing` and check the gate with `python scripts/check_coverage.py coverage.json`.
+Coverage is gated **per package**, not as one global percentage: `domain` at least 90 %, `application` at least 75 % and `adapters` at least 55 % (`scripts/check_coverage.py`, run by CI). The percentage in the coverage badge is published by `.github/workflows/coverage-badge.yml` on every push to `main`, so it is never edited by hand. Measure it locally with `pytest --cov=wiz_console --cov-report=term-missing` and check the gate with `python scripts/check_coverage.py coverage.json`.
 
 All tests should pass (see the CI badge at the top of this file for the live status).
 

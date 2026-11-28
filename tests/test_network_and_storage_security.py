@@ -11,18 +11,18 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.storage import json_repositories
-from gestor_luces.adapters.storage.json_repositories import (
+from wiz_console.adapters.storage import json_repositories
+from wiz_console.adapters.storage.json_repositories import (
     DEFAULT_SETTINGS,
     JsonBulbRepository,
     JsonSceneRepository,
     JsonSettingsRepository,
     _atomic_write_json,
 )
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service_context import ServiceContext
-from gestor_luces.cli import build_parser, run_command
-from gestor_luces.domain import Bulb, Color, validate_local_endpoint
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service_context import ServiceContext
+from wiz_console.cli import build_parser, run_command
+from wiz_console.domain import Bulb, Color, validate_local_endpoint
 
 
 @pytest.mark.parametrize(

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import threading
 
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
 
 
 def test_delta_status_polls_return_only_target_section_on_async_loop() -> None:

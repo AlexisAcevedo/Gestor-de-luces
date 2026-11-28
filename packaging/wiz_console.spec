@@ -21,7 +21,7 @@ datas = [
     *asset_datas,
 ]
 binaries = []
-hiddenimports = collect_submodules("gestor_luces") + collect_submodules("webview.platforms")
+hiddenimports = collect_submodules("wiz_console") + collect_submodules("webview.platforms")
 hiddenimports += ["clr", "clr_loader", "pythonnet", "pyaudiowpatch", "pystray._win32", "winreg"]
 
 # pywebview (WinForms backend), pythonnet and PyAudioWPatch ship native/.NET payloads.
@@ -54,7 +54,7 @@ version_file.write_text(
 )
 
 a = Analysis(  # noqa: F821
-    [str(ROOT / "src" / "gestor_luces" / "main.py")],
+    [str(ROOT / "src" / "wiz_console" / "main.py")],
     pathex=[str(ROOT / "src")],
     binaries=binaries,
     datas=datas,

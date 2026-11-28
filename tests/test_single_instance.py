@@ -29,8 +29,8 @@ from pathlib import Path
 
 import pytest
 
-import gestor_luces
-from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
+import wiz_console
+from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 
 #: Techo de espera para cada condicion observable (arranque de un hijo, salida de un hijo).
 DEADLINE_SECONDS = 20.0
@@ -40,7 +40,7 @@ POLL_SECONDS = 0.01
 #: primario: tres ciclos del sondeo de 500 ms del listener.
 QUIET_WINDOW_SECONDS = 3 * 500 / 1000
 
-_SRC_ROOT = Path(gestor_luces.__file__).resolve().parents[1]
+_SRC_ROOT = Path(wiz_console.__file__).resolve().parents[1]
 
 #: Hijo de prueba: adquiere la guarda, publica su veredicto y se queda vivo leyendo stdin
 #: hasta `exit` (o hasta EOF, que es el modo sonda: adquiere, informa y sale).
@@ -48,7 +48,7 @@ _INSTANCE_SCRIPT = """
 import sys
 from pathlib import Path
 
-from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
+from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 
 mutex_name, event_name, marker_path = sys.argv[1], sys.argv[2], sys.argv[3]
 guard = SingleInstanceGuard(mutex_name=mutex_name, event_name=event_name)

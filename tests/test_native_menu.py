@@ -11,13 +11,13 @@ import sys
 from types import SimpleNamespace
 from typing import Any
 
-from gestor_luces.adapters.platform.windows.menu_sync import (
+from wiz_console.adapters.platform.windows.menu_sync import (
     _apply_menu_strip_theme,
     _sync_native_menu_theme,
 )
-from gestor_luces.adapters.tray.winforms_paint import DARK_PALETTE, LIGHT_PALETTE, parse_hex_color
-from gestor_luces.adapters.ui_webview.app_menu import AppMenu, AppMenuItem
-from gestor_luces.main import _sync_native_menu, _to_webview_menus
+from wiz_console.adapters.tray.winforms_paint import DARK_PALETTE, LIGHT_PALETTE, parse_hex_color
+from wiz_console.adapters.ui_webview.app_menu import AppMenu, AppMenuItem
+from wiz_console.main import _sync_native_menu, _to_webview_menus
 
 
 def _menu_spec() -> list[AppMenu]:
@@ -71,7 +71,7 @@ def test_to_webview_menus_handles_empty_spec() -> None:
 
 def test_sync_native_menu_skips_non_win32(monkeypatch) -> None:
     """`_sync_native_menu` es no-op fuera de Windows."""
-    monkeypatch.setattr("gestor_luces.main.sys.platform", "linux")
+    monkeypatch.setattr("wiz_console.main.sys.platform", "linux")
     calls: list[bool] = []
     _sync_native_menu(SimpleNamespace(native=SimpleNamespace()), _menu_spec())
     assert calls == []
@@ -79,7 +79,7 @@ def test_sync_native_menu_skips_non_win32(monkeypatch) -> None:
 
 def test_sync_native_menu_skips_missing_or_disposed_native(monkeypatch) -> None:
     """`_sync_native_menu` retorna sin tocar nada si no hay ventana nativa valida."""
-    monkeypatch.setattr("gestor_luces.main.sys.platform", "win32")
+    monkeypatch.setattr("wiz_console.main.sys.platform", "win32")
 
     # native_form None
     _sync_native_menu(SimpleNamespace(native=None), _menu_spec())
@@ -99,7 +99,7 @@ def test_sync_native_menu_skips_missing_or_disposed_native(monkeypatch) -> None:
 
 def test_sync_native_menu_applies_labels_and_checks(monkeypatch) -> None:
     """`_sync_native_menu` actualiza Text y Checked en el MenuStrip WinForms en vivo."""
-    monkeypatch.setattr("gestor_luces.main.sys.platform", "win32")
+    monkeypatch.setattr("wiz_console.main.sys.platform", "win32")
 
     # `_sync_native_menu` hace `from System import Action`; inyectamos un fake para
     # que `_apply()` se ejecute sin pythonnet real.
@@ -258,7 +258,7 @@ def _fake_menu_strip(
 def test_sync_native_menu_theme_applies_dark_palette_and_binds_paint_idempotently(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr("gestor_luces.adapters.platform.windows.menu_sync.sys.platform", "win32")
+    monkeypatch.setattr("wiz_console.adapters.platform.windows.menu_sync.sys.platform", "win32")
 
     class _FakeAction:
         def __init__(self, fn) -> None:
@@ -310,7 +310,7 @@ def test_sync_native_menu_theme_applies_dark_palette_and_binds_paint_idempotentl
 
 def test_sync_native_menu_theme_skips_non_win32_and_disposed(monkeypatch) -> None:
     api = _fake_winforms_api()
-    monkeypatch.setattr("gestor_luces.adapters.platform.windows.menu_sync.sys.platform", "linux")
+    monkeypatch.setattr("wiz_console.adapters.platform.windows.menu_sync.sys.platform", "linux")
     assert (
         _sync_native_menu_theme(
             SimpleNamespace(native=SimpleNamespace()), "atmospheric-dark", api=api
@@ -318,7 +318,7 @@ def test_sync_native_menu_theme_skips_non_win32_and_disposed(monkeypatch) -> Non
         is False
     )
 
-    monkeypatch.setattr("gestor_luces.adapters.platform.windows.menu_sync.sys.platform", "win32")
+    monkeypatch.setattr("wiz_console.adapters.platform.windows.menu_sync.sys.platform", "win32")
     assert (
         _sync_native_menu_theme(
             SimpleNamespace(native=SimpleNamespace(IsDisposed=True, IsHandleCreated=True)),

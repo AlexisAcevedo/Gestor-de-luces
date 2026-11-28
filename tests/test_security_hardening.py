@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gestor_luces.adapters.storage.json_repositories import _atomic_write_json
-from gestor_luces.adapters.ui_webview.bridge import (
+from wiz_console.adapters.storage.json_repositories import _atomic_write_json
+from wiz_console.adapters.ui_webview.bridge import (
     JS_API_DISPATCH,
     JS_API_EXCLUDED,
     BlockedJsApi,
@@ -18,16 +18,16 @@ from gestor_luces.adapters.ui_webview.bridge import (
     WebviewBridge,
     build_exposed_functions,
 )
-from gestor_luces.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
-from gestor_luces.adapters.wiz import udp_controller as udp_controller_module
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController, _safe_int, _safe_text
-from gestor_luces.application.service import (
+from wiz_console.adapters.ui_webview.lifecycle import ASYNC_LOOP_THREAD_NAME
+from wiz_console.adapters.wiz import udp_controller as udp_controller_module
+from wiz_console.adapters.wiz.udp_controller import WizUdpController, _safe_int, _safe_text
+from wiz_console.application.service import (
     MAX_DISPLAY_NAME_LEN,
     MAX_EXPLICIT_TARGETS,
     LightControlService,
     validate_local_endpoint,
 )
-from gestor_luces.domain.models import Bulb
+from wiz_console.domain.models import Bulb
 
 
 @pytest.mark.parametrize("value", [float("inf"), "abc", None, [], {}])
@@ -77,7 +77,7 @@ _BRIDGE_MODULES = ("bridge.py", "dispatch.py", "handlers.py", "lifecycle.py")
 
 def _bridge_modules() -> list[Path]:
     """Rutas absolutas de los modulos que componen el puente IPC."""
-    src_root = Path(__file__).resolve().parents[1] / "src" / "gestor_luces"
+    src_root = Path(__file__).resolve().parents[1] / "src" / "wiz_console"
     ui_root = src_root / "adapters" / "ui_webview"
     return [ui_root / name for name in _BRIDGE_MODULES]
 
@@ -253,9 +253,9 @@ async def test_discover_ignores_broadcast_hits_when_probe_fails(
     async def fake_probe(ip: str, timeout: float = 1.0) -> Bulb | None:
         return None
 
-    monkeypatch.setattr("gestor_luces.adapters.wiz.udp_controller.detect_local_ipv4", lambda: None)
+    monkeypatch.setattr("wiz_console.adapters.wiz.udp_controller.detect_local_ipv4", lambda: None)
     monkeypatch.setattr(
-        "gestor_luces.adapters.wiz.udp_controller.discovery.discover_lights",
+        "wiz_console.adapters.wiz.udp_controller.discovery.discover_lights",
         fake_discover_lights,
     )
     monkeypatch.setattr(controller, "probe_bulb", fake_probe)
@@ -297,7 +297,7 @@ async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly(
     privado del controlador: el contrato es «no filtrar sockets», y eso se mide en el objeto
     que el sistema operativo entrega.
     """
-    from gestor_luces.domain.value_objects import Color
+    from wiz_console.domain.value_objects import Color
 
     created: list[socket.socket] = []
     real_socket = socket.socket
@@ -334,18 +334,18 @@ async def test_stream_pilot_reuses_udp_socket_and_closes_cleanly(
 def test_inner_hexagonal_layers_never_import_adapters() -> None:
     import ast
 
-    src_root = Path(__file__).resolve().parents[1] / "src" / "gestor_luces"
+    src_root = Path(__file__).resolve().parents[1] / "src" / "wiz_console"
     for layer in ("domain", "ports", "application"):
         for py_file in (src_root / layer).rglob("*.py"):
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        assert not alias.name.startswith("gestor_luces.adapters"), (
+                        assert not alias.name.startswith("wiz_console.adapters"), (
                             f"{py_file} imports {alias.name}"
                         )
                 elif isinstance(node, ast.ImportFrom) and node.module:
-                    assert not node.module.startswith("gestor_luces.adapters"), (
+                    assert not node.module.startswith("wiz_console.adapters"), (
                         f"{py_file} imports from {node.module}"
                     )
 
@@ -359,11 +359,11 @@ def test_webview_bridge_depends_on_the_port_not_the_concrete_service() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    assert not alias.name.startswith("gestor_luces.application"), (
+                    assert not alias.name.startswith("wiz_console.application"), (
                         f"{bridge_file} imports {alias.name}"
                     )
             elif isinstance(node, ast.ImportFrom) and node.module:
-                assert not node.module.startswith("gestor_luces.application"), (
+                assert not node.module.startswith("wiz_console.application"), (
                     f"{bridge_file} imports from {node.module}"
                 )
             if isinstance(node, ast.ImportFrom):
@@ -379,7 +379,7 @@ def test_light_control_port_covers_the_service_surface_the_bridge_uses() -> None
     import inspect
     from typing import get_origin, get_type_hints
 
-    from gestor_luces.ports.light_control import LightControlServicePort
+    from wiz_console.ports.light_control import LightControlServicePort
 
     def satisfies(port_return: object, service_return: object) -> bool:
         """`service_return` cumple `port_return` si es el mismo o un subtipo estructural."""
@@ -446,7 +446,7 @@ def test_webview_bridge_build_response_marshals_reads_onto_event_loop() -> None:
 def test_index_html_has_no_inline_style_attributes() -> None:
     import re
 
-    from gestor_luces.main import resolve_ui_directory
+    from wiz_console.main import resolve_ui_directory
 
     index_html = (resolve_ui_directory() / "index.html").read_text(encoding="utf-8")
     assert re.search(r"\bstyle\s*=", index_html, flags=re.IGNORECASE) is None

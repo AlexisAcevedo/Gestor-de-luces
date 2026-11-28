@@ -35,7 +35,7 @@ jobs:
           ruff format --check .
 
       - name: Run tests
-        run: pytest --cov=gestor_luces --cov-report=term-missing --cov-report=json:coverage.json
+        run: pytest --cov=wiz_console --cov-report=term-missing --cov-report=json:coverage.json
 
       # Per-package floors (domain 90, application 75, adapters 55): a global percentage can be
       # padded with cheap tests in one layer while another stays untested.

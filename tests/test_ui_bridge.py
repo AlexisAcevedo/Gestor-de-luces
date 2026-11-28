@@ -12,11 +12,11 @@ import asyncio
 import time
 from typing import Any
 
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.main import main as run_main
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.main import main as run_main
 
 
 async def test_webview_bridge_full_lifecycle_over_udp() -> None:
@@ -162,7 +162,7 @@ def test_main_composition_root_smoke_test() -> None:
 
 async def test_webview_bridge_theme_and_fit_window_height(tmp_path) -> None:
     """Verifica `set_theme` y `fit_window_height` expuestos en `WebviewBridge`."""
-    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
+    from wiz_console.adapters.storage.json_repositories import JsonSettingsRepository
 
     fit_calls: list[int] = []
     settings_repo = JsonSettingsRepository(data_dir=tmp_path)
@@ -295,7 +295,7 @@ def test_bridge_sanitizes_internal_errors_from_js() -> None:
     """Internal OS, runtime, timeout, and native callback exceptions never leak paths or traces."""
     from unittest.mock import MagicMock
 
-    from gestor_luces.adapters.ui_webview.bridge import JsApi
+    from wiz_console.adapters.ui_webview.bridge import JsApi
 
     class FailingService(LightControlService):
         def __init__(self) -> None:

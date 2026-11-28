@@ -40,10 +40,10 @@ Los dispositivos WiZ admiten descubrimiento automático en la subred local. No o
 
 Emitir paquetes de descubrimiento a `255.255.255.255` suele fallar en equipos Windows donde existen adaptadores de red virtuales activos (como WSL, Hyper-V, VMware o adaptadores virtuales de Docker). Windows puede enrutar el paquete `255.255.255.255` hacia una placa virtual en lugar de la interfaz física conectada al router.
 
-**Implementación en `gestor_luces.adapters.wiz.udp_controller`**:
+**Implementación en `wiz_console.adapters.wiz.udp_controller`**:
 1. Inspección de Ruta de Socket: se abre un socket UDP ficticio hacia una dirección externa (`8.8.8.8:80`) para detectar qué dirección IPv4 física selecciona la tabla de enrutamiento del sistema operativo.
 2. Cálculo de Broadcast Dirigido: `compute_subnet_broadcast()` deriva la dirección de difusión de la subred `/24` (por ejemplo, `192.168.100.255`) y `WizUdpController.discover()` transmite el paquete de descubrimiento directamente a esa dirección.
-El CLI y la aplicación de escritorio usan ese mismo controlador, así que el descubrimiento tiene una sola implementación y los subcomandos de `gestor-luces` ejercitan el mismo camino que la UI.
+El CLI y la aplicación de escritorio usan ese mismo controlador, así que el descubrimiento tiene una sola implementación y los subcomandos de `wiz-console` ejercitan el mismo camino que la UI.
 
 ### Mecanismo de Apertura de Firewall por Unicast Directo
 

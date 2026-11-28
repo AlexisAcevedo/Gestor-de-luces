@@ -7,7 +7,7 @@ import ctypes
 import logging
 from types import SimpleNamespace
 
-from gestor_luces.main import (
+from wiz_console.main import (
     DARK_TITLEBAR_ENABLED,
     THEME_WINDOW_CHROME,
     WINDOW_DEFAULT_SIZE,

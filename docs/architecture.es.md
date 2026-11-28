@@ -2,7 +2,7 @@
 
 [English](architecture.md) | [Español](architecture.es.md)
 
-Este documento detalla los fundamentos arquitectónicos, las capas estructurales, las topologías de hilos y los mecanismos de sincronización de concurrencia utilizados en **Gestor de Luces**.
+Este documento detalla los fundamentos arquitectónicos, las capas estructurales, las topologías de hilos y los mecanismos de sincronización de concurrencia utilizados en **WiZ Architectural Lighting Console** (`wiz_console`).
 
 ---
 
@@ -50,12 +50,12 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 
 ### Separación de Responsabilidades por Capa
 
-1. **Capa de Dominio (`gestor_luces.domain`)**:
+1. **Capa de Dominio (`wiz_console.domain`)**:
    - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), validación de endpoints (`validate_local_endpoint`) y las invariantes de preferencias globales de interfaz en `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`) y `DEFAULT_THEME` (`"architectural-stone"`)).
    - Libre de dependencias externas: no importa librerías de red, APIs de Windows ni frameworks de interfaz de usuario.
    - Aplica invariantes de negocio (enteros RGB entre 0 y 255, rangos de temperatura Kelvin entre 2.200 K y 6.500 K, validación de endpoints IPv4 locales unicast rechazando direcciones sin especificar, broadcast o multicast, y códigos de idioma y tema permitidos).
 
-2. **Capa de Puertos (`gestor_luces.ports`)**:
+2. **Capa de Puertos (`wiz_console.ports`)**:
    - Define contratos mediante `typing.Protocol` con el decorador `@runtime_checkable` distribuidos en `light_control.py`, `repositories.py` y `autostart.py`, sin un barril monolítico `interfaces.py`:
      - `LightControlServicePort` (`ports/light_control.py`): Contrato del servicio de aplicación consumido por `DesktopApplication`.
      - `LightController` (`ports/repositories.py`): Define las operaciones de red (`discover`, `get_state`, `set_power`, `set_color`, `set_temperature`, `set_scene`, `stream_pilot`, `close`).
@@ -64,7 +64,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
      - `AudioSampler`: Contrato para muestrear la energía y el espectro frecuencial del audio del sistema (`sample_frame`, `sample_audio_metrics`, `list_audio_devices`, `close`).
      - `AutostartManager` (`ports/autostart.py`): Contrato de autoinicio en el registro.
 
-3. **Capa de Aplicación (`gestor_luces.application`)**:
+3. **Capa de Aplicación (`wiz_console.application`)**:
    - Orquesta los casos de uso mediante `LightControlService` (`service.py`), delegando en servicios específicos (`bulb_control_service.py`, `bulb_inventory_service.py`, `scene_service.py`, `timer_service.py`, `ambilight_service.py`, `music_service.py`, `settings_service.py`) sobre un contexto compartido (`service_context.py`).
    - Recibe fábricas perezosas de muestreo (`screen_sampler_factory`, `audio_sampler_factory`) inyectadas desde la raíz de composición (`main.py`) de modo que las capas internas (`domain`, `ports`, `application`) nunca importan `adapters` (verificado estáticamente vía AST en `tests/test_security_hardening.py`).
    - Separa el cierre de recursos entre `close_audio_sampler()` (invocado mientras `BridgeLifecycle` detiene los flujos activos) y `close_all_resources()` al finalizar el cierre completo, con rotación de logs (`RotatingFileHandler`) y retroceso exponencial ante errores de flujo.
@@ -74,7 +74,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
      - `AmbilightStreamManager`: Controla los ciclos periódicos de captura y suavizado de color en pantalla.
      - `MusicSyncStreamManager`: Orquesta el muestreo por WASAPI loopback, el análisis FFT y el mapeo de frecuencias a color.
 
-4. **Capa de Adaptadores e Infraestructura (`gestor_luces.adapters`)**:
+4. **Capa de Adaptadores e Infraestructura (`wiz_console.adapters`)**:
    - Implementa los puertos conectando con el hardware y el sistema operativo:
      - `adapters.wiz.udp_controller`: Gestiona el descubrimiento por broadcast UDP y los datagramas JSON-RPC unicast mediante `pywizlight`.
      - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\WizConsole` (migrando automáticamente los archivos de `%LOCALAPPDATA%\GestorDeLuces` en el primer arranque).
@@ -271,7 +271,7 @@ Para prevenir corrupción, manipulación o lecturas ilimitadas en disco, los rep
 `adapters/ui_webview/app_menu.py` es un modelo puro del menú de la ventana (Archivo: Mostrar/Ocultar, Iniciar con Windows, Salir; Ayuda: Atajos de teclado, Acerca de) y del título localizado (`build_window_title`). La entrada Acerca de abre un cuadro nativo que informa el nombre visible, la versión resuelta, la licencia, el autor y el repositorio desde constantes del módulo, así que se lee igual desde el fuente y desde un build congelado (que no lleva ni `pyproject.toml` ni metadatos de importlib). `DesktopApplication.start()` entrega el menú a `webview.start(menu=...)` y `create_window()` inicializa el título localizado. Los menús de pywebview 6.2.1 son estáticos (sin ítems con tilde ni API de actualización, y con cromado por defecto de Windows), por lo que `DesktopApplication` actualiza etiquetas y tildes en vivo vía `menu_sync._sync_native_menu`, actualiza el título nativo vía `sync_window_title()`, y tematiza el `MenuStrip`, ítems principales, desplegables y separadores mediante `menu_sync._sync_native_menu_theme` usando `THEME_PALETTES` y handlers idempotentes de `ToolStripItem.Paint` y `Opened` (evitando subclasificar `ProfessionalColorTable` por `pythonnet 3.2.1`). Salir sigue el mismo camino de cierre que `Exit` / `Salir` en la bandeja.
 
 ### Autoinicio (`--minimized`)
-El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe el valor `WizConsole` en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` migra automáticamente cualquier entrada legacy `GestorDeLuces` hacia `WizConsole` y reescribe rutas desactualizadas (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
+El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe el valor `WizConsole` en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m wiz_console.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` migra automáticamente cualquier entrada legacy `GestorDeLuces` hacia `WizConsole` y reescribe rutas desactualizadas (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
 
 ### Instancia Única
 `adapters/system/single_instance.py` (`SingleInstanceGuard`) combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`), controlando errores `ERROR_ACCESS_DENIED` y `WAIT_FAILED` y liberando los handles de Win32 de forma determinista. Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana (salvo que se indique `--multi-instance` para ejecución simultánea de diagnóstico).

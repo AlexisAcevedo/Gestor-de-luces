@@ -15,18 +15,20 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from gestor_luces.adapters.storage.json_repositories import (
+from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import wait_for_async, wait_quiet_async, wait_until_async
+from wiz_console.adapters.storage.json_repositories import (
     DEFAULT_SETTINGS,
     JsonBulbRepository,
     JsonSceneRepository,
     JsonSettingsRepository,
 )
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.domain.models import Bulb, LightState
-from gestor_luces.domain.scenes import CustomScene
-from gestor_luces.domain.value_objects import (
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.domain.models import Bulb, LightState
+from wiz_console.domain.scenes import CustomScene
+from wiz_console.domain.value_objects import (
     DEFAULT_LANGUAGE,
     DEFAULT_THEME,
     SUPPORTED_LANGUAGES,
@@ -36,8 +38,6 @@ from gestor_luces.domain.value_objects import (
     normalize_language,
     normalize_theme,
 )
-from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
-from tests.waits import wait_for_async, wait_quiet_async, wait_until_async
 
 #: Ventana de observacion para la asercion negativa del temporizador cancelado: cubre varios
 #: ciclos de atenuacion (el timer atenua paso a paso) y se sondea, no se duerme.
@@ -352,7 +352,7 @@ def test_resolve_default_data_dir_migrates_legacy_windows_and_unix_dirs(
     tmp_path: Path, monkeypatch
 ) -> None:
     """Migrates legacy GestorDeLuces data once without overwriting newer WizConsole files."""
-    from gestor_luces.adapters.storage.json_repositories import (
+    from wiz_console.adapters.storage.json_repositories import (
         APP_DATA_DIR_NAME,
         LEGACY_APP_DATA_DIR_NAME,
         LEGACY_UNIX_DATA_DIR_NAME,
