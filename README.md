@@ -34,13 +34,13 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 3. Ambient Screen Sync (Ambilight):
    - Real-time display screen sampling using pure-Python Win32 GDI screen capture (`mss`).
-   - Sampling modes: saturation-weighted `vibrant` color or screen `average` color, with auto-brightness and a configurable 10–20% minimum brightness floor.
-   - Continuous 10 Hz fire-and-forget UDP streaming with Exponential Moving Average (EMA) color smoothing.
+   - Sampling modes: saturation-weighted `vibrant` color or screen `average` color, with auto-brightness, configurable 10–20% minimum brightness floor, automatic cinema black-bar letterbox cropping, and per-bulb screen-zone mapping (`full`, `left`, `right`, `top`, `bottom`, `center`) in a single screen grab.
+   - Continuous 10 Hz fire-and-forget UDP streaming with per-bulb Exponential Moving Average (EMA) color smoothing.
 
 4. WASAPI Loopback Reactive Music Sync:
    - Real-time system audio capture via Windows Audio Session API (WASAPI) loopback (`PyAudioWPatch`).
-   - Fast Fourier Transform (FFT) spectral decomposition into Bass, Mid, and Treble energy bands using `numpy`.
-   - Frequency-to-color mapping with configurable gain sensitivity and smoothing decay.
+   - Fast Fourier Transform (FFT) spectral decomposition into Bass, Mid, and Treble energy bands using `numpy`, plus rolling energy-history **Beat Detector** (`BeatDetector`) with beat-boost brightness pulses.
+   - Four palettes (`spectrum`, `club`, `chill`, and user-defined 3-band `custom` hex colors), configurable gain sensitivity and smoothing decay, and per-bulb frequency-band mapping (`full`, `bass`, `mid`, `treble`).
 
 5. System Tray & Background Residency:
    - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`
@@ -52,6 +52,20 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 6. Progressive Sleep Timer:
    - Configurable countdown timer (1 to 240 minutes) with progressive brightness dimming down to zero before powering off.
+7. Circadian Curve & Wake-Up Sunrise Ramp:
+   - Opt-in time-of-day Kelvin and brightness curve (`CircadianConfig`) plus local-only scheduled sunrise ramp (`WakeupRampConfig`) targeting selected bulbs or zones.
+8. Windows Session Lock & Sleep Triggers:
+   - Opt-in Win32 session/power monitor (`WindowsSessionMonitor`) to turn lights off when locking or sleeping and restore prior color/Kelvin/scene state on unlock or resume.
+9. Foreground Process Profiles & Local On-Air Indicator (`v0.7.0`):
+   - Opt-in Win32 foreground executable rules (`ContextRule`) and local Windows ConsentStore microphone/camera On-Air override (`OnAirConfig`), automatically restoring prior lighting when leaving a call or tracked application.
+10. Configurable Crossfade Transitions (`TransitionEngine`):
+   - Smooth ease-in-out RGB and Kelvin crossfade interpolation (`0.0s` instant default or `0.5s–5.0s`) with per-bulb preemption and instant stream override.
+11. Bulb Capability Inference & Wi-Fi/Firmware Diagnostics:
+   - Automatic optical capability inference (`BulbCapabilities` via `infer_bulb_capabilities(module_name)`) plus live Wi-Fi RSSI (`dBm`) and firmware version badges in the fixture drawer with adaptive RGB UI gating.
+12. Complete CLI & Opt-In Loopback HTTP API (`LocalHttpApiServer`):
+   - CLI targeting by saved `--name`, plus `brightness`, `scene`, `preset`, and `zones` subcommands, alongside an opt-in `127.0.0.1` HTTP API (`Bearer` auth via `hmac.compare_digest`, 16 KiB body cap, disabled by default).
+13. Multi-Vendor LAN Foundation (WiZ + Govee LAN, `v0.8.0`):
+   - Vendor-agnostic `Bulb.protocol` routing via `CompositeLightController` (`adapters/registry.py`) and `GoveeLanController` (`adapters/govee/lan_controller.py`, UDP 4003), preserving single-console control across mixed WiZ and Govee LAN fixtures.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).
