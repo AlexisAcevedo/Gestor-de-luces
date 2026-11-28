@@ -45,6 +45,12 @@ export function createBrowserMockApi() {
   let mockWakeupRamp = { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] };
   let mockWakeupStatus = { active: false, progress: 0.0 };
   let mockSessionTriggers = { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false };
+  let mockContextAutomation = {
+    enabled: false,
+    poll_seconds: 5,
+    on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+    rules: []
+  };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -111,6 +117,8 @@ export function createBrowserMockApi() {
       wakeup_ramp: Object.assign({}, mockWakeupRamp),
       wakeup_ramp_status: Object.assign({}, mockWakeupStatus),
       session_triggers: Object.assign({}, mockSessionTriggers),
+      context_automation: JSON.parse(JSON.stringify(mockContextAutomation)),
+      context_status: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
       error: null
     });
   }
@@ -447,6 +455,10 @@ export function createBrowserMockApi() {
     },
     set_session_triggers: (config) => {
       mockSessionTriggers = Object.assign({}, mockSessionTriggers, config || {});
+      return buildMockEnvelope();
+    },
+    set_context_automation: (config) => {
+      mockContextAutomation = Object.assign({}, mockContextAutomation, config || {});
       return buildMockEnvelope();
     }
   };

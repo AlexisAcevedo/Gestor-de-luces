@@ -56,6 +56,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Opt-in time-of-day Kelvin and brightness curve (`CircadianConfig`) plus local-only scheduled sunrise ramp (`WakeupRampConfig`) targeting selected bulbs or zones.
 8. Windows Session Lock & Sleep Triggers:
    - Opt-in Win32 session/power monitor (`WindowsSessionMonitor`) to turn lights off when locking or sleeping and restore prior color/Kelvin/scene state on unlock or resume.
+9. Foreground Process Profiles & Local On-Air Indicator (`v0.7.0`):
+   - Opt-in Win32 foreground executable rules (`ContextRule`) and local Windows ConsentStore microphone/camera On-Air override (`OnAirConfig`), automatically restoring prior lighting when leaving a call or tracked application.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).

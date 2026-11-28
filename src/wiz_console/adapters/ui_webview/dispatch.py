@@ -77,6 +77,7 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
     "set_builtin_scene": BridgeHandlers.set_builtin_scene,
     "set_circadian_config": BridgeHandlers.set_circadian_config,
     "set_color": BridgeHandlers.set_color,
+    "set_context_automation": BridgeHandlers.set_context_automation,
     "set_custom_scene_favorite": BridgeHandlers.set_custom_scene_favorite,
     "set_favorite_builtin_scenes": BridgeHandlers.set_favorite_builtin_scenes,
     "set_global_hotkeys": BridgeHandlers.set_global_hotkeys,

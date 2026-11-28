@@ -327,6 +327,18 @@ class LightControlServicePort(Protocol):
         """Apply opt-in lighting behavior for a normalized Windows session event."""
         ...
 
+    def get_context_automation(self) -> dict[str, Any]:
+        """Return normalized foreground profile & On-Air configuration."""
+        ...
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply foreground profile & On-Air automation settings."""
+        ...
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        """Return live foreground profile and On-Air indicator status."""
+        ...
+
     def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
         """Start a sunrise wake-up ramp immediately."""
         ...

@@ -110,6 +110,7 @@ _JS_API_SURFACE = frozenset(
         "set_builtin_scene",
         "set_circadian_config",
         "set_color",
+        "set_context_automation",
         "set_custom_scene_favorite",
         "set_favorite_builtin_scenes",
         "set_global_hotkeys",

@@ -23,6 +23,7 @@ from wiz_console.application.rate_limiter import StreamRateLimiter
 from wiz_console.application.sleep_timer import SleepTimerManager
 from wiz_console.domain.automation import (
     CircadianConfig,
+    ContextAutomationConfig,
     SessionTriggersConfig,
     WakeupRampConfig,
 )
@@ -39,6 +40,7 @@ from wiz_console.domain.value_objects import (
     normalize_theme,
     validate_local_endpoint,
 )
+from wiz_console.ports.context_monitor import ContextMonitor
 from wiz_console.ports.repositories import (
     AudioSampler,
     BulbRepository,
@@ -98,12 +100,14 @@ class ServiceContext:
         zone_repository: ZoneRepository | None = None,
         screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
         audio_sampler_factory: Callable[[], AudioSampler] | None = None,
+        context_monitor: ContextMonitor | None = None,
     ) -> None:
         self.controller = controller
         self.bulb_repo = bulb_repository
         self.scene_repo = scene_repository
         self.settings_repo = settings_repository
         self.zone_repo = zone_repository
+        self.context_monitor = context_monitor
         self.rate_limiter = rate_limiter or StreamRateLimiter()
         self.sleep_timer = sleep_timer or SleepTimerManager()
         self.screen_sampler = screen_sampler
@@ -146,6 +150,7 @@ class ServiceContext:
         self.circadian_config: dict[str, Any] = CircadianConfig().to_dict()
         self.wakeup_ramp_config: dict[str, Any] = WakeupRampConfig().to_dict()
         self.session_triggers: dict[str, Any] = SessionTriggersConfig().to_dict()
+        self.context_automation: dict[str, Any] = ContextAutomationConfig().to_dict()
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -212,6 +217,13 @@ class ServiceContext:
                 self.session_triggers = SessionTriggersConfig.from_dict(
                     loaded_settings["session_triggers"]
                 ).to_dict()
+            if "context_automation" in loaded_settings:
+                try:
+                    self.context_automation = ContextAutomationConfig.from_dict(
+                        loaded_settings["context_automation"]
+                    ).to_dict()
+                except ValueError:
+                    self.context_automation = ContextAutomationConfig().to_dict()
             raw_selected = loaded_settings.get("selected_ips")
             if isinstance(raw_selected, list) and self.bulbs:
                 restored = [ip for ip in raw_selected if isinstance(ip, str) and ip in self.bulbs]
@@ -314,6 +326,7 @@ class ServiceContext:
                 "circadian": dict(self.circadian_config),
                 "wakeup_ramp": dict(self.wakeup_ramp_config),
                 "session_triggers": dict(self.session_triggers),
+                "context_automation": dict(self.context_automation),
             }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True

@@ -197,6 +197,12 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   if (envelope.session_triggers && typeof envelope.session_triggers === "object") {
     appState.sessionTriggers = envelope.session_triggers;
   }
+  if (envelope.context_automation && typeof envelope.context_automation === "object") {
+    appState.contextAutomation = envelope.context_automation;
+  }
+  if (envelope.context_status && typeof envelope.context_status === "object") {
+    appState.contextStatus = envelope.context_status;
+  }
   if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
     const prev = appState.globalHotkeys || {};
     appState.globalHotkeys = {
@@ -303,6 +309,8 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     envelope.wakeup_ramp ||
     envelope.wakeup_ramp_status ||
     envelope.session_triggers ||
+    envelope.context_automation ||
+    envelope.context_status ||
     langChanged
   ) {
     renderAutomationPanel();

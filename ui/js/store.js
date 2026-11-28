@@ -162,6 +162,13 @@ export const appState = {
   wakeupRamp: { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] },
   wakeupRampStatus: { active: false, progress: 0.0 },
   sessionTriggers: { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false },
+  contextAutomation: {
+    enabled: false,
+    poll_seconds: 5,
+    on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+    rules: []
+  },
+  contextStatus: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
   globalHotkeys: {
     enabled: false,
     supported: false,

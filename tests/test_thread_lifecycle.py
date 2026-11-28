@@ -262,6 +262,17 @@ class _FakeLightControlService:
     def get_session_triggers(self) -> dict[str, Any]:
         return {"off_on_lock": False, "restore_on_unlock": False, "off_on_sleep": False}
 
+    def get_context_automation(self) -> dict[str, Any]:
+        return {"enabled": False, "poll_seconds": 5, "on_air": {"enabled": False}, "rules": []}
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        return {
+            "supported": False,
+            "active_reason": None,
+            "on_air_active": False,
+            "foreground_process": None,
+        }
+
     def get_language(self) -> str:
         return "en"
 

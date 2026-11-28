@@ -264,6 +264,14 @@
       "auto.sessionOffLock": "Turn lights off when locking Windows",
       "auto.sessionRestoreUnlock": "Restore previous lighting on unlock or wake",
       "auto.sessionOffSleep": "Turn lights off before system sleep",
+      "auto.contextEnabled": "Enable foreground app lighting profiles",
+      "auto.onAirEnabled": "On-Air light when mic or camera is active",
+      "auto.onAirColorLabel": "On-Air Color",
+      "auto.onAirLive": "ON AIR",
+      "auto.ruleProcessLabel": "Process (.exe)",
+      "auto.ruleSceneLabel": "Scene #",
+      "auto.addRuleBtn": "Add Rule",
+      "auto.removeRule": "Remove",
 
       /* Dialogos modales */
       "dialog.cancel": "Cancel",
@@ -418,7 +426,8 @@
       "status.wakeupDisabled": "Wake-up sunrise ramp disabled.",
       "status.wakeupTriggered": "Sunrise wake-up ramp started.",
       "status.wakeupCancelled": "Sunrise wake-up ramp stopped.",
-      "status.sessionTriggersSaved": "Windows session trigger settings saved."
+      "status.sessionTriggersSaved": "Windows session trigger settings saved.",
+      "status.contextAutomationSaved": "Context & On-Air rules updated."
     },
 
     es: {
@@ -677,6 +686,14 @@
       "auto.sessionOffLock": "Apagar luces al bloquear Windows",
       "auto.sessionRestoreUnlock": "Restaurar iluminación previa al desbloquear o reactivar",
       "auto.sessionOffSleep": "Apagar luces antes de suspender el equipo",
+      "auto.contextEnabled": "Activar perfiles por aplicación en primer plano",
+      "auto.onAirEnabled": "Indicador Al Aire cuando el micrófono o cámara estén activos",
+      "auto.onAirColorLabel": "Color Al Aire",
+      "auto.onAirLive": "AL AIRE",
+      "auto.ruleProcessLabel": "Proceso (.exe)",
+      "auto.ruleSceneLabel": "Escena #",
+      "auto.addRuleBtn": "Agregar regla",
+      "auto.removeRule": "Quitar",
       "dialog.addTitle": "Agregar Luminaria por IP",
       "dialog.addSubtitle": "Conecta directamente un foco WiZ en tu red local cuando el escaneo automático no lo encuentra.",
       "dialog.addIpLabel": "Dirección IP de la Luminaria",
@@ -828,7 +845,8 @@
       "status.wakeupDisabled": "Rampa de amanecer desactivada.",
       "status.wakeupTriggered": "Rampa de amanecer iniciada.",
       "status.wakeupCancelled": "Rampa de amanecer detenida.",
-      "status.sessionTriggersSaved": "Configuración de disparadores de sesión guardada."
+      "status.sessionTriggersSaved": "Configuración de disparadores de sesión guardada.",
+      "status.contextAutomationSaved": "Reglas contextuales y Al Aire actualizadas."
     }
   };
 

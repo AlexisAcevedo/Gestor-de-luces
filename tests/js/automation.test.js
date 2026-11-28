@@ -36,7 +36,15 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         "cancel-wakeup-btn": { tag: "button", disabled: true },
         "session-off-on-lock": { tag: "input", type: "checkbox", checked: false },
         "session-restore-on-unlock": { tag: "input", type: "checkbox", checked: false },
-        "session-off-on-sleep": { tag: "input", type: "checkbox", checked: false }
+        "session-off-on-sleep": { tag: "input", type: "checkbox", checked: false },
+        "context-enabled": { tag: "input", type: "checkbox", checked: false },
+        "on-air-enabled": { tag: "input", type: "checkbox", checked: false },
+        "on-air-color": { tag: "input", type: "color", value: "#ff2a55" },
+        "context-status-pill": { tag: "span" },
+        "context-rule-process": { tag: "input", type: "text", value: "" },
+        "context-rule-scene": { tag: "input", type: "number", value: "12" },
+        "add-context-rule-btn": { tag: "button" },
+        "context-rules-list": { tag: "div" }
       }
     });
     dom.install();
@@ -65,6 +73,13 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
     };
     appState.wakeupRampStatus = { active: false, progress: 0.0 };
     appState.sessionTriggers = { off_on_lock: true, restore_on_unlock: false, off_on_sleep: false };
+    appState.contextAutomation = {
+      enabled: false,
+      poll_seconds: 5,
+      on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+      rules: []
+    };
+    appState.contextStatus = { supported: true, active_reason: null, on_air_active: false, foreground_process: null };
   });
 
   afterEach(() => {
@@ -94,6 +109,10 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         set_session_triggers: async (cfg) => {
           calls.push(["set_session_triggers", cfg]);
           return { ok: true, session_triggers: cfg, error: null };
+        },
+        set_context_automation: async (cfg) => {
+          calls.push(["set_context_automation", cfg]);
+          return { ok: true, context_automation: cfg, error: null };
         }
       }
     };
@@ -131,5 +150,14 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
     assert.equal(calls[3][0], "set_session_triggers");
     assert.equal(calls[3][1].off_on_lock, true);
     assert.equal(calls[3][1].restore_on_unlock, true);
+
+    dom.getById("on-air-enabled").checked = true;
+    dom.getById("context-rule-process").value = "code.exe";
+    dom.getById("context-rule-scene").value = "12";
+    dom.getById("add-context-rule-btn").click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[4][0], "set_context_automation");
+    assert.equal(calls[4][1].rules[0].process_name, "code.exe");
+    assert.equal(calls[4][1].rules[0].value, "12");
   });
 });

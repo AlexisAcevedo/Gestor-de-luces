@@ -534,6 +534,16 @@ class BridgeHandlers:
 
         return self._call(_update)
 
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist foreground profile and On-Air automation settings."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_context_automation(dict(config))
+
+        return self._call(_update)
+
     def _poll_section(self, key: str, reader: Any) -> dict[str, Any]:
         """Read a single live-stream status section on the bridge loop for delta polling."""
         import threading

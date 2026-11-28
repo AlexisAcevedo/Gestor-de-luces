@@ -43,6 +43,7 @@ from wiz_console.adapters.storage.json_repositories import (
 )
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 from wiz_console.adapters.system.windows_autostart import WindowsRegistryAutostart
+from wiz_console.adapters.system.windows_context import WindowsContextMonitor
 from wiz_console.adapters.system.windows_hotkeys import WindowsGlobalHotkeyManager
 from wiz_console.adapters.system.windows_session import WindowsSessionMonitor
 from wiz_console.adapters.tray import TrayController
@@ -51,6 +52,7 @@ from wiz_console.adapters.wiz.udp_controller import WizUdpController
 from wiz_console.application.service import LightControlService
 from wiz_console.desktop import DesktopApplication
 from wiz_console.ports.autostart import AutostartManager
+from wiz_console.ports.context_monitor import ContextMonitor
 from wiz_console.ports.hotkeys import GlobalHotkeyManager
 from wiz_console.ports.session_monitor import SessionMonitor
 from wiz_console.resources import resolve_asset_path, resolve_resource_root
@@ -171,6 +173,13 @@ def _default_session_monitor() -> SessionMonitor | None:
     return WindowsSessionMonitor()
 
 
+def _default_context_monitor() -> ContextMonitor | None:
+    """Win32 foreground process & ConsentStore monitor on Windows; None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    return WindowsContextMonitor()
+
+
 def build_application(
     data_dir: Path | None = None,
     autostart: AutostartManager | None = None,
@@ -190,6 +199,7 @@ def build_application(
         zone_repository=zone_repo,
         screen_sampler_factory=MssScreenSampler,
         audio_sampler_factory=WasapiLoopbackSampler,
+        context_monitor=_default_context_monitor(),
     )
     bridge = WebviewBridge(
         service=service,

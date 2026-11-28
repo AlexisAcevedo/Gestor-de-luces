@@ -42,6 +42,7 @@ from wiz_console.application.zone_service import ZoneService
 from wiz_console.domain.models import Bulb, Zone
 from wiz_console.domain.scenes import BulbSceneState, CustomScene
 from wiz_console.domain.value_objects import Color, LightMode
+from wiz_console.ports.context_monitor import ContextMonitor
 from wiz_console.ports.repositories import (
     AudioSampler,
     BulbRepository,
@@ -78,6 +79,7 @@ class LightControlService:
         zone_repository: ZoneRepository | None = None,
         screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
         audio_sampler_factory: Callable[[], AudioSampler] | None = None,
+        context_monitor: ContextMonitor | None = None,
     ) -> None:
         context = ServiceContext(
             controller=controller,
@@ -93,6 +95,7 @@ class LightControlService:
             zone_repository=zone_repository,
             screen_sampler_factory=screen_sampler_factory,
             audio_sampler_factory=audio_sampler_factory,
+            context_monitor=context_monitor,
         )
         self._ctx = context
         self._settings = SettingsService(context)
@@ -493,6 +496,22 @@ class LightControlService:
     async def handle_session_event(self, event: str) -> dict[str, Any]:
         """Apply opt-in lighting behavior for a normalized Windows session event."""
         return await self._automation.handle_session_event(event)
+
+    def get_context_automation(self) -> dict[str, Any]:
+        """Return normalized foreground profile & On-Air configuration."""
+        return self._automation.get_context_automation()
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply foreground profile & On-Air automation settings."""
+        return self._automation.set_context_automation(config)
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        """Return live foreground profile and On-Air indicator status."""
+        return self._automation.get_context_automation_status()
+
+    async def evaluate_context_once(self) -> dict[str, Any]:
+        """Sample local host context once and apply matching rule or On-Air state."""
+        return await self._automation.evaluate_context_once()
 
     def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
         """Start a sunrise wake-up ramp immediately."""

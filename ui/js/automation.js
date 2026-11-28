@@ -1,5 +1,5 @@
 /*
- * Circadian lighting curve, Wake-Up sunrise ramp, and opt-in automation panel rendering & bindings.
+ * Circadian lighting curve, Wake-Up ramp, Windows session triggers, and Context/On-Air panel.
  */
 
 import { getBackendApi, invokeApi } from "./bridge-client.js";
@@ -27,11 +27,48 @@ function parseHourInput(hhmm, fallback) {
   return Number((h + m / 60).toFixed(2));
 }
 
+function saveContextAutomation(nextCfg) {
+  return invokeApi(
+    () => getBackendApi().set_context_automation(nextCfg),
+    () => t("status.contextAutomationSaved")
+  );
+}
+
+function renderContextRulesList(ctxCfg) {
+  const listEl = document.getElementById("context-rules-list");
+  if (!listEl) return;
+  const rules = Array.isArray(ctxCfg.rules) ? ctxCfg.rules : [];
+  const rows = rules.map((rule) => {
+    const row = document.createElement("div");
+    row.className = "context-rule-row";
+    const label = document.createElement("span");
+    label.className = "context-rule-label";
+    label.textContent = `${rule.process_name} -> ${rule.action_type}:${rule.value}`;
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-ghost btn-compact";
+    removeBtn.textContent = t("auto.removeRule");
+    removeBtn.addEventListener("click", () => {
+      const updated = Object.assign({}, ctxCfg, {
+        rules: rules.filter((r) => r.process_name !== rule.process_name)
+      });
+      saveContextAutomation(updated);
+    });
+    row.appendChild(label);
+    row.appendChild(removeBtn);
+    return row;
+  });
+  listEl.replaceChildren(...rows);
+}
+
 export function renderAutomationPanel() {
   const circ = appState.circadian || {};
   const wake = appState.wakeupRamp || {};
   const wakeStatus = appState.wakeupRampStatus || {};
   const session = appState.sessionTriggers || {};
+  const ctx = appState.contextAutomation || {};
+  const onAir = ctx.on_air || {};
+  const ctxStatus = appState.contextStatus || {};
 
   const badge = document.getElementById("automation-badge");
   if (badge) {
@@ -41,7 +78,9 @@ export function renderAutomationPanel() {
         wakeStatus.active ||
         session.off_on_lock ||
         session.restore_on_unlock ||
-        session.off_on_sleep
+        session.off_on_sleep ||
+        ctx.enabled ||
+        onAir.enabled
     );
     badge.setAttribute("data-active", String(anyActive));
     badge.textContent = anyActive ? t("auto.badgeActive") : t("auto.badgeIdle");
@@ -83,6 +122,22 @@ export function renderAutomationPanel() {
   if (restoreUnlock) restoreUnlock.checked = Boolean(session.restore_on_unlock);
   const offOnSleep = document.getElementById("session-off-on-sleep");
   if (offOnSleep) offOnSleep.checked = Boolean(session.off_on_sleep);
+
+  const ctxEnabled = document.getElementById("context-enabled");
+  if (ctxEnabled) ctxEnabled.checked = Boolean(ctx.enabled);
+  const onAirEnabled = document.getElementById("on-air-enabled");
+  if (onAirEnabled) onAirEnabled.checked = Boolean(onAir.enabled);
+  const onAirColor = document.getElementById("on-air-color");
+  if (onAirColor && document.activeElement !== onAirColor) {
+    onAirColor.value = onAir.color_hex || "#ff2a55";
+  }
+  const statusPill = document.getElementById("context-status-pill");
+  if (statusPill) {
+    statusPill.textContent = ctxStatus.on_air_active
+      ? t("auto.onAirLive")
+      : ctxStatus.active_reason || "";
+  }
+  renderContextRulesList(ctx);
 }
 
 export function bindAutomationEvents() {
@@ -166,5 +221,46 @@ export function bindAutomationEvents() {
   for (const id of ["session-off-on-lock", "session-restore-on-unlock", "session-off-on-sleep"]) {
     const inp = document.getElementById(id);
     if (inp) inp.addEventListener("change", saveSessionTriggers);
+  }
+
+  const pushContextConfig = () => {
+    const prev = appState.contextAutomation || {};
+    const prevOnAir = prev.on_air || {};
+    const nextCfg = {
+      enabled: Boolean(document.getElementById("context-enabled")?.checked),
+      poll_seconds: prev.poll_seconds ?? 5,
+      on_air: Object.assign({}, prevOnAir, {
+        enabled: Boolean(document.getElementById("on-air-enabled")?.checked),
+        color_hex: document.getElementById("on-air-color")?.value || prevOnAir.color_hex || "#ff2a55"
+      }),
+      rules: Array.isArray(prev.rules) ? prev.rules.slice() : []
+    };
+    return saveContextAutomation(nextCfg);
+  };
+  for (const id of ["context-enabled", "on-air-enabled", "on-air-color"]) {
+    const inp = document.getElementById(id);
+    if (inp) inp.addEventListener("change", pushContextConfig);
+  }
+
+  const addRuleBtn = document.getElementById("add-context-rule-btn");
+  if (addRuleBtn) {
+    addRuleBtn.addEventListener("click", () => {
+      const procInput = document.getElementById("context-rule-process");
+      const sceneInput = document.getElementById("context-rule-scene");
+      const proc = String(procInput?.value || "").trim().toLowerCase();
+      if (!proc) return;
+      const sceneId = clampInt(sceneInput?.value ?? 12, 1, 36);
+      const prev = appState.contextAutomation || {};
+      const existing = Array.isArray(prev.rules) ? prev.rules.filter((r) => r.process_name !== proc) : [];
+      existing.push({
+        process_name: proc,
+        action_type: "scene",
+        value: String(sceneId),
+        brightness: 85,
+        target_ips: []
+      });
+      if (procInput) procInput.value = "";
+      saveContextAutomation(Object.assign({}, prev, { rules: existing }));
+    });
   }
 }

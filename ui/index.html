@@ -1180,6 +1180,38 @@
               <span data-i18n="auto.sessionOffSleep">Turn lights off before system sleep</span>
             </label>
           </div>
+
+          <div class="automation-block">
+            <div class="automation-inline-row">
+              <label class="checkbox-control" for="context-enabled">
+                <input type="checkbox" id="context-enabled">
+                <span data-i18n="auto.contextEnabled">Enable foreground app lighting profiles</span>
+              </label>
+              <span class="badge-pill" id="context-status-pill"></span>
+            </div>
+            <div class="automation-inline-row">
+              <label class="checkbox-control" for="on-air-enabled">
+                <input type="checkbox" id="on-air-enabled">
+                <span data-i18n="auto.onAirEnabled">On-Air light when mic or camera is active</span>
+              </label>
+              <div class="field-group">
+                <label for="on-air-color" data-i18n="auto.onAirColorLabel">On-Air Color</label>
+                <input type="color" id="on-air-color" value="#ff2a55">
+              </div>
+            </div>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="context-rule-process" data-i18n="auto.ruleProcessLabel">Process (.exe)</label>
+                <input type="text" id="context-rule-process" placeholder="code.exe" maxlength="64" spellcheck="false">
+              </div>
+              <div class="field-group">
+                <label for="context-rule-scene" data-i18n="auto.ruleSceneLabel">Scene #</label>
+                <input type="number" id="context-rule-scene" min="1" max="36" step="1" value="12">
+              </div>
+              <button type="button" class="btn btn-ghost" id="add-context-rule-btn" data-i18n="auto.addRuleBtn">Add Rule</button>
+            </div>
+            <div id="context-rules-list" class="context-rules-list"></div>
+          </div>
         </div>
       </details>
     </main>
