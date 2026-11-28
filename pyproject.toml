@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wiz-console"
-version = "0.6.0"
+version = "0.8.0"
 description = "Hexagonal desktop light manager for Philips WiZ smart bulbs over local UDP."
 requires-python = ">=3.12"
 authors = [{ name = "AlexisAcevedo", email = "alexis.acevedo@outlook.com" }]

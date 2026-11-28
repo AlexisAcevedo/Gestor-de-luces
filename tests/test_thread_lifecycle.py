@@ -26,10 +26,18 @@ from typing import Any
 
 import pytest
 
+from wiz_console.adapters.api.local_http_api import (
+    LOCAL_API_THREAD_NAME,
+    LocalHttpApiServer,
+)
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 from wiz_console.adapters.system.windows_hotkeys import (
     HOTKEY_THREAD_NAME,
     WindowsGlobalHotkeyManager,
+)
+from wiz_console.adapters.system.windows_session import (
+    SESSION_THREAD_NAME,
+    WindowsSessionMonitor,
 )
 from wiz_console.adapters.tray.menu_model import ACTION_TURN_OFF
 from wiz_console.adapters.tray.tray_icon import (
@@ -66,10 +74,17 @@ APP_THREAD_NAMES = frozenset(
         HIDE_ON_MINIMIZE_THREAD_NAME,
         SINGLE_INSTANCE_THREAD_NAME,
         HOTKEY_THREAD_NAME,
+        SESSION_THREAD_NAME,
+        LOCAL_API_THREAD_NAME,
     }
 )
 #: Hilos que arranca la aplicacion de escritorio y que no deben sobrevivir al cierre.
-DESKTOP_THREAD_NAMES = APP_THREAD_NAMES - {SINGLE_INSTANCE_THREAD_NAME, HOTKEY_THREAD_NAME}
+DESKTOP_THREAD_NAMES = APP_THREAD_NAMES - {
+    SINGLE_INSTANCE_THREAD_NAME,
+    HOTKEY_THREAD_NAME,
+    SESSION_THREAD_NAME,
+    LOCAL_API_THREAD_NAME,
+}
 
 DEADLINE_SECONDS = 10.0
 POLL_SECONDS = 0.01
@@ -241,11 +256,40 @@ class _FakeLightControlService:
     def get_global_hotkeys(self) -> dict[str, Any]:
         return {"enabled": False, "bindings": {}}
 
+    def get_circadian_config(self) -> dict[str, Any]:
+        return {"enabled": False}
+
+    def get_wakeup_ramp_config(self) -> dict[str, Any]:
+        return {"enabled": False}
+
+    def get_wakeup_ramp_status(self) -> dict[str, Any]:
+        return {"active": False, "progress": 0.0}
+
+    def get_session_triggers(self) -> dict[str, Any]:
+        return {"off_on_lock": False, "restore_on_unlock": False, "off_on_sleep": False}
+
+    def get_context_automation(self) -> dict[str, Any]:
+        return {"enabled": False, "poll_seconds": 5, "on_air": {"enabled": False}, "rules": []}
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        return {
+            "supported": False,
+            "active_reason": None,
+            "on_air_active": False,
+            "foreground_process": None,
+        }
+
     def get_language(self) -> str:
         return "en"
 
     def get_theme(self) -> str:
         return "architectural-stone"
+
+    def get_transition_seconds(self) -> float:
+        return 0.0
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        return {"enabled": False, "port": 18899, "token": ""}
 
     def stop_ambilight(self) -> None:
         return None
@@ -505,3 +549,60 @@ def test_stopping_global_hotkey_manager_leaves_no_hotkey_thread() -> None:
         "stop() left the global hotkey pump thread alive",
     )
     assert hk_thread.is_alive() is False
+
+
+def test_stopping_session_monitor_leaves_no_session_thread() -> None:
+    """`stop()` posts WM_QUIT and joins the `WizConsoleSessionMonitor` thread cleanly."""
+    from tests.test_global_hotkeys import _FakeKernel32, _FakeUser32
+    from tests.test_windows_session_triggers import _FakeWtsapi32
+
+    kernel32 = _FakeKernel32()
+    user32 = _FakeUser32(kernel32)
+    wtsapi32 = _FakeWtsapi32()
+    monitor = WindowsSessionMonitor(
+        user32=user32,
+        kernel32=kernel32,
+        wtsapi32=wtsapi32,
+        platform="win32",
+    )
+    monitor.start(lambda _event: None)
+    _wait_until(
+        lambda: SESSION_THREAD_NAME in _live_thread_names(),
+        "the session monitor pump thread never started",
+    )
+    sess_thread = _thread_named(SESSION_THREAD_NAME)
+    assert sess_thread.daemon is True
+
+    monitor.stop()
+
+    _wait_until(
+        lambda: SESSION_THREAD_NAME not in _live_thread_names(),
+        "stop() left the session monitor pump thread alive",
+    )
+    assert sess_thread.is_alive() is False
+
+
+def test_stopping_local_api_server_leaves_no_api_thread() -> None:
+    """`stop()` shuts down the loopback server and joins `WizConsoleLocalApi` cleanly."""
+    import secrets
+
+    bridge = WebviewBridge(service=_FakeLightControlService())
+    server = LocalHttpApiServer(bridge)
+    try:
+        ephemeral_token = secrets.token_urlsafe(12)
+        bound_port = server.start(port=0, token=ephemeral_token)
+        assert bound_port > 0
+        _wait_until(
+            lambda: LOCAL_API_THREAD_NAME in _live_thread_names(),
+            "the local HTTP API thread never started",
+        )
+        api_thread = _thread_named(LOCAL_API_THREAD_NAME)
+        assert api_thread.daemon is True
+    finally:
+        server.stop()
+        bridge.shutdown()
+
+    _wait_until(
+        lambda: LOCAL_API_THREAD_NAME not in _live_thread_names(),
+        "stop() left the local HTTP API thread alive",
+    )

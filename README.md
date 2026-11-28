@@ -52,6 +52,20 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 6. Progressive Sleep Timer:
    - Configurable countdown timer (1 to 240 minutes) with progressive brightness dimming down to zero before powering off.
+7. Circadian Curve & Wake-Up Sunrise Ramp:
+   - Opt-in time-of-day Kelvin and brightness curve (`CircadianConfig`) plus local-only scheduled sunrise ramp (`WakeupRampConfig`) targeting selected bulbs or zones.
+8. Windows Session Lock & Sleep Triggers:
+   - Opt-in Win32 session/power monitor (`WindowsSessionMonitor`) to turn lights off when locking or sleeping and restore prior color/Kelvin/scene state on unlock or resume.
+9. Foreground Process Profiles & Local On-Air Indicator (`v0.7.0`):
+   - Opt-in Win32 foreground executable rules (`ContextRule`) and local Windows ConsentStore microphone/camera On-Air override (`OnAirConfig`), automatically restoring prior lighting when leaving a call or tracked application.
+10. Configurable Crossfade Transitions (`TransitionEngine`):
+   - Smooth ease-in-out RGB and Kelvin crossfade interpolation (`0.0s` instant default or `0.5s–5.0s`) with per-bulb preemption and instant stream override.
+11. Bulb Capability Inference & Wi-Fi/Firmware Diagnostics:
+   - Automatic optical capability inference (`BulbCapabilities` via `infer_bulb_capabilities(module_name)`) plus live Wi-Fi RSSI (`dBm`) and firmware version badges in the fixture drawer with adaptive RGB UI gating.
+12. Complete CLI & Opt-In Loopback HTTP API (`LocalHttpApiServer`):
+   - CLI targeting by saved `--name`, plus `brightness`, `scene`, `preset`, and `zones` subcommands, alongside an opt-in `127.0.0.1` HTTP API (`Bearer` auth via `hmac.compare_digest`, 16 KiB body cap, disabled by default).
+13. Multi-Vendor LAN Foundation (WiZ + Govee LAN, `v0.8.0`):
+   - Vendor-agnostic `Bulb.protocol` routing via `CompositeLightController` (`adapters/registry.py`) and `GoveeLanController` (`adapters/govee/lan_controller.py`, UDP 4003), preserving single-console control across mixed WiZ and Govee LAN fixtures.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).

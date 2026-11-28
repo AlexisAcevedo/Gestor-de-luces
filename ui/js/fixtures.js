@@ -205,7 +205,17 @@ export function renderFixtureList() {
     titleRow.append(nameHeading);
     const addressLine = document.createElement("p");
     addressLine.className = "fixture-address";
-    addressLine.textContent = `${bulb.ip} · ${bulb.mac}`;
+    const diagParts = [`${bulb.ip} · ${bulb.mac}`];
+    if (bulb.protocol && bulb.protocol !== "wiz") {
+      diagParts.push(String(bulb.protocol).toUpperCase());
+    }
+    if (typeof bulb.rssi === "number" && Number.isFinite(bulb.rssi)) {
+      diagParts.push(`${bulb.rssi} dBm`);
+    }
+    if (bulb.fw_version) {
+      diagParts.push(`v${bulb.fw_version}`);
+    }
+    addressLine.textContent = diagParts.join(" · ");
     metaDiv.append(titleRow, addressLine);
     selectLabel.append(checkbox, metaDiv);
     topRow.append(selectLabel, topActions);
@@ -481,8 +491,10 @@ export function bindFixtureEvents() {
       event.preventDefault();
       const ipInput = document.getElementById("manual-ip-input");
       const nameInput = document.getElementById("manual-name-input");
+      const protocolSelect = document.getElementById("manual-protocol-select");
       const ip = ipInput ? ipInput.value.trim() : "";
       const name = nameInput ? nameInput.value.trim() : "";
+      const protocol = protocolSelect && protocolSelect.value ? protocolSelect.value : "wiz";
       if (!isValidIpv4(ip)) {
         setFieldError(ipInput, addBulbError, t("dialog.invalidIp"));
         if (ipInput) ipInput.focus();
@@ -490,7 +502,7 @@ export function bindFixtureEvents() {
       }
       setFieldError(ipInput, addBulbError, "");
       const ok = await withButtonBusy(submitAddBtn, () =>
-        invokeApi(() => getBackendApi().add_manual_bulb(ip, name), () => t("status.registeredIp", { ip }))
+        invokeApi(() => getBackendApi().add_manual_bulb(ip, name, protocol), () => t("status.registeredIp", { ip }))
       );
       if (ok) {
         addDialog.close();

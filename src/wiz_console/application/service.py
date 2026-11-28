@@ -22,6 +22,7 @@ from typing import Any
 
 from wiz_console.application.ambilight_service import AmbilightService
 from wiz_console.application.ambilight_stream import AmbilightStreamManager
+from wiz_console.application.automation_service import AutomationService
 from wiz_console.application.bulb_control_service import BulbControlService
 from wiz_console.application.bulb_inventory_service import BulbInventoryService
 from wiz_console.application.music_service import MusicService
@@ -41,6 +42,7 @@ from wiz_console.application.zone_service import ZoneService
 from wiz_console.domain.models import Bulb, Zone
 from wiz_console.domain.scenes import BulbSceneState, CustomScene
 from wiz_console.domain.value_objects import Color, LightMode
+from wiz_console.ports.context_monitor import ContextMonitor
 from wiz_console.ports.repositories import (
     AudioSampler,
     BulbRepository,
@@ -77,6 +79,7 @@ class LightControlService:
         zone_repository: ZoneRepository | None = None,
         screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
         audio_sampler_factory: Callable[[], AudioSampler] | None = None,
+        context_monitor: ContextMonitor | None = None,
     ) -> None:
         context = ServiceContext(
             controller=controller,
@@ -92,6 +95,7 @@ class LightControlService:
             zone_repository=zone_repository,
             screen_sampler_factory=screen_sampler_factory,
             audio_sampler_factory=audio_sampler_factory,
+            context_monitor=context_monitor,
         )
         self._ctx = context
         self._settings = SettingsService(context)
@@ -106,6 +110,7 @@ class LightControlService:
         self._timer = TimerService(context, bulb_control=self._bulb_control)
         self._ambilight = AmbilightService(context, stop_music_sync=self.stop_music_sync)
         self._music = MusicService(context, stop_ambilight=self.stop_ambilight)
+        self._automation = AutomationService(context, bulb_control=self._bulb_control)
 
     def get_language(self) -> str:
         """Devuelve el codigo de idioma activo (`en` o `es`) de la consola."""
@@ -168,6 +173,26 @@ class LightControlService:
         """Validate and persist opt-in global Windows hotkeys configuration."""
         return self._settings.set_global_hotkeys(enabled, bindings=bindings)
 
+    def get_transition_seconds(self) -> float:
+        """Return configured crossfade duration in seconds (0.0 = instant)."""
+        return self._settings.get_transition_seconds()
+
+    def set_transition_seconds(self, seconds: float) -> float:
+        """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
+        return self._settings.set_transition_seconds(seconds)
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        return self._settings.get_local_api_config()
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        return self._settings.set_local_api_config(config)
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        return self._settings.rotate_local_api_token()
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()
@@ -189,9 +214,14 @@ class LightControlService:
         """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco."""
         return await self._inventory.discover_bulbs(wait_time=wait_time)
 
-    async def add_manual_bulb(self, ip: str, name: str | None = None) -> Bulb:
+    async def add_manual_bulb(
+        self,
+        ip: str,
+        name: str | None = None,
+        protocol: str = "wiz",
+    ) -> Bulb:
         """Registra un foco manualmente por su IP y verifica su estado en la red."""
-        return await self._inventory.add_manual_bulb(ip, name=name)
+        return await self._inventory.add_manual_bulb(ip, name=name, protocol=protocol)
 
     def rename_bulb(self, ip: str, new_name: str) -> Bulb:
         """Cambia el nombre amigable de un foco registrado y guarda el cambio."""
@@ -460,10 +490,71 @@ class LightControlService:
         """Devuelve el estado actual y telemetria espectral de la sincronizacion musical."""
         return self._music.get_music_sync_status()
 
+    def get_circadian_config(self) -> dict[str, Any]:
+        """Return normalized circadian lighting configuration."""
+        return self._automation.get_circadian_config()
+
+    def set_circadian_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply circadian lighting configuration."""
+        return self._automation.set_circadian_config(config)
+
+    def get_wakeup_ramp_config(self) -> dict[str, Any]:
+        """Return normalized sunrise wake-up ramp configuration."""
+        return self._automation.get_wakeup_ramp_config()
+
+    def set_wakeup_ramp_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and schedule sunrise wake-up ramp configuration."""
+        return self._automation.set_wakeup_ramp_config(config)
+
+    def get_wakeup_ramp_status(self) -> dict[str, Any]:
+        """Return live status of the sunrise wake-up ramp."""
+        return self._automation.get_wakeup_ramp_status()
+
+    def get_session_triggers(self) -> dict[str, Any]:
+        """Return normalized Windows lock/sleep session trigger settings."""
+        return self._automation.get_session_triggers()
+
+    def set_session_triggers(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist Windows session trigger preferences."""
+        return self._automation.set_session_triggers(config)
+
+    async def handle_session_event(self, event: str) -> dict[str, Any]:
+        """Apply opt-in lighting behavior for a normalized Windows session event."""
+        return await self._automation.handle_session_event(event)
+
+    def get_context_automation(self) -> dict[str, Any]:
+        """Return normalized foreground profile & On-Air configuration."""
+        return self._automation.get_context_automation()
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply foreground profile & On-Air automation settings."""
+        return self._automation.set_context_automation(config)
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        """Return live foreground profile and On-Air indicator status."""
+        return self._automation.get_context_automation_status()
+
+    async def evaluate_context_once(self) -> dict[str, Any]:
+        """Sample local host context once and apply matching rule or On-Air state."""
+        return await self._automation.evaluate_context_once()
+
+    def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
+        """Start a sunrise wake-up ramp immediately."""
+        return self._automation.trigger_wakeup_ramp(ips=ips)
+
+    def cancel_wakeup_ramp(self) -> dict[str, Any]:
+        """Cancel any active sunrise wake-up ramp."""
+        return self._automation.cancel_wakeup_ramp()
+
+    def ensure_automation_tasks(self) -> None:
+        """Start enabled background automation loops on the running event loop."""
+        self._automation.ensure_background_tasks()
+
     def close_audio_sampler(self) -> None:
         """Detiene Music Sync y cierra de forma segura el muestreador de audio."""
         self._ctx.close_audio_sampler()
 
     def close_all_resources(self) -> None:
         """Detiene los flujos activos y libera audio, pantalla y controlador UDP."""
+        self._automation.shutdown()
         self._ctx.close_all_resources()
