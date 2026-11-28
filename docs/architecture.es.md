@@ -77,7 +77,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 4. **Capa de Adaptadores e Infraestructura (`gestor_luces.adapters`)**:
    - Implementa los puertos conectando con el hardware y el sistema operativo:
      - `adapters.wiz.udp_controller`: Gestiona el descubrimiento por broadcast UDP y los datagramas JSON-RPC unicast mediante `pywizlight`.
-     - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\GestorDeLuces`.
+     - `adapters.storage.json_repositories`: Implementa la persistencia atómica en disco dentro de `%LOCALAPPDATA%\WizConsole` (migrando automáticamente los archivos de `%LOCALAPPDATA%\GestorDeLuces` en el primer arranque).
      - `adapters.ambilight.mss_sampler`: Implementa `ScreenSampler` accediendo al búfer GDI de Windows con `mss` y recuperación controlada ante `ScreenShotError`.
      - `adapters.audio.wasapi_sampler`: Implementa `AudioSampler` capturando la salida del sistema con `PyAudioWPatch` (`wasapi_session.py`, `wasapi_devices.py`) bajo bloqueo de ciclo de vida COM/sesión, recuperación ante desconexión en caliente, cierre sin fugas y caché de planes/búferes FFT en `wasapi_capture.py`.
      - `adapters.platform.windows`: Aísla el cromado DWM Win32 y caché de iconos (`window_chrome.py`), geometría multimonitor `WorkingArea` y DPI (`window_geometry.py`), foco de ventana (`foreground.py`), sincronización y tematizado claro/oscuro del `MenuStrip` nativo (`menu_sync.py`, `menu_state.py`) y diálogos (`message.py`).
@@ -245,7 +245,9 @@ Donde $\alpha \in [0.1, 0.4]$ regula la inercia del color (valores bajos generan
 
 Las preferencias de usuario, las escenas personalizadas y el inventario de focos se almacenan localmente en el directorio de datos de aplicación de Windows:
 
-$$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{GestorDeLuces}\backslash$$
+$$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{WizConsole}\backslash$$
+
+En el primer arranque tras actualizar desde `GestorDeLuces`, `resolve_default_data_dir()` copia de forma atómica e idempotente `bulbs.json`, `custom_scenes.json` y `settings.json` desde `%LOCALAPPDATA%\GestorDeLuces` (o `~/.gestor_de_luces` fuera de Windows) conservando los originales como respaldo.
 
 Archivos gestionados:
 - `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario, revalidados al cargar mediante `validate_local_endpoint()`).
@@ -269,7 +271,7 @@ Para prevenir corrupción, manipulación o lecturas ilimitadas en disco, los rep
 `adapters/ui_webview/app_menu.py` es un modelo puro del menú de la ventana (Archivo: Mostrar/Ocultar, Iniciar con Windows, Salir; Ayuda: Atajos de teclado, Acerca de) y del título localizado (`build_window_title`). La entrada Acerca de abre un cuadro nativo que informa el nombre visible, la versión resuelta, la licencia, el autor y el repositorio desde constantes del módulo, así que se lee igual desde el fuente y desde un build congelado (que no lleva ni `pyproject.toml` ni metadatos de importlib). `DesktopApplication.start()` entrega el menú a `webview.start(menu=...)` y `create_window()` inicializa el título localizado. Los menús de pywebview 6.2.1 son estáticos (sin ítems con tilde ni API de actualización, y con cromado por defecto de Windows), por lo que `DesktopApplication` actualiza etiquetas y tildes en vivo vía `menu_sync._sync_native_menu`, actualiza el título nativo vía `sync_window_title()`, y tematiza el `MenuStrip`, ítems principales, desplegables y separadores mediante `menu_sync._sync_native_menu_theme` usando `THEME_PALETTES` y handlers idempotentes de `ToolStripItem.Paint` y `Opened` (evitando subclasificar `ProfessionalColorTable` por `pythonnet 3.2.1`). Salir sigue el mismo camino de cierre que `Exit` / `Salir` en la bandeja.
 
 ### Autoinicio (`--minimized`)
-El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` reescribe la entrada si apunta a otra ruta (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
+El puerto `AutostartManager` (`ports/autostart.py`) lo implementa `WindowsRegistryAutostart` (`adapters/system/windows_autostart.py`), que escribe el valor `WizConsole` en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. El comando registrado es `<exe> --minimized` en la versión empaquetada y `pythonw -m gestor_luces.main --minimized` en desarrollo. En cada arranque, `refresh_if_stale` migra automáticamente cualquier entrada legacy `GestorDeLuces` hacia `WizConsole` y reescribe rutas desactualizadas (por ejemplo, al mover la carpeta portable). El registro es inyectable, así que las pruebas nunca tocan `HKCU`.
 
 ### Instancia Única
 `adapters/system/single_instance.py` (`SingleInstanceGuard`) combina un mutex con nombre y un evento con nombre protegidos por una DACL SDDL explícita (`SY`/`BA`/`OW`), controlando errores `ERROR_ACCESS_DENIED` y `WAIT_FAILED` y liberando los handles de Win32 de forma determinista. Una segunda ejecución señala el evento y termina; la primera instancia responde mostrando su ventana (salvo que se indique `--multi-instance` para ejecución simultánea de diagnóstico).

@@ -59,7 +59,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Compact widget geometry (opens at `620x760`, then resizes to the content of the active section) and custom light-bulb icon for the window, taskbar, tray and executable. The app also carries its own taskbar identity (`AppUserModelID`), so the button shows that icon and pins as an application instead of as the Python interpreter, even when it runs from source.
    - Theme-aware native menu bar: **File** (Show/Hide window, Start with Windows, Exit) and **Help** (Keyboard shortcuts, About), painted to match Light/Dark mode. About reports the localized display name, the version, the licence (MIT), the author and the repository.
    - Accessible keyboard ergonomics: `Space` for power, `Alt+Up/Down` for brightness (leaving bare arrow keys free for scrolling), `1`–`6` and `Home`/`End` across mode tabs, and `?` shortcuts help from the top bar.
-   - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches it minimized to the tray.
+   - Optional "Start with Windows" toggle (File menu) that registers the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`WizConsole`, automatically migrating legacy `GestorDeLuces` entries) and launches it minimized to the tray.
    - Single-instance guard: launching a second copy brings the running window to the front instead of opening another one (with `--multi-instance` override for side-by-side diagnostics).
    - Distributed as a per-user installer or a portable ZIP (see [Packaging & Distribution](#packaging--distribution)).
 
@@ -99,7 +99,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 +-----------------------------------------------------------------------------------+
 | ADAPTERS & INFRASTRUCTURE                                                         |
 |   WizUdpController   - Socket communication over UDP 38899 via pywizlight         |
-|   JsonRepositories   - Persistence in %LOCALAPPDATA%/GestorDeLuces                |
+|   JsonRepositories   - Persistence in %LOCALAPPDATA%/WizConsole                    |
 |   MssScreenSampler   - Windows desktop frame grabber                              |
 |   WasapiAudioSampler - Windows WASAPI loopback audio stream sampler               |
 +-----------------------------------------------------------------------------------+
@@ -372,7 +372,7 @@ Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.
 - Unless built with `SIGN_CERT_SHA1`, executables are unsigned, so Windows SmartScreen shows "Windows protected your PC": choose **More info** then **Run anyway**. Verify the download against `SHA256SUMS.txt`.
 - Per-user installation writes to `%LOCALAPPDATA%\Programs\GestorDeLuces` (no administrator prompt required); if you share the Windows account or require system-wide write-protected binaries under `C:\Program Files`, run the installer with administrator privileges or pass `/ALLUSERS`.
-- User data lives in `%LOCALAPPDATA%\GestorDeLuces`, never next to the executable.
+- User data lives in `%LOCALAPPDATA%\WizConsole` (with automatic one-time migration from legacy `%LOCALAPPDATA%\GestorDeLuces`, keeping the original files as backup), never next to the executable.
 - If the portable folder is moved while "Start with Windows" is enabled, the registry entry is corrected on the next launch.
 - Occasionally `Compress-Archive` fails with a locked file right after PyInstaller finishes (antivirus scanning); re-run the script.
 

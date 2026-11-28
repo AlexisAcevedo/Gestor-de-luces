@@ -1,8 +1,10 @@
 """Implementacion de los puertos BulbRepository y SceneRepository sobre JSON local.
 
 La persistencia se realiza en el directorio de datos de usuario del sistema operativo
-(`%LOCALAPPDATA%\\GestorDeLuces` en Windows) para garantizar permisos de escritura incluso
+(`%LOCALAPPDATA%\\WizConsole` en Windows) para garantizar permisos de escritura incluso
 cuando la aplicacion se ejecuta desde un directorio de solo lectura o empaquetado.
+En el primer arranque tras actualizar desde `GestorDeLuces`, los archivos existentes se
+migran de forma atomica e idempotente conservando los originales como respaldo.
 Cada guardado emplea una escritura atomica mediante un archivo temporal hermano (`.tmp`)
 seguida de `os.replace`, evitando que un corte de energia o cierre inesperado deje
 archivos JSON truncados o corruptos.
@@ -37,21 +39,54 @@ MAX_SCENE_RECORDS = 512
 _REPLACE_RETRY_ATTEMPTS = 5
 _REPLACE_RETRY_BASE_DELAY = 0.02
 _MISSING = object()
+APP_DATA_DIR_NAME = "WizConsole"
+LEGACY_APP_DATA_DIR_NAME = "GestorDeLuces"
+UNIX_DATA_DIR_NAME = ".wiz_console"
+LEGACY_UNIX_DATA_DIR_NAME = ".gestor_de_luces"
+MIGRATED_DATA_FILES = ("bulbs.json", "custom_scenes.json", "settings.json")
+
+
+def _migrate_legacy_data_dir(legacy_dir: Path, target_dir: Path) -> bool:
+    """Copy legacy JSON data files once into ``target_dir`` without deleting ``legacy_dir``."""
+    if legacy_dir == target_dir or not legacy_dir.is_dir():
+        return False
+
+    migrated_any = False
+    for filename in MIGRATED_DATA_FILES:
+        src = legacy_dir / filename
+        dst = target_dir / filename
+        if dst.exists() or src.is_symlink() or not src.is_file():
+            continue
+        try:
+            if src.stat().st_size > MAX_JSON_FILE_BYTES:
+                _LOGGER.warning("Skipping oversized legacy data file %s during migration.", src)
+                continue
+            raw_bytes = src.read_bytes()
+            _atomic_write_bytes(dst, raw_bytes)
+            migrated_any = True
+        except OSError:
+            _LOGGER.warning("Failed to migrate legacy data file %s.", src, exc_info=True)
+    return migrated_any
 
 
 def resolve_default_data_dir() -> Path:
-    """Determina y crea el directorio de datos local para la configuracion del usuario.
+    """Resolve and create the user data directory, migrating legacy GestorDeLuces files once.
 
-    En Windows prioriza `%LOCALAPPDATA%\\GestorDeLuces` siguiendo las convenciones de
-    aplicaciones de escritorio nativas; en otros entornos o si la variable no existe,
-    recurre a `~/.gestor_de_luces`.
+    On Windows this prioritizes `%LOCALAPPDATA%\\WizConsole` (migrating from
+    `%LOCALAPPDATA%\\GestorDeLuces`); on other environments it falls back to `~/.wiz_console`
+    (migrating from `~/.gestor_de_luces`).
     """
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data and local_app_data.strip():
-        base_dir = Path(local_app_data.strip()) / "GestorDeLuces"
+        root = Path(local_app_data.strip())
+        base_dir = root / APP_DATA_DIR_NAME
+        legacy_dir = root / LEGACY_APP_DATA_DIR_NAME
     else:
-        base_dir = Path.home() / ".gestor_de_luces"
+        home = Path.home()
+        base_dir = home / UNIX_DATA_DIR_NAME
+        legacy_dir = home / LEGACY_UNIX_DATA_DIR_NAME
     base_dir.mkdir(parents=True, exist_ok=True)
+    _migrate_legacy_data_dir(legacy_dir, base_dir)
     return base_dir
 
 
@@ -81,16 +116,9 @@ def _quarantine_corrupt_file(target_path: Path, reason: str) -> None:
         _LOGGER.warning("Unable to back up corrupt JSON file %s.", target_path, exc_info=True)
 
 
-def _atomic_write_json(target_path: Path, payload: Any) -> None:
-    """Escribe una estructura JSON de forma atomica usando un archivo temporal y os.replace.
-
-    Escribir directamente sobre el archivo destino podria corromper el inventario si el
-    proceso termina a mitad de la operacion de E/S. Al volcar primero en un archivo `.tmp`
-    en el mismo volumen y reemplazarlo atomicamente, el archivo destino siempre contiene
-    la version anterior integra o la version nueva completa.
-    """
+def _atomic_write_bytes(target_path: Path, raw_bytes: bytes) -> None:
+    """Write bytes atomically via a sibling temp file, fsync, and os.replace."""
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    serialized = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
     fd, tmp_raw = tempfile.mkstemp(
         prefix=f".{target_path.name}.",
         suffix=".tmp",
@@ -100,7 +128,7 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
     replaced = False
     try:
         with os.fdopen(fd, "wb") as handle:
-            handle.write(serialized)
+            handle.write(raw_bytes)
             handle.flush()
             os.fsync(handle.fileno())
         _replace_with_retry(tmp_path, target_path)
@@ -112,6 +140,12 @@ def _atomic_write_json(target_path: Path, payload: Any) -> None:
         if not replaced:
             with contextlib.suppress(OSError):
                 tmp_path.unlink(missing_ok=True)
+
+
+def _atomic_write_json(target_path: Path, payload: Any) -> None:
+    """Serialize JSON and persist it atomically using ``_atomic_write_bytes``."""
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+    _atomic_write_bytes(target_path, serialized)
 
 
 def _read_json_document(target_path: Path) -> Any:

@@ -60,7 +60,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable. La app lleva además identidad propia en la barra de tareas (`AppUserModelID`), así que el botón muestra ese icono y se ancla como aplicación en vez de como el intérprete de Python, incluso corriendo desde el fuente.
    - Barra de menú nativa tematizada (claro/oscuro): **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de). Acerca de informa el nombre visible localizado, la versión, la licencia (MIT), el autor y el repositorio.
    - Ergonomía y atajos accesibles: `Space` para encendido, `Alt+Flecha Arriba/Abajo` para brillo (dejando las flechas simples para el desplazamiento vertical), `1`–`6` y `Inicio`/`Fin` entre pestañas de modo, y acceso de ayuda `?` en la barra superior.
-   - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
+   - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`WizConsole`, migrando automáticamente entradas legacy `GestorDeLuces`) y la inicia minimizada en la bandeja.
    - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).
    - Se distribuye como instalador por usuario o como ZIP portable (ver [Empaquetado y Distribución](#empaquetado-y-distribución)).
 
@@ -100,7 +100,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 +-----------------------------------------------------------------------------------+
 | ADAPTADORES E INFRAESTRUCTURA                                                     |
 |   WizUdpController   - Comunicación por sockets UDP 38899 vía pywizlight          |
-|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/GestorDeLuces         |
+|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/WizConsole             |
 |   MssScreenSampler   - Capturador de fotogramas de pantalla de Windows            |
 |   WasapiAudioSampler - Muestreador de audio del sistema mediante WASAPI loopback  |
 +-----------------------------------------------------------------------------------+
@@ -373,7 +373,7 @@ Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
 - Salvo que se compile con `SIGN_CERT_SHA1`, los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Verificá la descarga contra `SHA256SUMS.txt`.
 - La instalación por defecto es por usuario en `%LOCALAPPDATA%\Programs\GestorDeLuces` (no pide permisos de administrador); si se requiere proteger los binarios bajo `C:\Program Files`, ejecutá el instalador como administrador o con `/ALLUSERS`.
-- Los datos del usuario viven en `%LOCALAPPDATA%\GestorDeLuces`, nunca junto al ejecutable.
+- Los datos del usuario viven en `%LOCALAPPDATA%\WizConsole` (con migración automática única desde `%LOCALAPPDATA%\GestorDeLuces`, conservando los archivos originales como respaldo), nunca junto al ejecutable.
 - Si se mueve la carpeta portable con "Iniciar con Windows" activado, la entrada del registro se corrige en el siguiente arranque.
 - A veces `Compress-Archive` falla por un archivo bloqueado justo después de PyInstaller (el antivirus lo está escaneando); volvé a correr el script.
 
