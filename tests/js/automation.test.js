@@ -33,7 +33,22 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         "wakeup-duration": { tag: "input", type: "number", value: "20" },
         "save-wakeup-btn": { tag: "button" },
         "trigger-wakeup-btn": { tag: "button" },
-        "cancel-wakeup-btn": { tag: "button", disabled: true }
+        "cancel-wakeup-btn": { tag: "button", disabled: true },
+        "session-off-on-lock": { tag: "input", type: "checkbox", checked: false },
+        "session-restore-on-unlock": { tag: "input", type: "checkbox", checked: false },
+        "session-off-on-sleep": { tag: "input", type: "checkbox", checked: false },
+        "context-enabled": { tag: "input", type: "checkbox", checked: false },
+        "on-air-enabled": { tag: "input", type: "checkbox", checked: false },
+        "on-air-color": { tag: "input", type: "color", value: "#ff2a55" },
+        "context-status-pill": { tag: "span" },
+        "context-rule-process": { tag: "input", type: "text", value: "" },
+        "context-rule-scene": { tag: "input", type: "number", value: "12" },
+        "add-context-rule-btn": { tag: "button" },
+        "context-rules-list": { tag: "div" },
+        "local-api-enabled": { tag: "input", type: "checkbox", checked: false },
+        "local-api-port": { tag: "input", type: "number", value: "18899" },
+        "local-api-token": { tag: "input", type: "text", value: "" },
+        "rotate-local-api-token-btn": { tag: "button" }
       }
     });
     dom.install();
@@ -61,6 +76,15 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
       target_ips: []
     };
     appState.wakeupRampStatus = { active: false, progress: 0.0 };
+    appState.sessionTriggers = { off_on_lock: true, restore_on_unlock: false, off_on_sleep: false };
+    appState.contextAutomation = {
+      enabled: false,
+      poll_seconds: 5,
+      on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+      rules: []
+    };
+    appState.contextStatus = { supported: true, active_reason: null, on_air_active: false, foreground_process: null };
+    appState.localApi = { enabled: false, port: 18899, token: "" };
   });
 
   afterEach(() => {
@@ -86,6 +110,22 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         cancel_wakeup_ramp: async () => {
           calls.push(["cancel_wakeup_ramp"]);
           return { ok: true, wakeup_ramp_status: { active: false, progress: 0.0 }, error: null };
+        },
+        set_session_triggers: async (cfg) => {
+          calls.push(["set_session_triggers", cfg]);
+          return { ok: true, session_triggers: cfg, error: null };
+        },
+        set_context_automation: async (cfg) => {
+          calls.push(["set_context_automation", cfg]);
+          return { ok: true, context_automation: cfg, error: null };
+        },
+        set_local_api_config: async (cfg) => {
+          calls.push(["set_local_api_config", cfg]);
+          return { ok: true, local_api: Object.assign({}, cfg, { token: "tok-1" }), error: null };
+        },
+        rotate_local_api_token: async () => {
+          calls.push(["rotate_local_api_token"]);
+          return { ok: true, local_api: { enabled: true, port: 18899, token: "tok-2" }, error: null };
         }
       }
     };
@@ -115,5 +155,33 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
     await new Promise((r) => setTimeout(r, 0));
     assert.equal(calls[2][0], "cancel_wakeup_ramp");
     assert.equal(dom.getById("cancel-wakeup-btn").disabled, true);
+
+    assert.equal(dom.getById("session-off-on-lock").checked, true);
+    dom.getById("session-restore-on-unlock").checked = true;
+    dom.getById("session-restore-on-unlock").dispatchEvent("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[3][0], "set_session_triggers");
+    assert.equal(calls[3][1].off_on_lock, true);
+    assert.equal(calls[3][1].restore_on_unlock, true);
+
+    dom.getById("on-air-enabled").checked = true;
+    dom.getById("context-rule-process").value = "code.exe";
+    dom.getById("context-rule-scene").value = "12";
+    dom.getById("add-context-rule-btn").click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[4][0], "set_context_automation");
+    assert.equal(calls[4][1].rules[0].process_name, "code.exe");
+    assert.equal(calls[4][1].rules[0].value, "12");
+
+    dom.getById("local-api-enabled").checked = true;
+    dom.getById("local-api-enabled").dispatchEvent("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[5][0], "set_local_api_config");
+    assert.equal(calls[5][1].enabled, true);
+
+    dom.getById("rotate-local-api-token-btn").click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[6][0], "rotate_local_api_token");
+    assert.equal(dom.getById("local-api-token").value, "tok-2");
   });
 });

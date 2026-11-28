@@ -171,3 +171,7 @@ class WebviewBridge(BridgeHandlers, BridgeLifecycle, WindowFitHandlers):
         return self._build_response(
             ok=False, error=f"Unsupported global hotkey action: {action_id}."
         )
+
+    def trigger_session_event(self, event: str) -> dict[str, Any]:
+        """Execute an OS-dispatched session/power trigger on the bridge event loop."""
+        return self._call(lambda: self._service.handle_session_event(event))

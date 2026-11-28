@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -212,3 +213,251 @@ def evaluate_wakeup_progress(progress_0_to_1: float, config: WakeupRampConfig) -
         max(2200, min(6500, int(kelvin))),
         max(10, min(100, int(brightness))),
     )
+
+
+@dataclass
+class SessionTriggersConfig:
+    """Opt-in Windows lock/unlock and sleep/resume lighting trigger preferences."""
+
+    off_on_lock: bool = False
+    restore_on_unlock: bool = False
+    off_on_sleep: bool = False
+
+    def __post_init__(self) -> None:
+        self.off_on_lock = bool(self.off_on_lock)
+        self.restore_on_unlock = bool(self.restore_on_unlock)
+        self.off_on_sleep = bool(self.off_on_sleep)
+
+    def to_dict(self) -> dict[str, bool]:
+        """Serialize session trigger preferences for JSON persistence and IPC."""
+        return {
+            "off_on_lock": self.off_on_lock,
+            "restore_on_unlock": self.restore_on_unlock,
+            "off_on_sleep": self.off_on_sleep,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> SessionTriggersConfig:
+        """Reconstruct `SessionTriggersConfig` from persisted or IPC mapping."""
+        if not isinstance(data, Mapping):
+            return cls()
+        return cls(
+            off_on_lock=bool(data.get("off_on_lock", False)),
+            restore_on_unlock=bool(data.get("restore_on_unlock", False)),
+            off_on_sleep=bool(data.get("off_on_sleep", False)),
+        )
+
+
+CONTEXT_ACTION_TYPES: frozenset[str] = frozenset({"scene", "preset", "temp", "color"})
+MAX_CONTEXT_RULES = 32
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _normalize_hex_color(raw: Any, default: str = "#ff2a55") -> str:
+    """Validate and normalize a `#rrggbb` color string."""
+    cleaned = str(raw if raw is not None else default).strip().lower()
+    if not _HEX_RE.fullmatch(cleaned):
+        raise ValueError(f"Invalid hex color {raw!r}; expected #rrggbb.")
+    return cleaned
+
+
+@dataclass
+class ContextRule:
+    """Associates an active Windows executable basename with a target lighting action."""
+
+    process_name: str
+    action_type: str = "scene"
+    value: str = "12"
+    brightness: int = 85
+    target_ips: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        proc = str(self.process_name).strip().lower()
+        if not proc or len(proc) > 128:
+            raise ValueError("process_name must be between 1 and 128 characters.")
+        self.process_name = proc
+        action = str(self.action_type).strip().lower()
+        if action not in CONTEXT_ACTION_TYPES:
+            raise ValueError(f"Unsupported context action_type: {self.action_type!r}.")
+        self.action_type = action
+        val = str(self.value).strip()
+        if action == "scene":
+            sid = parse_strict_int(int(val), field="value")
+            if not (1 <= sid <= 36):
+                raise ValueError("scene value must be between 1 and 36.")
+            self.value = str(sid)
+        elif action == "temp":
+            kelvin = ColorTemperature(parse_strict_int(int(val), field="value")).kelvin
+            self.value = str(kelvin)
+        elif action == "color":
+            self.value = _normalize_hex_color(val)
+        else:
+            if not val or len(val) > 80:
+                raise ValueError("preset value must be between 1 and 80 characters.")
+            self.value = val
+        self.brightness = Brightness(parse_strict_int(self.brightness, field="brightness")).percent
+        cleaned_ips: list[str] = []
+        for raw_ip in self.target_ips:
+            valid = validate_local_endpoint(str(raw_ip))
+            if valid not in cleaned_ips:
+                cleaned_ips.append(valid)
+        self.target_ips = cleaned_ips
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize context rule for JSON persistence and IPC."""
+        return {
+            "process_name": self.process_name,
+            "action_type": self.action_type,
+            "value": self.value,
+            "brightness": self.brightness,
+            "target_ips": list(self.target_ips),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ContextRule:
+        """Reconstruct `ContextRule` from persisted or IPC mapping."""
+        raw_ips = data.get("target_ips")
+        return cls(
+            process_name=str(data.get("process_name", "")),
+            action_type=str(data.get("action_type", "scene")),
+            value=str(data.get("value", "12")),
+            brightness=data.get("brightness", 85),
+            target_ips=list(raw_ips) if isinstance(raw_ips, list) else [],
+        )
+
+
+@dataclass
+class OnAirConfig:
+    """Configuration for local-only microphone/camera On-Air lighting indicator."""
+
+    enabled: bool = False
+    watch_mic: bool = True
+    watch_camera: bool = True
+    color_hex: str = "#ff2a55"
+    brightness: int = 90
+    target_ips: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.enabled = bool(self.enabled)
+        self.watch_mic = bool(self.watch_mic)
+        self.watch_camera = bool(self.watch_camera)
+        self.color_hex = _normalize_hex_color(self.color_hex, default="#ff2a55")
+        self.brightness = Brightness(parse_strict_int(self.brightness, field="brightness")).percent
+        cleaned_ips: list[str] = []
+        for raw_ip in self.target_ips:
+            valid = validate_local_endpoint(str(raw_ip))
+            if valid not in cleaned_ips:
+                cleaned_ips.append(valid)
+        self.target_ips = cleaned_ips
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize On-Air configuration for JSON persistence and IPC."""
+        return {
+            "enabled": self.enabled,
+            "watch_mic": self.watch_mic,
+            "watch_camera": self.watch_camera,
+            "color_hex": self.color_hex,
+            "brightness": self.brightness,
+            "target_ips": list(self.target_ips),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> OnAirConfig:
+        """Reconstruct `OnAirConfig` from persisted or IPC mapping."""
+        if not isinstance(data, Mapping):
+            return cls()
+        raw_ips = data.get("target_ips")
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            watch_mic=bool(data.get("watch_mic", True)),
+            watch_camera=bool(data.get("watch_camera", True)),
+            color_hex=data.get("color_hex", "#ff2a55"),
+            brightness=data.get("brightness", 90),
+            target_ips=list(raw_ips) if isinstance(raw_ips, list) else [],
+        )
+
+
+@dataclass
+class ContextAutomationConfig:
+    """Opt-in foreground process profiles plus local microphone/camera On-Air rules."""
+
+    enabled: bool = False
+    poll_seconds: int = 5
+    on_air: OnAirConfig = field(default_factory=OnAirConfig)
+    rules: list[ContextRule] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.enabled = bool(self.enabled)
+        self.poll_seconds = parse_strict_int(self.poll_seconds, field="poll_seconds")
+        if not (2 <= self.poll_seconds <= 60):
+            raise ValueError("poll_seconds must be between 2 and 60.")
+        deduped: list[ContextRule] = []
+        seen: set[str] = set()
+        for rule in self.rules[:MAX_CONTEXT_RULES]:
+            if rule.process_name not in seen:
+                seen.add(rule.process_name)
+                deduped.append(rule)
+        self.rules = deduped
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize context automation settings for JSON persistence and IPC."""
+        return {
+            "enabled": self.enabled,
+            "poll_seconds": self.poll_seconds,
+            "on_air": self.on_air.to_dict(),
+            "rules": [rule.to_dict() for rule in self.rules],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContextAutomationConfig:
+        """Reconstruct `ContextAutomationConfig` from persisted or IPC mapping."""
+        if not isinstance(data, Mapping):
+            return cls()
+        raw_on_air = data.get("on_air")
+        raw_rules = data.get("rules")
+        parsed_rules = (
+            [ContextRule.from_dict(item) for item in raw_rules if isinstance(item, Mapping)]
+            if isinstance(raw_rules, list)
+            else []
+        )
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            poll_seconds=data.get("poll_seconds", 5),
+            on_air=OnAirConfig.from_dict(raw_on_air if isinstance(raw_on_air, Mapping) else None),
+            rules=parsed_rules,
+        )
+
+
+@dataclass
+class LocalApiConfig:
+    """Opt-in loopback-only local HTTP API configuration."""
+
+    enabled: bool = False
+    port: int = 18899
+    token: str = ""
+
+    def __post_init__(self) -> None:
+        self.enabled = bool(self.enabled)
+        self.port = parse_strict_int(self.port, field="port")
+        if not (1024 <= self.port <= 65535):
+            raise ValueError("Local API port must be between 1024 and 65535.")
+        self.token = str(self.token or "").strip()[:128]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize local API config for JSON persistence and IPC."""
+        return {
+            "enabled": self.enabled,
+            "port": self.port,
+            "token": self.token,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> LocalApiConfig:
+        """Reconstruct `LocalApiConfig` from persisted or IPC mapping."""
+        if not isinstance(data, Mapping):
+            return cls()
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            port=data.get("port", 18899),
+            token=str(data.get("token", "")),
+        )
