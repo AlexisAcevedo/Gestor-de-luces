@@ -34,8 +34,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 3. Ambient Screen Sync (Ambilight):
    - Real-time display screen sampling using pure-Python Win32 GDI screen capture (`mss`).
-   - Sampling modes: saturation-weighted `vibrant` color or screen `average` color, with auto-brightness and a configurable 10–20% minimum brightness floor.
-   - Continuous 10 Hz fire-and-forget UDP streaming with Exponential Moving Average (EMA) color smoothing.
+   - Sampling modes: saturation-weighted `vibrant` color or screen `average` color, with auto-brightness, configurable 10–20% minimum brightness floor, automatic cinema black-bar letterbox cropping, and per-bulb screen-zone mapping (`full`, `left`, `right`, `top`, `bottom`, `center`) in a single screen grab.
+   - Continuous 10 Hz fire-and-forget UDP streaming with per-bulb Exponential Moving Average (EMA) color smoothing.
 
 4. WASAPI Loopback Reactive Music Sync:
    - Real-time system audio capture via Windows Audio Session API (WASAPI) loopback (`PyAudioWPatch`).

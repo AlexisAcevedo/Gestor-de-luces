@@ -102,6 +102,18 @@ def _opt_stripped(value: Any, *, field: str) -> str | None:
     return _req_str(value, field=field).strip() or None
 
 
+def _opt_str_mapping(value: Any, *, field: str) -> dict[str, str] | None:
+    """Validate an optional string-to-string mapping received from JavaScript."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be an object mapping strings to strings.")
+    return {
+        _req_str(k, field=f"{field}.key").strip(): _req_str(v, field=f"{field}.value").strip()
+        for k, v in value.items()
+    }
+
+
 class BridgeHandlers:
     """Operaciones de iluminacion invocables desde la vista, agrupadas por capacidad."""
 
@@ -416,6 +428,8 @@ class BridgeHandlers:
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
         min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion Ambilight de pantalla en el bucle de eventos asincrono."""
         return self._call(
@@ -427,6 +441,8 @@ class BridgeHandlers:
                 smoothing_alpha=_req_float(smoothing_alpha, field="smoothing_alpha"),
                 ips=_opt_ips(ips),
                 min_brightness=_req_int(min_brightness, field="min_brightness"),
+                region_map=_opt_str_mapping(region_map, field="region_map"),
+                letterbox_crop=_req_bool(letterbox_crop, field="letterbox_crop"),
             )
         )
 

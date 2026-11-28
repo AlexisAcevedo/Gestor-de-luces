@@ -123,6 +123,8 @@ class ServiceContext:
             "brightness": 85,
             "smoothing_alpha": 0.38,
             "min_brightness": 10,
+            "region_map": {},
+            "letterbox_crop": True,
         }
         self.music_prefs: dict[str, Any] = {
             "palette_mode": "spectrum",
@@ -300,23 +302,16 @@ class ServiceContext:
             self.music_sync.set_sampler(self.audio_sampler)
         return self.audio_sampler
 
-    async def stream_color_frame(
+    async def stream_bulb_frames(
         self,
-        color: Color,
-        brightness: int = 100,
-        ips: list[str] | None = None,
+        frames: dict[str, tuple[Color, int]],
     ) -> bool:
-        """Envia un fotograma continuo (Ambilight/Musica) filtrado por el RateLimiter.
-
-        Devuelve True si al menos un foco recibio un paquete nuevo, o False si
-        todos los envios fueron suprimidos por limite de frecuencia o deduplicacion.
-        """
-        target_ips = self.get_target_ips(ips)
-        if not target_ips:
+        """Send per-bulb color and brightness frames filtered independently by RateLimiter."""
+        if not frames:
             return False
 
         tasks = []
-        for ip in target_ips:
+        for ip, (color, brightness) in frames.items():
             prepared = self.rate_limiter.prepare_frame(ip, color, brightness)
             if prepared is not None:
                 smoothed_color, smoothed_brightness = prepared
@@ -341,6 +336,18 @@ class ServiceContext:
 
         await asyncio.gather(*tasks)
         return True
+
+    async def stream_color_frame(
+        self,
+        color: Color,
+        brightness: int = 100,
+        ips: list[str] | None = None,
+    ) -> bool:
+        """Envia un fotograma continuo (Ambilight/Musica) filtrado por el RateLimiter."""
+        target_ips = self.get_target_ips(ips)
+        if not target_ips:
+            return False
+        return await self.stream_bulb_frames({ip: (color, brightness) for ip in target_ips})
 
     def close_audio_sampler(self) -> None:
         """Detiene Music Sync, espera capturas en curso y cierra solo el sampler de audio."""

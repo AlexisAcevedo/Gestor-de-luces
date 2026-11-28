@@ -272,16 +272,16 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     }
     if (hasSleep) syncSleepTimerPolling();
   }
-  if (hasAmbi || hasAmbiPrefs || hasMonitors || langChanged) {
-    const nextKey = JSON.stringify([appState.ambilight, appState.ambilightPrefs, appState.monitors]);
+  if (hasAmbi || hasAmbiPrefs || hasMonitors || bulbsChanged || langChanged) {
+    const nextKey = JSON.stringify([appState.ambilight, appState.ambilightPrefs, appState.monitors, appState.bulbs, appState.selectedIps]);
     if (nextKey !== lastRendered.ambiKey) {
       lastRendered.ambiKey = nextKey;
       renderAmbilightPanel();
     }
     if (hasAmbi) syncAmbilightPolling();
   }
-  if (hasMusic || hasMusicPrefs || hasAudio || langChanged) {
-    const nextKey = JSON.stringify([appState.musicSync, appState.musicPrefs, appState.audioDevices]);
+  if (hasMusic || hasMusicPrefs || hasAudio || bulbsChanged || langChanged) {
+    const nextKey = JSON.stringify([appState.musicSync, appState.musicPrefs, appState.audioDevices, appState.bulbs, appState.selectedIps]);
     if (nextKey !== lastRendered.musicKey) {
       lastRendered.musicKey = nextKey;
       renderMusicPanel();

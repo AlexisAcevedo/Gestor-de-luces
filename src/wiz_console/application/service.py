@@ -396,6 +396,8 @@ class LightControlService:
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
         min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
         return self._ambilight.start_ambilight(
@@ -406,6 +408,8 @@ class LightControlService:
             smoothing_alpha=smoothing_alpha,
             ips=ips,
             min_brightness=min_brightness,
+            region_map=region_map,
+            letterbox_crop=letterbox_crop,
         )
 
     def stop_ambilight(self) -> AwaitableStatusDict:

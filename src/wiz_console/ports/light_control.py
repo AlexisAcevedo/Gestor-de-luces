@@ -251,6 +251,8 @@ class LightControlServicePort(Protocol):
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
         min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
         ...

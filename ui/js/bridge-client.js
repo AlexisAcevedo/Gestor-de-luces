@@ -347,22 +347,26 @@ export function createBrowserMockApi() {
       return buildMockEnvelope();
     },
     get_sleep_timer_status: () => buildMockEnvelope(),
-    start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips, minBrightness) => {
+    start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips, minBrightness, regionMap, letterboxCrop) => {
       const targets = resolveTargets(ips);
       const sampled = { r: 56, g: 189, b: 248, hex: "#38bdf8" };
       mockMusicSync.active = false;
       mockMusicSync.target_ips = [];
       const minBri = clampInt(minBrightness != null ? minBrightness : 10, 10, 20);
+      const cleanedRegions = (regionMap && typeof regionMap === "object") ? Object.assign({}, regionMap) : {};
+      const crop = letterboxCrop == null ? true : Boolean(letterboxCrop);
       mockAmbilightPrefs = {
         monitor_index: Number(monitorIndex || 1), color_mode: String(colorMode || "vibrant"),
         auto_brightness: Boolean(autoBrightness), min_brightness: minBri,
-        brightness: Number(brightness || 85), smoothing_alpha: Number(smoothingAlpha || 0.38)
+        brightness: Number(brightness || 85), smoothing_alpha: Number(smoothingAlpha || 0.38),
+        region_map: cleanedRegions, letterbox_crop: crop
       };
       mockAmbilight = {
         active: true, monitor_index: mockAmbilightPrefs.monitor_index, color_mode: mockAmbilightPrefs.color_mode,
         auto_brightness: mockAmbilightPrefs.auto_brightness, min_brightness: minBri,
         brightness: mockAmbilightPrefs.brightness, fixed_brightness: mockAmbilightPrefs.brightness,
         smoothing_alpha: mockAmbilightPrefs.smoothing_alpha, last_color: sampled,
+        region_map: cleanedRegions, letterbox_crop: crop, last_region_colors: { full: sampled },
         target_ips: targets, frames_sent: mockAmbilight.frames_sent + 1
       };
       mutateTargetBulbs(ips, (st) => {

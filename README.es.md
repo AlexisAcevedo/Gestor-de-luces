@@ -34,8 +34,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
    - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).
-   - Modos de muestreo: color `vibrant` ponderado por saturación o color `average` promedio de pantalla, con brillo automático y piso mínimo configurable entre 10% y 20%.
-   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA).
+   - Modos de muestreo: color `vibrant` ponderado por saturación o color `average` promedio de pantalla, con brillo automático, piso mínimo configurable entre 10% y 20%, recorte automático de barras negras de cine (letterbox) y asignación de zona por luminaria (`full`, `left`, `right`, `top`, `bottom`, `center`) sobre una única captura por fotograma.
+   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA) independiente por foco.
 
 4. Sincronización Musical Reactiva por WASAPI Loopback:
    - Captura de audio del sistema en tiempo real mediante loopback de Windows Audio Session API (WASAPI) (`PyAudioWPatch`).

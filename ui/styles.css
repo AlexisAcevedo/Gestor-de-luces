@@ -2138,6 +2138,33 @@
     gap: 6px;
   }
 
+  .per-bulb-map-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .per-bulb-map-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(132px, auto);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .per-bulb-map-row label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .per-bulb-map-select {
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.84rem;
+  }
+
   .slider-scale-anchored {
     display: flex;
     flex-wrap: wrap;
