@@ -433,6 +433,9 @@ class LightControlService:
         brightness: int = 85,
         device_index: int | None = None,
         ips: list[str] | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion acustica WASAPI Loopback hacia los focos objetivo."""
         return self._music.start_music_sync(
@@ -443,6 +446,9 @@ class LightControlService:
             brightness=brightness,
             device_index=device_index,
             ips=ips,
+            band_map=band_map,
+            beat_boost=beat_boost,
+            custom_palette=custom_palette,
         )
 
     def stop_music_sync(self, close_sampler: bool = False) -> AwaitableStatusDict:

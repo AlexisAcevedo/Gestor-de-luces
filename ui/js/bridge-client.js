@@ -383,23 +383,29 @@ export function createBrowserMockApi() {
       if (mockAmbilight.active) mockAmbilight.frames_sent += 4;
       return Promise.resolve({ ok: true, ambilight: JSON.parse(JSON.stringify(mockAmbilight)), error: null });
     },
-    start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips) => {
+    start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips, bandMap, beatBoost, customPalette) => {
       const targets = resolveTargets(ips);
       const sampled = { r: 240, g: 52, b: 112, hex: "#f03470" };
       mockAmbilight.active = false;
       mockAmbilight.target_ips = [];
+      const cleanedBands = (bandMap && typeof bandMap === "object") ? Object.assign({}, bandMap) : {};
+      const boost = beatBoost == null ? true : Boolean(beatBoost);
+      const custom = (customPalette && typeof customPalette === "object")
+        ? Object.assign({ bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" }, customPalette)
+        : { bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" };
       mockMusicPrefs = {
         device_index: deviceIndex != null ? Number(deviceIndex) : -1,
         palette_mode: String(paletteMode || "spectrum"), sensitivity: Number(sensitivity || 1.0),
         smoothing_alpha: Number(smoothingAlpha || 0.50), audio_brightness: Boolean(audioBrightness),
-        brightness: Number(brightness || 85)
+        brightness: Number(brightness || 85), band_map: cleanedBands, beat_boost: boost, custom_palette: custom
       };
       mockMusicSync = {
         active: true, device_index: mockMusicPrefs.device_index,
         palette_mode: mockMusicPrefs.palette_mode, sensitivity: mockMusicPrefs.sensitivity,
         smoothing_alpha: mockMusicPrefs.smoothing_alpha, audio_brightness: mockMusicPrefs.audio_brightness,
         brightness: mockMusicPrefs.brightness, fixed_brightness: mockMusicPrefs.brightness,
-        rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, last_color: sampled,
+        rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, beat: true, beat_intensity: 0.82,
+        band_map: cleanedBands, beat_boost: boost, custom_palette: custom, last_color: sampled,
         target_ips: targets, frames_sent: mockMusicSync.frames_sent + 1
       };
       mutateTargetBulbs(ips, (st) => {

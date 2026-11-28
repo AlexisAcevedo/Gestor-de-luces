@@ -39,8 +39,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 4. Sincronización Musical Reactiva por WASAPI Loopback:
    - Captura de audio del sistema en tiempo real mediante loopback de Windows Audio Session API (WASAPI) (`PyAudioWPatch`).
-   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`.
-   - Mapeo de frecuencias a color con sensibilidad de ganancia configurable y caída suavizada.
+   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`, junto a un **Detector de Ritmo** (`BeatDetector`) con pulso de brillo al golpe.
+   - Cuatro paletas (`spectrum`, `club`, `chill` y `custom` personalizable en hexadecimal por banda), sensibilidad/suavizado configurables y asignación independiente de banda por luminaria (`full`, `bass`, `mid`, `treble`).
 
 5. Bandeja del Sistema y Ejecución en Segundo Plano:
    - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo

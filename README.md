@@ -39,8 +39,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 4. WASAPI Loopback Reactive Music Sync:
    - Real-time system audio capture via Windows Audio Session API (WASAPI) loopback (`PyAudioWPatch`).
-   - Fast Fourier Transform (FFT) spectral decomposition into Bass, Mid, and Treble energy bands using `numpy`.
-   - Frequency-to-color mapping with configurable gain sensitivity and smoothing decay.
+   - Fast Fourier Transform (FFT) spectral decomposition into Bass, Mid, and Treble energy bands using `numpy`, plus rolling energy-history **Beat Detector** (`BeatDetector`) with beat-boost brightness pulses.
+   - Four palettes (`spectrum`, `club`, `chill`, and user-defined 3-band `custom` hex colors), configurable gain sensitivity and smoothing decay, and per-bulb frequency-band mapping (`full`, `bass`, `mid`, `treble`).
 
 5. System Tray & Background Residency:
    - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`

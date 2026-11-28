@@ -799,6 +799,7 @@
           <div class="music-telemetry-card">
             <div class="ambilight-preview-header">
               <span class="timer-status-badge" id="music-status-badge" data-active="false" data-i18n="music.statusStandby">STANDBY</span>
+              <span class="beat-pill" id="music-beat-pill" data-beat="false" data-i18n="music.beatPill">BEAT</span>
               <span class="telemetry-meta" id="music-frames-readout" data-i18n="music.telemetryZero">0 FPS · 0 frames</span>
             </div>
 
@@ -908,6 +909,29 @@
                   <span class="palette-swatch-dot palette-dot-chill" aria-hidden="true"></span>
                   <span data-i18n="music.paletteChill">Aurora Chill (Ocean/Teal)</span>
                 </button>
+                <button
+                  type="button"
+                  class="chip-btn music-palette-btn"
+                  data-palette-mode="custom"
+                  aria-pressed="false"
+                >
+                  <span class="palette-swatch-dot palette-dot-custom" aria-hidden="true"></span>
+                  <span data-i18n="music.paletteCustom">Custom Palette</span>
+                </button>
+              </div>
+              <div class="custom-palette-row" id="music-custom-palette-row" hidden>
+                <div class="custom-palette-item">
+                  <label for="music-custom-bass" data-i18n="music.bandBass">Bass</label>
+                  <input type="color" id="music-custom-bass" value="#ff2a55">
+                </div>
+                <div class="custom-palette-item">
+                  <label for="music-custom-mid" data-i18n="music.bandMid">Mid</label>
+                  <input type="color" id="music-custom-mid" value="#22e58b">
+                </div>
+                <div class="custom-palette-item">
+                  <label for="music-custom-treble" data-i18n="music.bandTreble">Treble</label>
+                  <input type="color" id="music-custom-treble" value="#389bff">
+                </div>
               </div>
             </div>
 
@@ -1018,6 +1042,15 @@
                 <input type="checkbox" id="music-audio-brightness" checked>
                 <span data-i18n="music.audioBrightness">Modulate brightness with audio volume</span>
               </label>
+              <label class="checkbox-control" for="music-beat-boost">
+                <input type="checkbox" id="music-beat-boost" checked>
+                <span data-i18n="music.beatBoost">Pulse brightness on detected beats</span>
+              </label>
+            </div>
+
+            <div class="field-group" id="music-band-map-group">
+              <span class="field-label" id="music-band-map-label" data-i18n="music.bandMapLabel">Frequency Band per Bulb</span>
+              <div id="music-band-map" class="per-bulb-map-list" role="group" aria-labelledby="music-band-map-label"></div>
             </div>
           </div>
         </div>

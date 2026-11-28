@@ -464,6 +464,9 @@ class BridgeHandlers:
         brightness: int = 85,
         device_index: int | None = None,
         ips: list[str] | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion musical WASAPI Loopback en el bucle asincrono."""
         return self._call(
@@ -475,6 +478,9 @@ class BridgeHandlers:
                 brightness=_req_int(brightness, field="brightness"),
                 device_index=_opt_int(device_index, field="device_index"),
                 ips=_opt_ips(ips),
+                band_map=_opt_str_mapping(band_map, field="band_map"),
+                beat_boost=_req_bool(beat_boost, field="beat_boost"),
+                custom_palette=_opt_str_mapping(custom_palette, field="custom_palette"),
             )
         )
 

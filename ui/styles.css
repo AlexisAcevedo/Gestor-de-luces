@@ -2165,6 +2165,52 @@
     font-size: 0.84rem;
   }
 
+  .palette-dot-custom {
+    background: conic-gradient(from 0deg, #ff2a55, #22e58b, #389bff, #ff2a55);
+  }
+
+  .custom-palette-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .custom-palette-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+
+  .custom-palette-item input[type="color"] {
+    width: 30px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .beat-pill {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    transition: background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+  }
+
+  .beat-pill[data-beat="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast, #fff);
+  }
+
   .slider-scale-anchored {
     display: flex;
     flex-wrap: wrap;

@@ -11,6 +11,7 @@ ni saturar el microcontrolador Wi-Fi de las lamparas WiZ.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import threading
 from collections.abc import Awaitable, Callable, Iterator
@@ -24,12 +25,17 @@ from wiz_console.application.sleep_timer import (
     require_int_value,
     sanitize_brightness,
 )
+from wiz_console.domain.music_colors import (
+    DEFAULT_CUSTOM_PALETTE,
+    VALID_BAND_ASSIGNMENTS,
+    VALID_MUSIC_PALETTES,
+    normalize_custom_palette,
+    resolve_band_frame,
+)
 from wiz_console.domain.value_objects import Brightness, Color
 from wiz_console.ports.repositories import AudioSampler
 
 _LOGGER = logging.getLogger(__name__)
-
-VALID_MUSIC_PALETTES = ("spectrum", "club", "chill")
 
 
 class MusicSyncStreamManager:
@@ -66,6 +72,11 @@ class MusicSyncStreamManager:
         self._bass: float = 0.0
         self._mid: float = 0.0
         self._treble: float = 0.0
+        self._beat: bool = False
+        self._beat_intensity: float = 0.0
+        self._band_map: dict[str, str] = {}
+        self._beat_boost: bool = True
+        self._custom_palette: dict[str, str] = dict(DEFAULT_CUSTOM_PALETTE)
         self._target_ips: list[str] = []
         self._frames_sent: int = 0
 
@@ -95,6 +106,10 @@ class MusicSyncStreamManager:
         audio_brightness: bool = True,
         brightness: int = 85,
         device_index: int | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
+        on_bulb_frames: Callable[[dict[str, tuple[Color, int]]], Awaitable[bool]] | None = None,
     ) -> AwaitableStatusDict:
         """Inicia o reinicia el bucle continuo de reaccion musical hacia los focos objetivo."""
         normalized_palette = str(palette_mode).strip().lower()
@@ -115,6 +130,12 @@ class MusicSyncStreamManager:
         else:
             parsed_dev = require_int_value(device_index, "device_index")
             normalized_device = parsed_dev if parsed_dev >= 0 else None
+        normalized_bands = {
+            str(ip): str(band).strip().lower()
+            for ip, band in (band_map or {}).items()
+            if str(band).strip().lower() in VALID_BAND_ASSIGNMENTS
+        }
+        normalized_custom = normalize_custom_palette(custom_palette)
         loop = asyncio.get_running_loop()
 
         self.stop()
@@ -130,12 +151,17 @@ class MusicSyncStreamManager:
         self._audio_brightness = bool(audio_brightness)
         self._fixed_brightness = validated_brightness
         self._last_brightness = validated_brightness
+        self._band_map = normalized_bands
+        self._beat_boost = bool(beat_boost)
+        self._custom_palette = normalized_custom
+        self._beat = False
+        self._beat_intensity = 0.0
         self._target_ips = list(target_ips)
         self._frames_sent = 0
         self._active = True
 
         self._task = loop.create_task(
-            self._run_loop(on_frame=on_frame, run_id=run_id),
+            self._run_loop(on_frame=on_frame, on_bulb_frames=on_bulb_frames, run_id=run_id),
             name="WizConsoleMusicSyncStream",
         )
         return self.get_status()
@@ -152,6 +178,8 @@ class MusicSyncStreamManager:
         self._bass = 0.0
         self._mid = 0.0
         self._treble = 0.0
+        self._beat = False
+        self._beat_intensity = 0.0
         return self.get_status()
 
     def update_targets(self, target_ips: list[str]) -> None:
@@ -188,6 +216,11 @@ class MusicSyncStreamManager:
                 "bass": round(self._bass, 3) if is_running else 0.0,
                 "mid": round(self._mid, 3) if is_running else 0.0,
                 "treble": round(self._treble, 3) if is_running else 0.0,
+                "beat": bool(self._beat) if is_running else False,
+                "beat_intensity": round(self._beat_intensity, 3) if is_running else 0.0,
+                "band_map": dict(self._band_map),
+                "beat_boost": self._beat_boost,
+                "custom_palette": dict(self._custom_palette),
                 "last_color": (
                     self._last_color.to_dict() if self._last_color is not None else None
                 ),
@@ -202,6 +235,7 @@ class MusicSyncStreamManager:
         device_index: int | None,
         palette_mode: str,
         sensitivity: float,
+        custom_palette: dict[str, str],
         run_id: int,
     ) -> dict[str, Any]:
         """Ejecuta una lectura sincrona del muestreador de audio (via `asyncio.to_thread`)."""
@@ -212,17 +246,28 @@ class MusicSyncStreamManager:
                     "bass": 0.0,
                     "mid": 0.0,
                     "treble": 0.0,
+                    "beat": False,
+                    "beat_intensity": 0.0,
                     "brightness": self._fixed_brightness,
                     "color": Color(56, 34, 24),
                 }
 
             sample_frame_fn = getattr(sampler, "sample_frame", None)
             if callable(sample_frame_fn):
-                result = sample_frame_fn(
-                    device_index=device_index,
-                    palette_mode=palette_mode,
-                    sensitivity=sensitivity,
-                )
+                params = inspect.signature(sample_frame_fn).parameters
+                if "custom_palette" in params:
+                    result = sample_frame_fn(
+                        device_index=device_index,
+                        palette_mode=palette_mode,
+                        sensitivity=sensitivity,
+                        custom_palette=custom_palette,
+                    )
+                else:
+                    result = sample_frame_fn(
+                        device_index=device_index,
+                        palette_mode=palette_mode,
+                        sensitivity=sensitivity,
+                    )
                 return dict(result)
 
             # Compatibilidad con dobles de prueba que solo implementan `sample_audio_metrics`
@@ -235,6 +280,8 @@ class MusicSyncStreamManager:
             "bass": round(clamped_energy * (color.r / 255.0), 3),
             "mid": round(clamped_energy * (color.g / 255.0), 3),
             "treble": round(clamped_energy * (color.b / 255.0), 3),
+            "beat": False,
+            "beat_intensity": 0.0,
             "brightness": derived_brightness,
             "color": color,
         }
@@ -242,6 +289,7 @@ class MusicSyncStreamManager:
     async def _run_loop(
         self,
         on_frame: Callable[[Color, int, list[str]], Awaitable[bool]],
+        on_bulb_frames: Callable[[dict[str, tuple[Color, int]]], Awaitable[bool]] | None,
         run_id: int,
     ) -> None:
         """Bucle asincrono que analiza el espectro acustico y transmite fotogramas UDP."""
@@ -254,12 +302,14 @@ class MusicSyncStreamManager:
                     device_index = self._device_index
                     palette_mode = self._palette_mode
                     sensitivity = self._sensitivity
+                    custom_palette = dict(self._custom_palette)
                     metrics = await asyncio.to_thread(
                         self._sample_once,
                         sampler,
                         device_index,
                         palette_mode,
                         sensitivity,
+                        custom_palette,
                         run_id,
                     )
                     if self._generation != run_id or not self._active:
@@ -277,15 +327,42 @@ class MusicSyncStreamManager:
                     self._bass = finite_metric(metrics.get("bass", 0.0))
                     self._mid = finite_metric(metrics.get("mid", 0.0))
                     self._treble = finite_metric(metrics.get("treble", 0.0))
+                    self._beat = bool(metrics.get("beat", False))
+                    self._beat_intensity = finite_metric(metrics.get("beat_intensity", 0.0))
                     self._last_color = sampled_color
                     self._last_brightness = effective_brightness
 
-                    if self._target_ips:
-                        sent = await on_frame(
-                            sampled_color,
-                            effective_brightness,
-                            list(self._target_ips),
+                    target_ips = list(self._target_ips)
+                    if target_ips:
+                        has_bands = any(
+                            self._band_map.get(ip, "full") != "full" for ip in target_ips
                         )
+                        if has_bands and on_bulb_frames is not None:
+                            per_bulb = {
+                                ip: resolve_band_frame(
+                                    self._band_map.get(ip, "full"),
+                                    bass=self._bass,
+                                    mid=self._mid,
+                                    treble=self._treble,
+                                    rms=self._rms,
+                                    base_color=sampled_color,
+                                    base_brightness=effective_brightness,
+                                    palette_mode=palette_mode,
+                                    custom_palette=custom_palette,
+                                    beat=self._beat,
+                                    beat_boost=self._beat_boost,
+                                    audio_brightness=self._audio_brightness,
+                                )
+                                for ip in target_ips
+                            }
+                            sent = await on_bulb_frames(per_bulb)
+                        else:
+                            pulsed_bri = (
+                                min(100, effective_brightness + 12)
+                                if (self._beat and self._beat_boost)
+                                else effective_brightness
+                            )
+                            sent = await on_frame(sampled_color, pulsed_bri, target_ips)
                         if sent and self._generation == run_id:
                             self._frames_sent += 1
                     consecutive_errors = 0

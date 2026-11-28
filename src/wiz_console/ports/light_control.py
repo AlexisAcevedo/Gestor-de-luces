@@ -279,6 +279,9 @@ class LightControlServicePort(Protocol):
         brightness: int = 85,
         device_index: int | None = None,
         ips: list[str] | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion acustica WASAPI Loopback hacia los focos objetivo."""
         ...

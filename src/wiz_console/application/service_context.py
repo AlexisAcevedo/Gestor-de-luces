@@ -133,6 +133,9 @@ class ServiceContext:
             "audio_brightness": True,
             "brightness": 85,
             "device_index": None,
+            "band_map": {},
+            "beat_boost": True,
+            "custom_palette": {"bass": "#ff2a55", "mid": "#22e58b", "treble": "#389bff"},
         }
         self.global_hotkeys: dict[str, Any] = default_global_hotkeys()
 
