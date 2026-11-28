@@ -43,11 +43,15 @@ class FakeWizBulbServer:
         module_name: str = "ESP01_SHRGB1C_31",
         host: str = "127.0.0.1",
         port: int = 0,
+        rssi: int = -54,
+        fw_version: str = "1.31.0",
     ) -> None:
         self.mac = mac
         self.module_name = module_name
         self.host = host
         self.port = port
+        self.rssi = rssi
+        self.fw_version = fw_version
         self._transport: asyncio.DatagramTransport | None = None
         self.received_messages: list[dict[str, Any]] = []
 
@@ -59,6 +63,7 @@ class FakeWizBulbServer:
             "temp": 4200,
             "sceneId": 0,
             "speed": 100,
+            "rssi": self.rssi,
         }
 
     @property
@@ -105,7 +110,7 @@ class FakeWizBulbServer:
                 "result": {
                     "mac": self.mac,
                     "moduleName": self.module_name,
-                    "fwVersion": "1.31.0",
+                    "fwVersion": self.fw_version,
                 },
             }
 

@@ -22,8 +22,11 @@ import numpy as np
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 from tests.waits import wait_until_async
 from wiz_console.adapters.ambilight import (
+    VALID_AMBILIGHT_REGIONS,
     MssScreenSampler,
+    detect_letterbox_bounds,
     extract_color_and_brightness_from_bgra,
+    extract_region_colors_from_bgra,
 )
 from wiz_console.adapters.ui_webview.bridge import WebviewBridge
 from wiz_console.adapters.wiz.udp_controller import WizUdpController
@@ -306,3 +309,99 @@ async def test_ambilight_auto_brightness_respects_min_brightness_floor() -> None
 
         # Aunque el sampler sugiera 10%, el piso configurado de 18% debe imponerse
         assert server.pilot_state["dimming"] == 18
+
+
+def test_multizone_region_extraction_and_letterbox_crop() -> None:
+    """Single-grab region slicing resolves Left/Right/Top/Bottom/Center and crops black bars."""
+    width, height = 40, 40
+    frame = np.zeros((height, width, 4), dtype=np.uint8)
+    frame[:, :, 3] = 255
+    # Active cinema area inside rows 8..32 (top/bottom 8px black letterbox bars)
+    # Left half: vibrant blue (B=240, G=30, R=20), Right half: vibrant green (B=20, G=240, R=30)
+    frame[8:32, :20, 0] = 240
+    frame[8:32, :20, 1] = 30
+    frame[8:32, :20, 2] = 20
+    frame[8:32, 20:, 0] = 20
+    frame[8:32, 20:, 1] = 240
+    frame[8:32, 20:, 2] = 30
+    # Center patch (rows 14..26, cols 10..30): bright red (B=10, G=15, R=250)
+    frame[14:26, 10:30, 0] = 10
+    frame[14:26, 10:30, 1] = 15
+    frame[14:26, 10:30, 2] = 250
+
+    top, bottom, left, right = detect_letterbox_bounds(frame, luma_threshold=12.0)
+    assert (top, bottom, left, right) == (8, 32, 0, 40)
+
+    regions = extract_region_colors_from_bgra(
+        frame.tobytes(),
+        width=width,
+        height=height,
+        regions=VALID_AMBILIGHT_REGIONS,
+        mode="average",
+        stride=1,
+        letterbox_crop=True,
+    )
+    assert set(regions) == set(VALID_AMBILIGHT_REGIONS)
+    assert regions["left"][0].b > 200
+    assert regions["right"][0].g > 200
+    assert regions["center"][0].r > 200
+
+    # All-black frame must not collapse or throw during letterbox detection.
+    black = np.zeros((16, 16, 4), dtype=np.uint8)
+    assert detect_letterbox_bounds(black) == (0, 16, 0, 16)
+
+
+async def test_ambilight_multizone_streams_distinct_colors_per_bulb() -> None:
+    """PR 2A.3: Left/Right mapped bulbs receive distinct region colors in parallel."""
+    width, height = 24, 24
+    frame = np.zeros((height, width, 4), dtype=np.uint8)
+    frame[:, :, 3] = 255
+    frame[:, :12, 2] = 250  # Left = Red
+    frame[:, 12:, 0] = 250  # Right = Blue
+    shot = _FakeMssShot(bgra=frame.tobytes(), width=width, height=height)
+    ctx = _FakeMssContext(
+        monitors=[
+            {"left": 0, "top": 0, "width": width, "height": height},
+            {"left": 0, "top": 0, "width": width, "height": height},
+        ],
+        shot=shot,
+    )
+    sampler = MssScreenSampler(stride=1, sct_factory=lambda: ctx)
+
+    async with (
+        FakeWizBulbServer(mac="a8bb50101010") as left_bulb,
+        FakeWizBulbServer(mac="a8bb50202020") as right_bulb,
+    ):
+        controller = WizUdpController(probe_candidates=[left_bulb.endpoint, right_bulb.endpoint])
+        service = LightControlService(
+            controller=controller,
+            rate_limiter=StreamRateLimiter(max_hz=50.0, alpha=1.0, min_color_delta=1),
+            screen_sampler=sampler,
+            ambilight_manager=AmbilightStreamManager(sampler=sampler, interval_seconds=0.02),
+        )
+        await service.discover_bulbs()
+
+        status = service.start_ambilight(
+            monitor_index=1,
+            color_mode="average",
+            auto_brightness=False,
+            brightness=80,
+            smoothing_alpha=1.0,
+            region_map={left_bulb.endpoint: "left", right_bulb.endpoint: "right"},
+            letterbox_crop=False,
+        )
+        assert status["region_map"] == {
+            left_bulb.endpoint: "left",
+            right_bulb.endpoint: "right",
+        }
+        assert status["letterbox_crop"] is False
+
+        await wait_until_async(
+            lambda: (
+                left_bulb.pilot_state.get("r", 0) > 200 and right_bulb.pilot_state.get("b", 0) > 200
+            ),
+            "multizone ambilight never delivered distinct left/right colors",
+        )
+        await service.stop_ambilight()
+        assert left_bulb.pilot_state["r"] > 200 and left_bulb.pilot_state["b"] < 20
+        assert right_bulb.pilot_state["b"] > 200 and right_bulb.pilot_state["r"] < 20

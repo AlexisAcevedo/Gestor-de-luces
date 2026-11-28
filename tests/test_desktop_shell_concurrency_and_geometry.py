@@ -713,3 +713,38 @@ def test_main_releases_guard_and_shuts_down_bridge_when_create_window_fails(
 
     assert shutdowns == [True]
     assert released == [True]
+
+
+def test_desktop_application_cleanup_isolates_icon_release_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BUG-001: a failing icon release never aborts guard, hotkeys, tray, or bridge shutdown."""
+    calls: list[str] = []
+    bridge = SimpleNamespace(
+        shutdown=lambda: calls.append("bridge"),
+        get_tray_snapshot=lambda: {"language": "en", "theme": "architectural-stone"},
+        get_autostart=lambda: {"enabled": False},
+    )
+    service = SimpleNamespace(get_language=lambda: "en", get_theme=lambda: "architectural-stone")
+    guard = SimpleNamespace(release=lambda: calls.append("guard"))
+    hotkeys = SimpleNamespace(stop=lambda: calls.append("hotkeys"))
+
+    app = DesktopApplication(
+        service=service,  # type: ignore[arg-type]
+        bridge=bridge,  # type: ignore[arg-type]
+        index_path=tmp_path / "index.html",
+        icon_path=tmp_path / "app.ico",
+        ui_dir=tmp_path,
+        guard=guard,
+        hotkeys=hotkeys,
+    )
+    app._window = _FakeWindow()
+    app._tray = SimpleNamespace(stop=lambda: calls.append("tray"))  # type: ignore[assignment]
+
+    def _boom(_window: Any) -> None:
+        raise RuntimeError("ObjectDisposedException simulated")
+
+    monkeypatch.setattr(desktop_app.window_chrome, "release_window_icons", _boom)
+
+    app.cleanup()
+    assert calls == ["guard", "hotkeys", "tray", "bridge"]

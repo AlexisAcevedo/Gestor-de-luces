@@ -7,7 +7,7 @@ categorias y soporte de velocidad) sin depender de detalles internos de pywizlig
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from wiz_console.domain.value_objects import (
@@ -17,6 +17,7 @@ from wiz_console.domain.value_objects import (
     LightMode,
     SceneSpeed,
     parse_strict_int,
+    validate_local_endpoint,
 )
 
 
@@ -94,6 +95,81 @@ def list_builtin_scenes() -> list[BuiltInScene]:
     return list(BUILTIN_SCENES)
 
 
+@dataclass(frozen=True)
+class BulbSceneState:
+    """Captured lighting state for an individual fixture inside a multi-bulb preset."""
+
+    is_on: bool = True
+    mode: LightMode = LightMode.TEMPERATURE
+    brightness: int = 100
+    color: Color | None = None
+    temperature: int | None = None
+    built_in_scene_id: int | None = None
+    speed: int = 100
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.is_on, bool):
+            raise ValueError(f"Invalid bulb scene power state: {self.is_on!r}")
+        if not isinstance(self.mode, LightMode):
+            raise ValueError(f"Invalid bulb scene mode: {self.mode!r}")
+        if self.color is not None and not isinstance(self.color, Color):
+            raise ValueError(f"Invalid bulb scene color: {self.color!r}")
+        Brightness(self.brightness)
+        SceneSpeed(self.speed)
+        if self.temperature is not None:
+            ColorTemperature(self.temperature)
+        if self.built_in_scene_id is not None:
+            if isinstance(self.built_in_scene_id, bool) or not isinstance(
+                self.built_in_scene_id, int
+            ):
+                raise ValueError(f"Invalid built-in scene ID: {self.built_in_scene_id!r}.")
+            if get_builtin_scene(self.built_in_scene_id) is None:
+                raise ValueError(f"Unknown built-in scene ID: {self.built_in_scene_id}.")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize per-bulb scene parameters cleanly."""
+        return {
+            "is_on": self.is_on,
+            "mode": self.mode.value,
+            "brightness": self.brightness,
+            "color": self.color.to_dict() if self.color else None,
+            "temperature": self.temperature,
+            "built_in_scene_id": self.built_in_scene_id,
+            "speed": self.speed,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BulbSceneState:
+        """Reconstruct a validated per-bulb state from JSON."""
+        raw_color = data.get("color")
+        color = (
+            Color(
+                r=parse_strict_int(raw_color["r"], field="color.r"),
+                g=parse_strict_int(raw_color["g"], field="color.g"),
+                b=parse_strict_int(raw_color["b"], field="color.b"),
+            )
+            if isinstance(raw_color, dict)
+            else None
+        )
+        return cls(
+            is_on=bool(data.get("is_on", True)),
+            mode=LightMode(data["mode"]),
+            brightness=parse_strict_int(data.get("brightness", 100), field="brightness"),
+            color=color,
+            temperature=(
+                parse_strict_int(data["temperature"], field="temperature")
+                if data.get("temperature") is not None
+                else None
+            ),
+            built_in_scene_id=(
+                parse_strict_int(data["built_in_scene_id"], field="built_in_scene_id")
+                if data.get("built_in_scene_id") is not None
+                else None
+            ),
+            speed=parse_strict_int(data.get("speed", 100), field="speed"),
+        )
+
+
 @dataclass
 class CustomScene:
     """Representa un preset o escena personalizada creada y guardada por el usuario."""
@@ -109,6 +185,7 @@ class CustomScene:
     # Marca de favorito para el acceso rapido desde la bandeja del sistema. Vive en el
     # dominio porque es una preferencia del usuario sobre el preset, no un detalle de UI.
     is_favorite: bool = False
+    bulb_states: dict[str, BulbSceneState] | None = field(default=None)
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id.strip():
@@ -130,10 +207,20 @@ class CustomScene:
                 raise ValueError(f"Invalid built-in scene ID: {self.built_in_scene_id!r}.")
             if get_builtin_scene(self.built_in_scene_id) is None:
                 raise ValueError(f"Unknown built-in scene ID: {self.built_in_scene_id}.")
+        if self.bulb_states is not None:
+            if not isinstance(self.bulb_states, dict):
+                raise ValueError("CustomScene bulb_states must be a mapping.")
+            normalized_states: dict[str, BulbSceneState] = {}
+            for raw_ip, raw_state in self.bulb_states.items():
+                clean_ip = validate_local_endpoint(raw_ip)
+                if not isinstance(raw_state, BulbSceneState):
+                    raise ValueError(f"Invalid BulbSceneState for {clean_ip}: {raw_state!r}")
+                normalized_states[clean_ip] = raw_state
+            self.bulb_states = normalized_states or None
 
     def to_dict(self) -> dict[str, Any]:
         """Convierte la escena personalizada a un diccionario serializable en JSON."""
-        return {
+        payload: dict[str, Any] = {
             "id": self.id,
             "name": self.name,
             "mode": self.mode.value,
@@ -144,6 +231,11 @@ class CustomScene:
             "speed": self.speed,
             "is_favorite": self.is_favorite,
         }
+        if self.bulb_states:
+            payload["bulb_states"] = {
+                ip: bulb_state.to_dict() for ip, bulb_state in self.bulb_states.items()
+            }
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CustomScene:
@@ -164,6 +256,17 @@ class CustomScene:
             if isinstance(raw_color, dict)
             else None
         )
+        raw_bulb_states = data.get("bulb_states")
+        bulb_states: dict[str, BulbSceneState] | None = None
+        if raw_bulb_states is not None:
+            if not isinstance(raw_bulb_states, dict):
+                raise ValueError("CustomScene bulb_states must be an object.")
+            parsed_states: dict[str, BulbSceneState] = {}
+            for raw_ip, raw_entry in raw_bulb_states.items():
+                if not isinstance(raw_entry, dict):
+                    raise ValueError(f"Invalid bulb_states entry for {raw_ip!r}.")
+                parsed_states[validate_local_endpoint(raw_ip)] = BulbSceneState.from_dict(raw_entry)
+            bulb_states = parsed_states or None
         return cls(
             id=raw_id,
             name=raw_name,
@@ -184,4 +287,5 @@ class CustomScene:
             # Los archivos guardados antes de existir la bandeja no incluyen la clave;
             # se asume False para que sigan cargando sin migracion explicita.
             is_favorite=bool(data.get("is_favorite", False)),
+            bulb_states=bulb_states,
         )

@@ -177,6 +177,79 @@ export function renderMusicPanel() {
   if (audioBriCheckbox && typeof music.audio_brightness === "boolean") {
     audioBriCheckbox.checked = music.audio_brightness;
   }
+
+  const beatPill = document.getElementById("music-beat-pill");
+  if (beatPill) {
+    beatPill.setAttribute("data-beat", String(Boolean(music.active && music.beat)));
+  }
+
+  const beatBoostCheckbox = document.getElementById("music-beat-boost");
+  if (beatBoostCheckbox) {
+    beatBoostCheckbox.checked = Boolean(music.beat_boost ?? true);
+  }
+
+  const customRow = document.getElementById("music-custom-palette-row");
+  const isCustomPalette = (music.palette_mode || "spectrum") === "custom";
+  if (customRow) {
+    customRow.hidden = !isCustomPalette;
+  }
+  const cp = (music.custom_palette && typeof music.custom_palette === "object")
+    ? music.custom_palette
+    : { bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" };
+  [["bass", "music-custom-bass", "#ff2a55"], ["mid", "music-custom-mid", "#22e58b"], ["treble", "music-custom-treble", "#389bff"]].forEach(([band, id, fallback]) => {
+    const inp = document.getElementById(id);
+    if (inp && document.activeElement !== inp) {
+      inp.value = String(cp[band] || fallback);
+    }
+  });
+
+  const bandContainer = document.getElementById("music-band-map");
+  if (bandContainer) {
+    const activeEl = document.activeElement;
+    if (activeEl && bandContainer.contains(activeEl)) {
+      return;
+    }
+    const targetIps = appState.selectedIps.length > 0
+      ? appState.selectedIps
+      : appState.bulbs.map((b) => b.ip);
+    const bandMap = (music.band_map && typeof music.band_map === "object") ? music.band_map : {};
+    if (targetIps.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "well-description";
+      empty.textContent = t("music.bandMapEmpty");
+      bandContainer.replaceChildren(empty);
+    } else {
+      const BAND_CHOICES = [
+        ["full", "music.bandFull"],
+        ["bass", "music.bandBass"],
+        ["mid", "music.bandMid"],
+        ["treble", "music.bandTreble"]
+      ];
+      const rows = targetIps.map((ip, idx) => {
+        const bulb = appState.bulbs.find((b) => b.ip === ip);
+        const row = document.createElement("div");
+        row.className = "per-bulb-map-row";
+        const label = document.createElement("label");
+        const selectId = `music-band-select-${idx}`;
+        label.setAttribute("for", selectId);
+        label.textContent = bulb ? bulb.name : ip;
+        const select = document.createElement("select");
+        select.id = selectId;
+        select.className = "console-select per-bulb-map-select";
+        select.dataset.ip = ip;
+        BAND_CHOICES.forEach(([val, key]) => {
+          const opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = t(key);
+          select.appendChild(opt);
+        });
+        select.value = BAND_CHOICES.some(([v]) => v === bandMap[ip]) ? bandMap[ip] : "full";
+        row.append(label, select);
+        return row;
+      });
+      bandContainer.replaceChildren(...rows);
+    }
+  }
 }
 
 export function bindMusicEvents() {
@@ -186,7 +259,20 @@ export function bindMusicEvents() {
     const sensSlider = document.getElementById("music-sensitivity-slider");
     const alphaSlider = document.getElementById("music-smoothing-slider");
     const audioBriCheckbox = document.getElementById("music-audio-brightness");
+    const beatBoostCheckbox = document.getElementById("music-beat-boost");
     const briSlider = document.getElementById("brightness-slider");
+    const bassInp = document.getElementById("music-custom-bass");
+    const midInp = document.getElementById("music-custom-mid");
+    const trebleInp = document.getElementById("music-custom-treble");
+    const bandMap = {};
+    const bandContainer = document.getElementById("music-band-map");
+    if (bandContainer) {
+      bandContainer.querySelectorAll("select").forEach((sel) => {
+        if (sel.dataset.ip) {
+          bandMap[sel.dataset.ip] = sel.value || "full";
+        }
+      });
+    }
 
     const rawDev = devSelect ? Number(devSelect.value) : -1;
     return {
@@ -195,7 +281,14 @@ export function bindMusicEvents() {
       sensitivity: Number(sensSlider ? sensSlider.value : 1.0),
       smoothingAlpha: Number(alphaSlider ? alphaSlider.value : 0.50),
       audioBrightness: Boolean(audioBriCheckbox ? audioBriCheckbox.checked : true),
-      brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100)
+      brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100),
+      bandMap,
+      beatBoost: Boolean(beatBoostCheckbox ? beatBoostCheckbox.checked : true),
+      customPalette: {
+        bass: bassInp ? bassInp.value : "#ff2a55",
+        mid: midInp ? midInp.value : "#22e58b",
+        treble: trebleInp ? trebleInp.value : "#389bff"
+      }
     };
   };
 
@@ -210,7 +303,10 @@ export function bindMusicEvents() {
           p.audioBrightness,
           p.brightness,
           p.deviceIndex,
-          null
+          null,
+          p.bandMap,
+          p.beatBoost,
+          p.customPalette
         ),
       statusMsg
     );
@@ -247,11 +343,16 @@ export function bindMusicEvents() {
         b.setAttribute("aria-pressed", String(active));
       });
       appState.musicSync.palette_mode = btn.dataset.paletteMode || "spectrum";
+      const customRow = document.getElementById("music-custom-palette-row");
+      if (customRow) {
+        customRow.hidden = appState.musicSync.palette_mode !== "custom";
+      }
       if (appState.musicSync.active) {
         const paletteKeyMap = {
           spectrum: "music.paletteSpectrum",
           club: "music.paletteClub",
-          chill: "music.paletteChill"
+          chill: "music.paletteChill",
+          custom: "music.paletteCustom"
         };
         const paletteLabel = t(paletteKeyMap[appState.musicSync.palette_mode] || "music.paletteSpectrum");
         startOrUpdateMusicSync(() =>
@@ -324,6 +425,43 @@ export function bindMusicEvents() {
         startOrUpdateMusicSync(() =>
           t(musicAudioBriCheckbox.checked ? "status.musicAudioBriOn" : "status.musicAudioBriOff")
         );
+      }
+    });
+  }
+
+  const beatBoostCheckbox = document.getElementById("music-beat-boost");
+  if (beatBoostCheckbox) {
+    beatBoostCheckbox.addEventListener("change", () => {
+      appState.musicSync.beat_boost = beatBoostCheckbox.checked;
+      if (appState.musicSync.active) {
+        startOrUpdateMusicSync(() =>
+          t(beatBoostCheckbox.checked ? "status.musicBeatBoostOn" : "status.musicBeatBoostOff")
+        );
+      }
+    });
+  }
+
+  ["music-custom-bass", "music-custom-mid", "music-custom-treble"].forEach((id) => {
+    const inp = document.getElementById(id);
+    if (inp) {
+      inp.addEventListener("change", () => {
+        if (appState.musicSync.active && appState.musicSync.palette_mode === "custom") {
+          startOrUpdateMusicSync(() => t("status.musicCustomPaletteChanged"));
+        }
+      });
+    }
+  });
+
+  const bandContainer = document.getElementById("music-band-map");
+  if (bandContainer) {
+    bandContainer.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!target || !target.dataset || !target.dataset.ip) return;
+      const nextMap = Object.assign({}, appState.musicSync.band_map || {});
+      nextMap[target.dataset.ip] = target.value || "full";
+      appState.musicSync.band_map = nextMap;
+      if (appState.musicSync.active) {
+        startOrUpdateMusicSync(() => t("status.musicBandChanged"));
       }
     });
   }

@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
 from uuid import uuid4
 
 from wiz_console.application.bulb_control_service import BulbControlService
 from wiz_console.application.service_context import ServiceContext, validate_display_name
-from wiz_console.domain.models import Bulb
-from wiz_console.domain.scenes import CustomScene
+from wiz_console.domain.models import Bulb, LightState
+from wiz_console.domain.scenes import BulbSceneState, CustomScene
 from wiz_console.domain.value_objects import Color, LightMode
+
+
+def _bulb_scene_state_from_light(state: LightState) -> BulbSceneState:
+    """Convert live fixture state into an immutable per-bulb scene snapshot."""
+    return BulbSceneState(
+        is_on=bool(state.is_on),
+        mode=state.mode,
+        brightness=int(state.brightness),
+        color=state.color,
+        temperature=state.temperature,
+        built_in_scene_id=state.scene_id,
+        speed=int(state.speed),
+    )
 
 
 class SceneService:
@@ -31,16 +45,24 @@ class SceneService:
         name: str,
         source_ip: str | None = None,
         scene_id: str | None = None,
+        capture_all_targets: bool = False,
     ) -> CustomScene:
         """Captura la fotografia luminica actual del foco de referencia y la guarda como preset.
 
         Si no se especifica `source_ip`, toma el primer foco seleccionado o el primero
-        registrado. Si aun no hay focos en el inventario, emplea el estado por defecto
-        (4200K al 100%) para permitir crear presets antes de conectar fisicamente un foco.
+        registrado. Cuando `capture_all_targets=True` y existen al menos 2 luminarias
+        objetivo, guarda tambien el estado individual de cada foco en `bulb_states`.
         """
         cleaned_name = validate_display_name(name, "Custom scene")
 
         reference_state = self._ctx.resolve_reference_state(source_ip)
+        bulb_states: dict[str, BulbSceneState] | None = None
+        if capture_all_targets:
+            target_ips = [ip for ip in self._ctx.get_target_ips() if ip in self._ctx.bulbs]
+            if len(target_ips) >= 2:
+                bulb_states = {
+                    ip: _bulb_scene_state_from_light(self._ctx.bulbs[ip].state) for ip in target_ips
+                }
         return self.create_or_update_custom_scene(
             name=cleaned_name,
             mode=reference_state.mode,
@@ -50,6 +72,7 @@ class SceneService:
             built_in_scene_id=reference_state.scene_id,
             speed=reference_state.speed,
             scene_id=scene_id,
+            bulb_states=bulb_states,
         )
 
     def create_or_update_custom_scene(
@@ -62,6 +85,7 @@ class SceneService:
         built_in_scene_id: int | None = None,
         speed: int = 100,
         scene_id: str | None = None,
+        bulb_states: dict[str, BulbSceneState] | None = None,
     ) -> CustomScene:
         """Crea un nuevo preset personalizado o actualiza uno existente validando el dominio."""
         cleaned_name = validate_display_name(name, "Custom scene")
@@ -95,6 +119,7 @@ class SceneService:
             speed=int(speed),
             # Sobrescribir la captura luminica de un preset no debe quitarlo de la bandeja.
             is_favorite=self._is_existing_favorite(resolved_id),
+            bulb_states=bulb_states,
         )
         self._ctx.custom_scenes[scene.id] = scene
         self._ctx.persist_scenes()
@@ -134,6 +159,42 @@ class SceneService:
         del self._ctx.custom_scenes[scene_id]
         self._ctx.persist_scenes()
 
+    async def _apply_state_to_ips(
+        self,
+        *,
+        is_on: bool,
+        mode: LightMode,
+        brightness: int,
+        color: Color | None,
+        temperature: int | None,
+        built_in_scene_id: int | None,
+        speed: int,
+        ips: list[str] | None,
+    ) -> list[Bulb]:
+        if not is_on:
+            return await self._bulb_control.set_power(False, ips=ips)
+        if mode == LightMode.RGB and color is not None:
+            return await self._bulb_control.set_color(
+                r=color.r,
+                g=color.g,
+                b=color.b,
+                brightness=brightness,
+                ips=ips,
+            )
+        if mode == LightMode.SCENE and built_in_scene_id is not None:
+            return await self._bulb_control.set_builtin_scene(
+                scene_id=built_in_scene_id,
+                speed=speed,
+                brightness=brightness,
+                ips=ips,
+            )
+        kelvin = temperature if temperature is not None else 4200
+        return await self._bulb_control.set_temperature(
+            kelvin=kelvin,
+            brightness=brightness,
+            ips=ips,
+        )
+
     async def apply_custom_scene(
         self,
         scene_id: str,
@@ -144,24 +205,49 @@ class SceneService:
         if scene is None:
             raise KeyError(f"Custom scene '{scene_id}' does not exist.")
 
-        if scene.mode == LightMode.RGB and scene.color is not None:
-            return await self._bulb_control.set_color(
-                r=scene.color.r,
-                g=scene.color.g,
-                b=scene.color.b,
-                brightness=scene.brightness,
-                ips=ips,
-            )
-        if scene.mode == LightMode.SCENE and scene.built_in_scene_id is not None:
-            return await self._bulb_control.set_builtin_scene(
-                scene_id=scene.built_in_scene_id,
-                speed=scene.speed,
-                brightness=scene.brightness,
-                ips=ips,
-            )
-        kelvin = scene.temperature if scene.temperature is not None else 4200
-        return await self._bulb_control.set_temperature(
-            kelvin=kelvin,
+        if scene.bulb_states:
+            target_ips = self._ctx.get_target_ips(ips)
+            if not target_ips:
+                return []
+            tasks = []
+            for target_ip in target_ips:
+                per_bulb = scene.bulb_states.get(target_ip)
+                if per_bulb is not None:
+                    tasks.append(
+                        self._apply_state_to_ips(
+                            is_on=per_bulb.is_on,
+                            mode=per_bulb.mode,
+                            brightness=per_bulb.brightness,
+                            color=per_bulb.color,
+                            temperature=per_bulb.temperature,
+                            built_in_scene_id=per_bulb.built_in_scene_id,
+                            speed=per_bulb.speed,
+                            ips=[target_ip],
+                        )
+                    )
+                else:
+                    tasks.append(
+                        self._apply_state_to_ips(
+                            is_on=True,
+                            mode=scene.mode,
+                            brightness=scene.brightness,
+                            color=scene.color,
+                            temperature=scene.temperature,
+                            built_in_scene_id=scene.built_in_scene_id,
+                            speed=scene.speed,
+                            ips=[target_ip],
+                        )
+                    )
+            await asyncio.gather(*tasks)
+            return self._ctx.list_bulbs()
+
+        return await self._apply_state_to_ips(
+            is_on=True,
+            mode=scene.mode,
             brightness=scene.brightness,
+            color=scene.color,
+            temperature=scene.temperature,
+            built_in_scene_id=scene.built_in_scene_id,
+            speed=scene.speed,
             ips=ips,
         )
