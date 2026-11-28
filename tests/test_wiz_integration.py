@@ -138,3 +138,102 @@ async def test_stream_color_frame_sends_udp_datagrams() -> None:
         assert server.pilot_state["g"] == 128
         assert server.pilot_state["b"] == 0
         assert server.pilot_state["dimming"] == 70
+
+
+async def test_remove_bulb_updates_targets_and_persistence() -> None:
+    """remove_bulb deletes a bulb, updates selected targets/repository, and rejects unknown IPs."""
+    import pytest
+
+    async with (
+        FakeWizBulbServer(mac="a8bb50000011") as srv1,
+        FakeWizBulbServer(mac="a8bb50000012") as srv2,
+    ):
+        repo = InMemoryBulbRepository()
+        controller = WizUdpController(probe_candidates=[srv1.endpoint, srv2.endpoint])
+        service = LightControlService(controller=controller, bulb_repository=repo)
+        await service.discover_bulbs()
+
+        removed = service.remove_bulb(srv1.endpoint)
+        assert removed.ip == srv1.endpoint
+        assert [b.ip for b in service.list_bulbs()] == [srv2.endpoint]
+        assert service.get_target_ips() == [srv2.endpoint]
+        assert [b.ip for b in repo.saved] == [srv2.endpoint]
+
+        with pytest.raises(KeyError):
+            service.remove_bulb(srv1.endpoint)
+
+
+async def test_discover_bulbs_reconciles_dhcp_ip_change_by_mac() -> None:
+    """DHCP IP changes for a known MAC migrate the entry and keep custom alias & selection."""
+    from dataclasses import replace
+
+    from wiz_console.domain.models import LightState
+
+    class _MockController:
+        def __init__(self, bulbs: list[Bulb]) -> None:
+            self.bulbs = bulbs
+
+        async def discover(self, wait_time: float = 2.5) -> list[Bulb]:
+            return [replace(b) for b in self.bulbs]
+
+        async def probe_bulb(self, ip: str) -> Bulb | None:
+            return next((replace(b) for b in self.bulbs if b.ip == ip), None)
+
+        async def get_state(self, ip: str) -> LightState | None:
+            b = next((b for b in self.bulbs if b.ip == ip), None)
+            return b.state if b else None
+
+        async def set_power(self, ip: str, is_on: bool, brightness: int | None = None) -> bool:
+            return True
+
+        async def set_brightness(self, ip: str, brightness: int) -> bool:
+            return True
+
+        async def set_color(self, ip: str, color: Color, brightness: int | None = None) -> bool:
+            return True
+
+        async def set_temperature(
+            self, ip: str, temperature: int, brightness: int | None = None
+        ) -> bool:
+            return True
+
+        async def set_scene(
+            self, ip: str, scene_id: int, speed: int = 100, brightness: int | None = None
+        ) -> bool:
+            return True
+
+        async def stream_pilot(
+            self, ip: str, color: Color | None = None, brightness: int | None = None
+        ) -> bool:
+            return True
+
+        async def close(self) -> None:
+            return None
+
+    repo = InMemoryBulbRepository()
+    ctrl = _MockController(
+        [
+            Bulb(ip="192.168.1.10", mac="AA:BB:CC:00:00:01", name="WiZ Bulb (192.168.1.10)"),
+            Bulb(ip="192.168.1.11", mac="unknown", name="Guest Lamp"),
+        ]
+    )
+    service = LightControlService(controller=ctrl, bulb_repository=repo)
+    await service.discover_bulbs()
+    service.rename_bulb("192.168.1.10", "Studio Key")
+    service.select_targets(["192.168.1.10"])
+
+    # Simulate DHCP lease change for Studio Key plus another bulb with "unknown" MAC.
+    ctrl.bulbs = [
+        Bulb(ip="192.168.1.44", mac="aabbcc000001", name="WiZ Bulb (192.168.1.44)"),
+        Bulb(ip="192.168.1.99", mac="unknown", name="WiZ Bulb (192.168.1.99)"),
+    ]
+    bulbs = await service.discover_bulbs()
+    ips = {b.ip for b in bulbs}
+    assert "192.168.1.10" not in ips
+    assert "192.168.1.44" in ips
+    assert "192.168.1.11" in ips  # unknown MAC is never treated as a duplicate match
+    assert "192.168.1.99" in ips
+    reconciled = service.get_bulb("192.168.1.44")
+    assert reconciled is not None
+    assert reconciled.name == "Studio Key"
+    assert service.get_target_ips() == ["192.168.1.44"]

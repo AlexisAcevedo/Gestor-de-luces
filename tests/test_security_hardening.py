@@ -96,6 +96,7 @@ _JS_API_SURFACE = frozenset(
         "get_music_sync_status",
         "get_sleep_timer_status",
         "refresh_states",
+        "remove_bulb",
         "rename_bulb",
         "save_custom_scene",
         "select_targets",

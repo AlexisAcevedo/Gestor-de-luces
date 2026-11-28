@@ -61,6 +61,10 @@ class LightControlServicePort(Protocol):
         """Cambia el nombre amigable de un foco registrado y guarda el cambio."""
         ...
 
+    def remove_bulb(self, ip: str) -> Bulb:
+        """Remove a registered bulb by IP and persist the updated inventory."""
+        ...
+
     async def refresh_states(self, ips: list[str] | None = None) -> list[Bulb]:
         """Consulta en paralelo el estado real (getPilot) de los focos indicados."""
         ...

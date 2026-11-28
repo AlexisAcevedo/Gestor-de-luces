@@ -129,6 +129,12 @@ export function createBrowserMockApi() {
       if (target && String(newName || "").trim()) target.name = String(newName).trim();
       return buildMockEnvelope();
     },
+    remove_bulb: (ip) => {
+      const cleaned = String(ip || "").trim();
+      mockBulbs = mockBulbs.filter((b) => b.ip !== cleaned);
+      mockSelected = mockSelected.filter((item) => item !== cleaned);
+      return buildMockEnvelope();
+    },
     set_power: (isOn, brightness, ips) => {
       mutateTargetBulbs(ips, (st) => {
         st.is_on = Boolean(isOn);

@@ -183,6 +183,16 @@ export function createDomEnvironment({ elementsById = {}, hash = "", storageInit
       this.append(...children);
     }
 
+    contains(node) {
+      if (!node) return false;
+      let cur = node;
+      while (cur) {
+        if (cur === this) return true;
+        cur = cur.parentNode;
+      }
+      return false;
+    }
+
     addEventListener(type, handler) {
       if (!this.listeners.has(type)) this.listeners.set(type, []);
       this.listeners.get(type).push(handler);

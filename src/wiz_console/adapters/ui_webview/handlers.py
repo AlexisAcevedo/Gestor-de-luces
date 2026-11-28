@@ -144,6 +144,10 @@ class BridgeHandlers:
             )
         )
 
+    def remove_bulb(self, ip: str) -> dict[str, Any]:
+        """Remove a registered bulb from the local inventory."""
+        return self._call(lambda: self._service.remove_bulb(ip=_req_str(ip, field="ip")))
+
     def select_targets(self, ips: list[str]) -> dict[str, Any]:
         """Actualiza la seleccion de focos activos para control individual o grupal."""
         return self._call(lambda: self._service.select_targets(_opt_ips(ips) or []))
