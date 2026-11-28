@@ -39,19 +39,19 @@ Write-Host "==> Generating icon"
 if ($LASTEXITCODE -ne 0) { throw "Icon generation failed" }
 
 Write-Host "==> PyInstaller"
-& $Python -m PyInstaller packaging\gestor_luces.spec --noconfirm --clean
+& $Python -m PyInstaller packaging\wiz_console.spec --noconfirm --clean
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
 # Sign the frozen executable BEFORE packaging the portable zip and Inno Setup installer
 # so every distributed copy carries the Authenticode signature.
-Invoke-CodeSign -TargetPath (Join-Path $Root "dist\GestorDeLuces\GestorDeLuces.exe")
+Invoke-CodeSign -TargetPath (Join-Path $Root "dist\WizConsole\WizConsole.exe")
 
 Write-Host "==> Portable zip"
-$zip = Join-Path $Root "dist\GestorDeLuces-portable-$Version.zip"
+$zip = Join-Path $Root "dist\WizConsole-portable-$Version.zip"
 for ($attempt = 1; $attempt -le 5; $attempt++) {
   try {
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    Compress-Archive -Path (Join-Path $Root "dist\GestorDeLuces") -DestinationPath $zip -Force
+    Compress-Archive -Path (Join-Path $Root "dist\WizConsole") -DestinationPath $zip -Force
     break
   } catch {
     if ($attempt -eq 5) { throw }
@@ -76,7 +76,7 @@ if (-not $SkipInstaller) {
     Write-Host "==> Inno Setup"
     & $iscc.Source "/DAppVersion=$Version" packaging\installer.iss
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-    Invoke-CodeSign -TargetPath (Join-Path $Root "dist\GestorDeLuces-Setup-$Version.exe")
+    Invoke-CodeSign -TargetPath (Join-Path $Root "dist\WizConsole-Setup-$Version.exe")
   } else {
     Write-Warning "Inno Setup (ISCC.exe) not found; installer skipped."
   }

@@ -1,0 +1,177 @@
+"""Puente IPC entre la ventana de PyWebView (JavaScript) y el puerto de control de luces.
+
+`WebviewBridge` compone las piezas de este paquete: el ciclo de vida asincrono
+(`lifecycle`), los casos de uso por capacidad (`handlers`) y el contrato con la vista
+(`dispatch`, con la tabla de despacho y la fachada `JsApi`). Este modulo conserva el punto
+de importacion historico (`adapters.ui_webview.bridge`) y reexporta todo lo que se
+importaba desde el antiguo modulo unico.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from wiz_console.adapters.ui_webview.dispatch import (
+    FIT_WINDOW_MAX_PX,
+    FIT_WINDOW_MIN_PX,
+    JS_API_DISPATCH,
+    JS_API_EXCLUDED,
+    BlockedJsApi,
+    JsApi,
+    WindowFitHandlers,
+    build_exposed_functions,
+)
+from wiz_console.adapters.ui_webview.handlers import BridgeHandlers
+from wiz_console.adapters.ui_webview.lifecycle import _SERVICE_CALL_ERRORS, BridgeLifecycle
+from wiz_console.domain.models import Bulb
+from wiz_console.ports.autostart import AutostartManager
+from wiz_console.ports.light_control import LightControlServicePort
+
+__all__ = [
+    "BlockedJsApi",
+    "FIT_WINDOW_MAX_PX",
+    "FIT_WINDOW_MIN_PX",
+    "JS_API_DISPATCH",
+    "JS_API_EXCLUDED",
+    "JsApi",
+    "WebviewBridge",
+    "WindowFitHandlers",
+    "_SERVICE_CALL_ERRORS",
+    "build_exposed_functions",
+]
+
+
+class WebviewBridge(BridgeHandlers, BridgeLifecycle, WindowFitHandlers):
+    """Adaptador primario que expone los casos de uso de iluminacion a la UI HTML/JS."""
+
+    def __init__(
+        self,
+        service: LightControlServicePort,
+        default_timeout: float = 12.0,
+        on_state_changed: Callable[[], None] | None = None,
+        autostart: AutostartManager | None = None,
+        fit_window_height: Callable[[int], bool] | None = None,
+    ) -> None:
+        # Frontera hexagonal (T-4.3): el adaptador solo conoce el puerto; la fachada concreta
+        # de `wiz_console.application` se inyecta desde la raiz de composicion.
+        self._service = service
+        # Private on purpose (see `_on_state_changed`): never exposed to JavaScript.
+        self._autostart = autostart
+        self._fit_window_height = fit_window_height
+        self._default_timeout = default_timeout
+        # Atributo privado a proposito: PyWebView expone a JavaScript todo atributo publico
+        # del objeto `js_api`, y un callback interno no debe ser invocable desde la vista.
+        self._on_state_changed = on_state_changed
+        self._monitors_cache: list[dict[str, Any]] | None = None
+        self._audio_devices_cache: list[dict[str, Any]] | None = None
+        self._hotkey_supported = False
+        self._hotkey_errors: dict[str, str] = {}
+        self._start_async_loop()
+
+    def set_global_hotkey_runtime(
+        self,
+        *,
+        supported: bool,
+        errors: dict[str, str] | None = None,
+    ) -> None:
+        """Record platform support and per-action registration errors for snapshots."""
+        self._hotkey_supported = bool(supported)
+        self._hotkey_errors = dict(errors) if errors else {}
+
+    def get_tray_snapshot(self) -> dict[str, Any]:
+        """Devuelve una vista resumida y serializable del estado para la bandeja del sistema.
+
+        Se construye dentro del bucle asincrono porque los diccionarios del servicio se
+        mutan en ese hilo; leerlos desde el hilo de la bandeja podria observar estados
+        intermedios o fallar por modificacion concurrente durante la iteracion.
+        """
+
+        async def _collect() -> dict[str, Any]:
+            return self._collect_tray_snapshot()
+
+        return self._run_async(_collect(), timeout=3.0)
+
+    def _collect_tray_snapshot(self) -> dict[str, Any]:
+        """Resume el estado de los focos objetivo, los presets y el temporizador."""
+        targets: list[Bulb] = [
+            bulb
+            for ip in self._service.get_target_ips()
+            if (bulb := self._service.get_bulb(ip)) is not None
+        ]
+        lit = [bulb for bulb in targets if bulb.is_online and bulb.state.is_on]
+        reference = lit[0] if lit else (targets[0] if targets else None)
+        state = reference.state if reference is not None else None
+        color = state.color if state is not None else None
+        return {
+            "is_on": bool(lit),
+            "brightness": state.brightness if state is not None else 100,
+            "mode": state.mode.value if state is not None else None,
+            "color": [color.r, color.g, color.b] if color is not None else None,
+            "temperature": state.temperature if state is not None else None,
+            "presets": [
+                {"id": scene.id, "name": scene.name, "is_favorite": scene.is_favorite}
+                for scene in self._service.list_custom_scenes()
+            ],
+            "sleep_timer_active": bool(self._service.get_sleep_timer_status().get("active")),
+            "ambilight_active": bool(self._service.get_ambilight_status().get("active")),
+            "music_sync_active": bool(self._service.get_music_sync_status().get("active")),
+            "language": self._service.get_language(),
+            "theme": self._service.get_theme(),
+        }
+
+    def toggle_ambilight(self) -> dict[str, Any]:
+        """Toggle Ambilight screen sync from the system tray using saved defaults."""
+
+        async def _toggle() -> None:
+            if self._service.get_ambilight_status().get("active"):
+                self._service.stop_ambilight()
+            else:
+                prefs = self._service.get_ambilight_prefs()
+                self._service.start_ambilight(**prefs)
+
+        return self._call(_toggle)
+
+    def toggle_music_sync(self) -> dict[str, Any]:
+        """Toggle Music Sync from the system tray using saved defaults."""
+
+        async def _toggle() -> None:
+            if self._service.get_music_sync_status().get("active"):
+                self._service.stop_music_sync()
+            else:
+                prefs = self._service.get_music_prefs()
+                self._service.start_music_sync(**prefs)
+
+        return self._call(_toggle)
+
+    def trigger_global_hotkey(self, action_id: str) -> dict[str, Any]:
+        """Execute a host-dispatched global hotkey action against selected fixtures."""
+        if action_id == "toggle_power":
+            return self.toggle_power()
+        if action_id == "toggle_ambilight":
+            return self.toggle_ambilight()
+        if action_id == "toggle_music_sync":
+            return self.toggle_music_sync()
+        if action_id in {"brightness_up", "brightness_down"}:
+            delta = 10 if action_id == "brightness_up" else -10
+
+            async def _nudge() -> None:
+                targets = [
+                    bulb
+                    for ip in self._service.get_target_ips()
+                    if (bulb := self._service.get_bulb(ip)) is not None
+                ]
+                lit = [bulb for bulb in targets if bulb.is_online and bulb.state.is_on]
+                reference = lit[0] if lit else (targets[0] if targets else None)
+                current = reference.state.brightness if reference is not None else 100
+                next_brightness = max(10, min(100, current + delta))
+                await self._service.set_brightness(next_brightness)
+
+            return self._call(_nudge)
+        return self._build_response(
+            ok=False, error=f"Unsupported global hotkey action: {action_id}."
+        )
+
+    def trigger_session_event(self, event: str) -> dict[str, Any]:
+        """Execute an OS-dispatched session/power trigger on the bridge event loop."""
+        return self._call(lambda: self._service.handle_session_event(event))

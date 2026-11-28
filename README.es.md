@@ -1,4 +1,4 @@
-# Gestor de Luces
+# WiZ Architectural Lighting Console
 
 [English](README.md) | [Español](README.es.md)
 
@@ -21,36 +21,52 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 ## Características Principales
 
-1. Control Fotométrico Completo:
+1. Control Fotométrico Completo y Gestión de Inventario:
    - Encendido y apagado en tiempo real, ajuste de curva de atenuación (10% a 100%) y sondeo de estado.
    - Regulación de Temperatura de Color Correlacionada (CCT) desde 2.200 K (Blanco Cálido Incandescente) hasta 6.500 K (Luz Día Fría).
    - Selección de color RGB con previsualización en vivo e ingreso hexadecimal.
+   - Eliminación de luminarias protegida por un aviso **Deshacer** de 5 segundos y reconciliación automática por dirección MAC al descubrir focos, conservando alias y selección ante cambios de IP por DHCP.
 
-2. Catálogo de Escenas Nativas y Presets Personalizados:
+2. Catálogo de Escenas Nativas, Zonas y Presets Personalizados:
    - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (10% a 200%).
-   - Presets guardados por el usuario en disco local con aplicación en un clic, edición y eliminación protegida por un aviso **Deshacer** de 5 segundos en capa superior (`popover="manual"`).
+   - **Zonas / Habitaciones** (`zones.json`) definidas por el usuario para agrupar luminarias con selección en un clic y reconciliación automática ante cambios de IP por DHCP o bajas.
+   - Presets guardados en disco local —con captura opcional heterogénea por luminaria (`bulb_states`) combinando color, CCT, escenas nativas y encendido— con aplicación en un clic, edición y eliminación protegida por **Deshacer** de 5 segundos en capa superior (`popover="manual"`).
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
    - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).
-   - Múltiples algoritmos de muestreo: color promedio general, color dominante de bordes o centroide de alta luminosidad.
-   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA).
+   - Modos de muestreo: color `vibrant` ponderado por saturación o color `average` promedio de pantalla, con brillo automático, piso mínimo configurable entre 10% y 20%, recorte automático de barras negras de cine (letterbox) y asignación de zona por luminaria (`full`, `left`, `right`, `top`, `bottom`, `center`) sobre una única captura por fotograma.
+   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA) independiente por foco.
 
 4. Sincronización Musical Reactiva por WASAPI Loopback:
    - Captura de audio del sistema en tiempo real mediante loopback de Windows Audio Session API (WASAPI) (`PyAudioWPatch`).
-   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`.
-   - Mapeo de frecuencias a color con sensibilidad de ganancia configurable y caída suavizada.
+   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`, junto a un **Detector de Ritmo** (`BeatDetector`) con pulso de brillo al golpe.
+   - Cuatro paletas (`spectrum`, `club`, `chill` y `custom` personalizable en hexadecimal por banda), sensibilidad/suavizado configurables y asignación independiente de banda por luminaria (`full`, `bass`, `mid`, `treble`).
 
 5. Bandeja del Sistema y Ejecución en Segundo Plano:
    - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo
      WinForms `NotifyIcon` pintado con el tema activo (con respaldo `pystray` si WinForms no
      puede cargar).
-   - Menú unificado (`Mostrar ventana` / `Ocultar ventana`, `Presets favoritos`, `Salir`), alternancia de encendido general y minimización elegante a la bandeja al cerrar o minimizar la ventana, con aviso único (`tray_hint_seen` persistido en `settings.json`).
+   - Menú unificado (`Mostrar ventana` / `Ocultar ventana`, `Presets favoritos`, toggles de `Ambilight` y `Sincronización musical`, `Salir`), alternancia de encendido general y minimización elegante a la bandeja al cerrar o minimizar la ventana, con aviso único (`tray_hint_seen` persistido en `settings.json`, junto con `selected_ips`, `auto_sync`, escenas favoritas y parámetros de Ambilight/Música).
    - El item de encendido/apagado actúa sobre el estado real del foco: relee los focos objetivo antes de invertir, y la etiqueta, el tooltip y el color del icono se refrescan desde los focos en cada sondeo, así que una luz cambiada desde la llave de pared o la app del teléfono no invierte el próximo clic.
    - Ocultarse en la bandeja no deja residuo en alt+tab (la ventana del bombeo de la bandeja es una ventana de herramienta) y salir desde el menú cierra limpio.
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.
 
 6. Temporizador de Apagado Progresivo (Sleep Timer):
    - Cuenta regresiva configurable (1 a 240 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
+7. Curva Circadiana y Rampa de Despertar:
+   - Curva horaria opcional de Kelvin y brillo (`CircadianConfig`) más rampa de amanecer programada localmente (`WakeupRampConfig`) sobre bombillas o zonas seleccionadas.
+8. Disparadores de Sesión y Suspensión en Windows:
+   - Monitor Win32 opcional (`WindowsSessionMonitor`) para apagar las luminarias al bloquear o suspender el equipo y restaurar su color/Kelvin/escena anterior al desbloquear o reactivar.
+9. Perfiles por Aplicación e Indicador Local Al Aire (`v0.7.0`):
+   - Reglas opcionales por ejecutable en primer plano (`ContextRule`) e indicador local Al Aire por micrófono o cámara en `ConsentStore` (`OnAirConfig`), con restauración automática al finalizar la llamada o salir de la aplicación.
+10. Transiciones Graduales Configurables (`TransitionEngine`):
+   - Interpolación suave (`ease-in-out`) para cambios de color RGB y Kelvin (`0.0s` instantáneo por defecto o `0.5s–5.0s`) con cancelación preventiva por bombilla y precedencia de flujos continuos.
+11. Detección de Capacidades y Diagnóstico Wi-Fi / Firmware:
+   - Inferencia automática de capacidades ópticas (`BulbCapabilities` mediante `infer_bulb_capabilities`) junto a insignias de intensidad de señal Wi-Fi (`dBm`) y versión de firmware en el cajón de luminarias con adaptación automática de controles RGB.
+12. CLI Completo y API HTTP Local Opcional (`LocalHttpApiServer`):
+   - Selección por `--name` guardado y subcomandos `brightness`, `scene`, `preset` y `zones` en CLI, junto a una API HTTP local opcional en `127.0.0.1` (`Bearer` validado con `hmac.compare_digest`, límite de 16 KiB, desactivada por defecto).
+13. Base Multi-Fabricante LAN (WiZ + Govee LAN, `v0.8.0`):
+   - Enrutamiento multi-protocolo mediante `Bulb.protocol`, `CompositeLightController` (`adapters/registry.py`) y `GoveeLanController` (`adapters/govee/lan_controller.py`, UDP 4003) para unificar luminarias WiZ y Govee en la misma consola local.
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).
@@ -60,7 +76,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Geometría de widget compacta (abre en `620x760` y después se ajusta al contenido de la sección activa) e icono de bombilla propio para la ventana, la barra de tareas, la bandeja y el ejecutable. La app lleva además identidad propia en la barra de tareas (`AppUserModelID`), así que el botón muestra ese icono y se ancla como aplicación en vez de como el intérprete de Python, incluso corriendo desde el fuente.
    - Barra de menú nativa tematizada (claro/oscuro): **Archivo** (Mostrar/Ocultar ventana, Iniciar con Windows, Salir) y **Ayuda** (Atajos de teclado, Acerca de). Acerca de informa el nombre visible localizado, la versión, la licencia (MIT), el autor y el repositorio.
    - Ergonomía y atajos accesibles: `Space` para encendido, `Alt+Flecha Arriba/Abajo` para brillo (dejando las flechas simples para el desplazamiento vertical), `1`–`6` y `Inicio`/`Fin` entre pestañas de modo, y acceso de ayuda `?` en la barra superior.
-   - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` y la inicia minimizada en la bandeja.
+   - **Atajos globales de Windows** opcionales (`opt-in`, desactivados por defecto desde el modal `Atajos de teclado (?)`), implementados con Win32 `RegisterHotKey` (predeterminados `Ctrl+Alt+P/Up/Down/A/M/W`) para controlar encendido, brillo ±10%, Ambilight, Sincronización musical y visibilidad de la ventana incluso minimizada en la bandeja.
+   - Opción "Iniciar con Windows" (menú Archivo) que registra la app en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`WizConsole`, migrando automáticamente entradas legacy `GestorDeLuces`) y la inicia minimizada en la bandeja.
    - Instancia única: abrir una segunda copia trae al frente la ventana ya abierta en lugar de crear otra (con opción `--multi-instance` para diagnósticos lado a lado).
    - Se distribuye como instalador por usuario o como ZIP portable (ver [Empaquetado y Distribución](#empaquetado-y-distribución)).
 
@@ -100,7 +117,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 +-----------------------------------------------------------------------------------+
 | ADAPTADORES E INFRAESTRUCTURA                                                     |
 |   WizUdpController   - Comunicación por sockets UDP 38899 vía pywizlight          |
-|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/GestorDeLuces         |
+|   JsonRepositories   - Persistencia local en %LOCALAPPDATA%/WizConsole             |
 |   MssScreenSampler   - Capturador de fotogramas de pantalla de Windows            |
 |   WasapiAudioSampler - Muestreador de audio del sistema mediante WASAPI loopback  |
 +-----------------------------------------------------------------------------------+
@@ -133,7 +150,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 ├── assets/
 │   └── icon/                    # make_icon.py más app.ico / app.png generados
 ├── packaging/
-│   ├── gestor_luces.spec        # Definición del build PyInstaller (carpeta)
+│   ├── wiz_console.spec         # Definición del build PyInstaller (carpeta)
 │   └── installer.iss            # Script del instalador por usuario (Inno Setup)
 ├── scripts/
 │   └── build.ps1                # Icono + PyInstaller + ZIP portable + instalador
@@ -151,9 +168,9 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │       ├── ui_redesign_spec.md     # Especificación de rediseño de UI (EN)
 │       └── ui_redesign_spec.es.md  # Especificación de rediseño de UI (ES)
 ├── src/
-│   └── gestor_luces/
+│   └── wiz_console/
 │       ├── __init__.py
-│       ├── __main__.py              # Punto de entrada del paquete (python -m gestor_luces)
+│       ├── __main__.py              # Punto de entrada del paquete (python -m wiz_console)
 │       ├── main.py              # Raíz de composición y punto de entrada de la app
 │       ├── cli.py               # Herramienta de sondeo y diagnóstico de red por CLI
 │       ├── resources.py         # Resolución de assets y versión (dev y congelado con PyInstaller)
@@ -214,8 +231,8 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 
 No requiere tener Python instalado. Descargá la última versión desde [**GitHub Releases**](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/releases/latest):
 
-- **Instalador (`GestorDeLuces-Setup-<versión>.exe`)**: Instalación por usuario (sin pedir permisos de administrador) con accesos en el Menú Inicio, icono opcional en el escritorio y registro opcional de "Iniciar con Windows".
-- **Portable (`GestorDeLuces-portable-<versión>.zip`)**: Extraelo en cualquier carpeta y ejecutá `GestorDeLuces.exe` (mantené la carpeta `_internal` junto al ejecutable).
+- **Instalador (`WizConsole-Setup-<versión>.exe`)**: Instalación por usuario (sin permisos de administrador) con accesos en el Menú Inicio, icono opcional en el escritorio y registro opcional de "Iniciar con Windows" (preservando el `AppId` para actualizar desde `GestorDeLuces` sin duplicar entradas).
+- **Portable (`WizConsole-portable-<versión>.zip`)**: Extraer en cualquier carpeta y ejecutar `WizConsole.exe` (mantener la carpeta `_internal` junto al ejecutable).
 
 **Requisitos del Sistema:**
 - Windows 10 (Compilación 1809+) o Windows 11 (64 bits).
@@ -271,9 +288,9 @@ No requiere tener Python instalado. Descargá la última versión desde [**GitHu
 Inicia la consola de escritorio completa:
 
 ```bash
-python -m gestor_luces
+python -m wiz_console
 # o bien:
-python -m gestor_luces.main
+python -m wiz_console.main
 ```
 
 Parámetros opcionales aceptados por `main.py`:
@@ -284,26 +301,26 @@ Parámetros opcionales aceptados por `main.py`:
 
 ### 2. Modo Diagnóstico por Consola (CLI)
 
-El módulo `gestor_luces.cli` permite realizar descubrimientos de red, consultas de estado y pruebas de control por línea de comandos sin inicializar la interfaz gráfica:
+El módulo `wiz_console.cli` permite realizar descubrimientos de red, consultas de estado y pruebas de control por línea de comandos sin inicializar la interfaz gráfica:
 
 ```bash
 # Descubrir todos los focos presentes en la subred local:
-python -m gestor_luces.cli discover
+python -m wiz_console.cli discover
 
 # Consultar el estado en tiempo real de un foco específico:
-python -m gestor_luces.cli status --ip 192.168.100.6
+python -m wiz_console.cli status --ip 192.168.100.6
 
 # Encender el foco con un 80% de brillo:
-python -m gestor_luces.cli on --ip 192.168.100.6 --brightness 80
+python -m wiz_console.cli on --ip 192.168.100.6 --brightness 80
 
 # Establecer un color RGB:
-python -m gestor_luces.cli color --ip 192.168.100.6 255 120 0 --brightness 100
+python -m wiz_console.cli color --ip 192.168.100.6 255 120 0 --brightness 100
 
 # Ajustar la temperatura de color (CCT en Kelvin):
-python -m gestor_luces.cli kelvin --ip 192.168.100.6 2700
+python -m wiz_console.cli kelvin --ip 192.168.100.6 2700
 
 # Apagar el foco:
-python -m gestor_luces.cli off --ip 192.168.100.6
+python -m wiz_console.cli off --ip 192.168.100.6
 ```
 
 ---
@@ -322,7 +339,7 @@ pytest
 
 Las pruebas de workflows detectan automáticamente Git Bash en Windows (descartando los stubs de WSL y WindowsApps), por lo que la suite completa de `pytest` se ejecuta sin problemas desde PowerShell sin exclusiones `--ignore`.
 
-La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=gestor_luces --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
+La cobertura se controla **por paquete**, no como un porcentaje global: `domain` al menos 90 %, `application` al menos 75 % y `adapters` al menos 55 % (`scripts/check_coverage.py`, ejecutado por el CI). El porcentaje del badge de cobertura lo publica `.github/workflows/coverage-badge.yml` en cada push a `main`, así que no se edita a mano. Se mide localmente con `pytest --cov=wiz_console --cov-report=term-missing` y se verifica con `python scripts/check_coverage.py coverage.json`.
 
 Todas las pruebas deben pasar (ver el badge de CI al inicio de este archivo para el estado en vivo).
 
@@ -352,14 +369,14 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 
 | Salida (en `dist/`) | Descripción |
 |---|---|
-| `GestorDeLuces\GestorDeLuces.exe` | App portable en carpeta. La carpeta `_internal` debe quedar junto al ejecutable. |
-| `GestorDeLuces-portable-<versión>.zip` | La misma carpeta comprimida. Se extrae en cualquier lado y se ejecuta `GestorDeLuces.exe`. |
-| `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
+| `WizConsole\WizConsole.exe` | App portable en carpeta. La carpeta `_internal` debe quedar junto al ejecutable. |
+| `WizConsole-portable-<versión>.zip` | La misma carpeta comprimida. Se extrae en cualquier lado y se ejecuta `WizConsole.exe`. |
+| `WizConsole-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
 | `SHA256SUMS.txt` | Hashes SHA-256 de todos los artefactos generados en `dist/`. |
 
-Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `scripts/build.ps1` firma `GestorDeLuces.exe` **antes** de crear el ZIP portable y el instalador de Inno Setup (para que ambos incluyan el ejecutable firmado) y luego firma el instalador con SHA-256 y sello de tiempo RFC 3161 por HTTPS (`https://timestamp.digicert.com`).
+Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `scripts/build.ps1` firma `WizConsole.exe` **antes** de crear el ZIP portable y el instalador de Inno Setup (para que ambos incluyan el ejecutable firmado) y luego firma el instalador con SHA-256 y sello de tiempo RFC 3161 por HTTPS (`https://timestamp.digicert.com`).
 
-`packaging/gestor_luces.spec` excluye scripts auxiliares de Python (como `make_icon.py`) del directorio `assets/` empaquetado. `packaging/installer.iss` inicia la ejecución post-instalación con `runasoriginaluser`, elimina de forma incondicional la clave de autoinicio en `HKCU\...\Run` al desinstalar e incluye mensajes personalizados bilingües en inglés y español (`[CustomMessages]`).
+`packaging/wiz_console.spec` excluye scripts auxiliares de Python (como `make_icon.py`) del directorio `assets/` empaquetado. `packaging/installer.iss` preserva el `AppId` original para actualizaciones limpias, inicia la ejecución post-instalación con `runasoriginaluser`, elimina tanto la clave `WizConsole` como la entrada legacy `GestorDeLuces` en `HKCU\...\Run` al desinstalar e incluye mensajes personalizados bilingües en inglés y español (`[CustomMessages]`).
 
 ### Publicar una release
 
@@ -369,13 +386,13 @@ Las releases las compila y publica el CI; los comandos de arriba son para compil
 2. Escribir `docs/releases/X.Y.Z.md` con las notas de esa release ([convención](docs/releases/README.md)).
 3. Mergear, y después taggear el commit mergeado y pushear el tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-`.github/workflows/release.yml` fija todas las acciones de terceros por su SHA de commit, fija la versión de Inno Setup (`6.7.1`) y restringe `contents: write` exclusivamente al job `publish`. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
+`.github/workflows/release.yml` fija todas las acciones de terceros por su SHA de commit, fija la versión de Inno Setup (`6.7.1`) y restringe `contents: write` exclusivamente al job `publish`. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `WizConsole.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
 
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
 - Salvo que se compile con `SIGN_CERT_SHA1`, los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Verificá la descarga contra `SHA256SUMS.txt`.
-- La instalación por defecto es por usuario en `%LOCALAPPDATA%\Programs\GestorDeLuces` (no pide permisos de administrador); si se requiere proteger los binarios bajo `C:\Program Files`, ejecutá el instalador como administrador o con `/ALLUSERS`.
-- Los datos del usuario viven en `%LOCALAPPDATA%\GestorDeLuces`, nunca junto al ejecutable.
+- La instalación por defecto es por usuario en `%LOCALAPPDATA%\Programs\WizConsole` (no pide permisos de administrador); si se requiere proteger los binarios bajo `C:\Program Files`, ejecutá el instalador como administrador o con `/ALLUSERS`.
+- Los datos del usuario viven en `%LOCALAPPDATA%\WizConsole` (con migración automática única desde `%LOCALAPPDATA%\GestorDeLuces`, conservando los archivos originales como respaldo), nunca junto al ejecutable.
 - Si se mueve la carpeta portable con "Iniciar con Windows" activado, la entrada del registro se corrige en el siguiente arranque.
 - A veces `Compress-Archive` falla por un archivo bloqueado justo después de PyInstaller (el antivirus lo está escaneando); volvé a correr el script.
 

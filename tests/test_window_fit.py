@@ -11,9 +11,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gestor_luces.adapters.platform.windows.window_geometry import _fit_max_height
-from gestor_luces.adapters.ui_webview.bridge import JsApi
-from gestor_luces.main import (
+from wiz_console.adapters.platform.windows.window_geometry import _fit_max_height
+from wiz_console.adapters.ui_webview.bridge import JsApi
+from wiz_console.main import (
     WINDOW_MIN_SIZE,
     _compute_fit_height,
     _fit_native_window_height,

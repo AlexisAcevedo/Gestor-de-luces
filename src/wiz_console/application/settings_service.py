@@ -1,0 +1,160 @@
+"""Ajustes globales de la consola: idioma y tema."""
+
+from __future__ import annotations
+
+import secrets
+from typing import Any
+
+from wiz_console.application.service_context import ServiceContext
+from wiz_console.application.transition_engine import normalize_transition_seconds
+from wiz_console.domain.automation import LocalApiConfig
+from wiz_console.domain.scenes import get_builtin_scene
+from wiz_console.domain.value_objects import (
+    SUPPORTED_LANGUAGES,
+    normalize_global_hotkeys,
+    normalize_theme,
+)
+
+
+class SettingsService:
+    """Valida, aplica y persiste las preferencias globales de la consola."""
+
+    def __init__(self, context: ServiceContext) -> None:
+        self._ctx = context
+
+    def get_language(self) -> str:
+        """Devuelve el codigo de idioma activo (`en` o `es`) de la consola."""
+        return self._ctx.language
+
+    def set_language(self, language: str) -> str:
+        """Valida, actualiza y persiste el idioma activo de la interfaz y la bandeja."""
+        cleaned = str(language or "").strip().lower()
+        if cleaned not in SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"Unsupported language '{language}'. Must be one of {SUPPORTED_LANGUAGES}."
+            )
+        self._ctx.language = cleaned
+        self._ctx.persist_settings()
+        return self._ctx.language
+
+    def get_theme(self) -> str:
+        """Devuelve el identificador del tema visual activo (`architectural-stone` o
+        `atmospheric-dark`)."""
+        return self._ctx.theme
+
+    def set_theme(self, theme: str) -> str:
+        """Normaliza, actualiza y persiste el tema visual activo de la consola."""
+        self._ctx.theme = normalize_theme(theme)
+        self._ctx.persist_settings()
+        return self._ctx.theme
+
+    def get_tray_hint_seen(self) -> bool:
+        """Return whether the one-time hide-to-tray notice has already been shown."""
+        return bool(self._ctx.tray_hint_seen)
+
+    def set_tray_hint_seen(self, seen: bool = True) -> bool:
+        """Persist whether the one-time hide-to-tray notice has been displayed."""
+        self._ctx.tray_hint_seen = bool(seen)
+        self._ctx.persist_settings()
+        return self._ctx.tray_hint_seen
+
+    def get_auto_sync(self) -> bool:
+        """Return whether periodic background polling is enabled."""
+        return bool(self._ctx.auto_sync)
+
+    def set_auto_sync(self, enabled: bool) -> bool:
+        """Persist whether periodic background polling is enabled."""
+        self._ctx.auto_sync = bool(enabled)
+        self._ctx.persist_settings()
+        return self._ctx.auto_sync
+
+    def get_favorite_builtin_scenes(self) -> list[int]:
+        """Return persisted favorite built-in WiZ scene IDs (1-36)."""
+        return list(self._ctx.favorite_builtin_scenes)
+
+    def set_favorite_builtin_scenes(self, scene_ids: list[int]) -> list[int]:
+        """Validate, deduplicate, and persist favorite built-in WiZ scene IDs."""
+        cleaned: list[int] = []
+        for raw_id in scene_ids:
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                raise ValueError(f"Invalid built-in scene ID: {raw_id!r}.")
+            if get_builtin_scene(raw_id) is None:
+                raise ValueError(f"Unknown built-in scene ID: {raw_id}.")
+            if raw_id not in cleaned:
+                cleaned.append(raw_id)
+        self._ctx.favorite_builtin_scenes = cleaned
+        self._ctx.persist_settings()
+        return list(self._ctx.favorite_builtin_scenes)
+
+    def get_ambilight_prefs(self) -> dict[str, Any]:
+        """Return persisted Ambilight configuration defaults."""
+        return dict(self._ctx.ambilight_prefs)
+
+    def get_music_prefs(self) -> dict[str, Any]:
+        """Return persisted Music Sync configuration defaults."""
+        return dict(self._ctx.music_prefs)
+
+    def get_global_hotkeys(self) -> dict[str, Any]:
+        """Return the normalized global Windows hotkeys configuration."""
+        return {
+            "enabled": bool(self._ctx.global_hotkeys.get("enabled", False)),
+            "bindings": dict(self._ctx.global_hotkeys.get("bindings", {})),
+        }
+
+    def set_global_hotkeys(
+        self,
+        enabled: bool,
+        bindings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate, update, and persist opt-in global Windows hotkeys configuration."""
+        merged_bindings = dict(self._ctx.global_hotkeys.get("bindings", {}))
+        if bindings is not None:
+            if not isinstance(bindings, dict):
+                raise ValueError("global_hotkeys.bindings must be an object.")
+            merged_bindings.update(bindings)
+        normalized = normalize_global_hotkeys(
+            {
+                "enabled": enabled,
+                "bindings": merged_bindings,
+            }
+        )
+        self._ctx.global_hotkeys = normalized
+        self._ctx.persist_settings()
+        return self.get_global_hotkeys()
+
+    def get_transition_seconds(self) -> float:
+        """Return configured crossfade duration in seconds (0.0 = instant)."""
+        return float(self._ctx.transition_seconds)
+
+    def set_transition_seconds(self, seconds: float) -> float:
+        """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
+        self._ctx.transition_seconds = normalize_transition_seconds(seconds)
+        self._ctx.persist_settings()
+        return float(self._ctx.transition_seconds)
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        return dict(self._ctx.local_api)
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        parsed = LocalApiConfig.from_dict(config)
+        token = parsed.token or self._ctx.local_api.get("token", "")
+        if parsed.enabled and not token:
+            token = secrets.token_urlsafe(32)
+        updated = LocalApiConfig(enabled=parsed.enabled, port=parsed.port, token=token)
+        self._ctx.local_api = updated.to_dict()
+        self._ctx.persist_settings()
+        return self.get_local_api_config()
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh 32-byte Bearer token for the Local HTTP API."""
+        current = LocalApiConfig.from_dict(self._ctx.local_api)
+        updated = LocalApiConfig(
+            enabled=current.enabled,
+            port=current.port,
+            token=secrets.token_urlsafe(32),
+        )
+        self._ctx.local_api = updated.to_dict()
+        self._ctx.persist_settings()
+        return self.get_local_api_config()

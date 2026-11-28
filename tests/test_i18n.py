@@ -14,23 +14,23 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.storage.json_repositories import (
+from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
     JsonSettingsRepository,
 )
-from gestor_luces.adapters.tray import (
+from wiz_console.adapters.tray import (
     TrayController,
     TrayPreset,
     build_tray_menu_spec,
     build_tray_title,
 )
-from gestor_luces.adapters.tray.menu_model import _TRAY_STRINGS
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.main import resolve_ui_directory
-from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.tray.menu_model import _TRAY_STRINGS
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.main import resolve_ui_directory
 
 
 class _RecordingTrayView:
@@ -116,6 +116,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         "Mostrar ventana",
         "Brillo",
         "Presets favoritos",
+        "Ambilight",
+        "Sincronización musical",
         "Salir",
     ]
     fav_submenu = next(e for e in spec_es_off if e.label == "Presets favoritos")
@@ -128,6 +130,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         presets=[TrayPreset(id="p1", name="Lectura Calida", is_favorite=True)],
         window_visible=True,
         sleep_timer_active=True,
+        ambilight_active=True,
+        music_sync_active=False,
         language="es",
     )
     labels_on = [entry.label for entry in spec_es_on if not entry.is_separator]
@@ -136,6 +140,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         "Ocultar ventana",
         "Brillo",
         "Presets favoritos",
+        "Ambilight",
+        "Sincronización musical",
         "Cancelar temporizador",
         "Salir",
     ]

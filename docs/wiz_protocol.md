@@ -40,10 +40,10 @@ WiZ devices support automatic discovery on local subnets. However, Windows opera
 
 Sending a discovery broadcast to `255.255.255.255` frequently fails on Windows workstations where virtual adapters (such as WSL, Hyper-V, VMware, or Docker vEthernet) are active. Windows may route `255.255.255.255` out of a virtual adapter rather than the physical Ethernet or Wi-Fi interface connected to the router.
 
-**Implementation in `gestor_luces.adapters.wiz.udp_controller`**:
+**Implementation in `wiz_console.adapters.wiz.udp_controller`**:
 1. Socket Route Inspection: open a dummy UDP socket to an external address (`8.8.8.8:80`) to discover the active physical IPv4 address selected by the Windows routing table.
 2. Directed Subnet Computation: `compute_subnet_broadcast()` derives the directed `/24` broadcast address (e.g., `192.168.100.255`) and `WizUdpController.discover()` transmits the discovery packets directly to it.
-The CLI and the desktop app use that same controller, so discovery has a single implementation and the `gestor-luces` subcommands exercise the same path as the UI.
+The CLI and the desktop app use that same controller, so discovery has a single implementation and the `wiz-console` subcommands exercise the same path as the UI.
 
 ### The Windows Firewall Unicast Hole-Punching Fallback
 

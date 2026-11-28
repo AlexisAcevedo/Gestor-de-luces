@@ -119,11 +119,16 @@ export function normalizeTheme(theme) {
 }
 
 /* Preferencias de interfaz persistentes (pestana activa y secciones plegables) */
-export const UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
+export const UI_PREFS_STORAGE_KEY = "wiz_console_ui_prefs";
+export const LEGACY_UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
 
 export function loadUiPrefs() {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(UI_PREFS_STORAGE_KEY) || "{}");
+    const raw =
+      window.localStorage.getItem(UI_PREFS_STORAGE_KEY) ||
+      window.localStorage.getItem(LEGACY_UI_PREFS_STORAGE_KEY) ||
+      "{}";
+    const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch (_err) {
     return {};
@@ -146,9 +151,39 @@ export const appState = {
   theme: DEFAULT_THEME,
   bulbs: [],
   selectedIps: [],
+  zones: [],
+  autoSync: false,
+  transitionSeconds: 0,
   scenes: SCENE_CATALOG.slice(),
   favoriteSceneIds: loadFavoriteSceneIds(),
   customScenes: [],
+  ambilightPrefs: null,
+  musicPrefs: null,
+  circadian: { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 },
+  wakeupRamp: { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] },
+  wakeupRampStatus: { active: false, progress: 0.0 },
+  sessionTriggers: { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false },
+  contextAutomation: {
+    enabled: false,
+    poll_seconds: 5,
+    on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+    rules: []
+  },
+  contextStatus: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
+  localApi: { enabled: false, port: 18899, token: "" },
+  globalHotkeys: {
+    enabled: false,
+    supported: false,
+    bindings: {
+      toggle_power: "Ctrl+Alt+P",
+      brightness_up: "Ctrl+Alt+Up",
+      brightness_down: "Ctrl+Alt+Down",
+      toggle_ambilight: "Ctrl+Alt+A",
+      toggle_music_sync: "Ctrl+Alt+M",
+      toggle_window: "Ctrl+Alt+W"
+    },
+    errors: {}
+  },
   sleepTimer: {
     active: false,
     remaining_seconds: 0,

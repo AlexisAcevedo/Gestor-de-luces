@@ -3,8 +3,8 @@ requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gestor-luces"
-version = "0.4.3"
+name = "wiz-console"
+version = "0.8.0"
 description = "Hexagonal desktop light manager for Philips WiZ smart bulbs over local UDP."
 requires-python = ">=3.12"
 authors = [{ name = "AlexisAcevedo", email = "alexis.acevedo@outlook.com" }]
@@ -43,7 +43,7 @@ dev = [
 Repository = "https://github.com/AlexisAcevedo/wiz-architectural-lighting-console"
 
 [project.scripts]
-gestor-luces = "gestor_luces.main:main"
+wiz-console = "wiz_console.main:main"
 
 [tool.ruff]
 target-version = "py312"

@@ -11,11 +11,11 @@ import mss.exception
 import numpy as np
 import pytest
 
-from gestor_luces.adapters.ambilight import MssScreenSampler, extract_color_and_brightness_from_bgra
-from gestor_luces.adapters.audio import WasapiLoopbackSampler, analyze_pcm_audio_frame
-from gestor_luces.adapters.audio import wasapi_capture as wasapi_capture_module
-from gestor_luces.adapters.audio.wasapi_session import WasapiLoopbackStreamSession
-from gestor_luces.domain.value_objects import Color
+from wiz_console.adapters.ambilight import MssScreenSampler, extract_color_and_brightness_from_bgra
+from wiz_console.adapters.audio import WasapiLoopbackSampler, analyze_pcm_audio_frame
+from wiz_console.adapters.audio import wasapi_capture as wasapi_capture_module
+from wiz_console.adapters.audio.wasapi_session import WasapiLoopbackStreamSession
+from wiz_console.domain.value_objects import Color
 
 
 class _FakeStream:

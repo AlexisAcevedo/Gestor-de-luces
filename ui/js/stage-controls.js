@@ -78,6 +78,10 @@ export function renderStageHeaderAndControls() {
   const quickSavePresetBtn = document.getElementById("quick-save-preset-btn");
   const brightnessSlider = document.getElementById("brightness-slider");
   const brightnessOutput = document.getElementById("brightness-output");
+  const transitionSelect = document.getElementById("transition-seconds-select");
+  if (transitionSelect && document.activeElement !== transitionSelect) {
+    transitionSelect.value = String(Number(appState.transitionSeconds || 0));
+  }
   const emptyBanner = document.getElementById("stage-empty-banner");
   const emptyMessage = document.getElementById("stage-empty-message");
   const emptyScanBtn = document.getElementById("stage-empty-scan-btn");
@@ -134,6 +138,18 @@ export function renderStageHeaderAndControls() {
   setControlDisabled(false);
 
   const selectedCount = selectedBulbs.length;
+  const rgbUnsupported =
+    selectedBulbs.length > 0 &&
+    selectedBulbs.every((b) => b.capabilities && b.capabilities.supports_rgb === false);
+  const rgbTab = document.getElementById("tab-btn-rgb");
+  const applyRgbBtn = document.getElementById("apply-rgb-btn");
+  if (rgbTab) {
+    rgbTab.title = rgbUnsupported ? t("stage.rgbUnsupportedHint") : "";
+    if (rgbTab.setAttribute) rgbTab.setAttribute("data-unsupported", String(rgbUnsupported));
+  }
+  if (applyRgbBtn) {
+    applyRgbBtn.disabled = rgbUnsupported;
+  }
   if (drawerPillDot) drawerPillDot.classList.toggle("is-offline", !primary.is_online);
   if (drawerPillLabel) {
     drawerPillLabel.textContent = selectedCount > 1 ? `${primary.name} (+${selectedCount - 1})` : primary.name;
@@ -294,6 +310,17 @@ export function bindStageControlEvents() {
       invokeApi(() => getBackendApi().set_brightness(val, null), () => t("status.brightnessSet", { brightness: val }));
     });
   });
+
+  const transitionSelect = document.getElementById("transition-seconds-select");
+  if (transitionSelect) {
+    transitionSelect.addEventListener("change", () => {
+      const seconds = Number(transitionSelect.value) || 0;
+      invokeApi(
+        () => getBackendApi().set_transition_seconds(seconds),
+        () => t("status.transitionSet", { seconds })
+      );
+    });
+  }
 
   const WHEEL_THROTTLE_MS = 70;
   const syncRgbPreview = (rgb) => {

@@ -288,7 +288,7 @@ describe("selective envelope updates (app.js)", () => {
     dom.seedElement("panel-temp", { tag: "section" });
     dom.seedElement("panel-rgb", { tag: "section" });
     dom.seedElement("details-sleep", { tag: "details", attrs: { "data-persist-open": "sleep" } });
-    dom.storage.setItem("gestor_luces_ui_prefs", JSON.stringify({ activeTab: "rgb", openSections: { sleep: true }, theme: "atmospheric-dark" }));
+    dom.storage.setItem("wiz_console_ui_prefs", JSON.stringify({ activeTab: "rgb", openSections: { sleep: true }, theme: "atmospheric-dark" }));
 
     const apiCalls = [];
     dom.window.pywebview = {
@@ -492,5 +492,52 @@ describe("polling guards, active-input protection, controls & toasts", () => {
     assert.equal(dom.getById("toast-region").children.length, 2);
     dom.getById("toast-region").querySelector(".toast-close").click();
     assert.equal(dom.getById("toast-region").children.length, 1);
+  });
+
+  test("hydrates session prefs and migrates legacy favorite scenes once to backend", async () => {
+    const migratedCalls = [];
+    dom.storage.setItem("gestor_luces_fav_scenes", JSON.stringify([4, 12]));
+    dom.window.pywebview = {
+      api: {
+        set_favorite_builtin_scenes: async (ids) => {
+          migratedCalls.push(ids);
+          return makeFullEnvelope({ favorite_builtin_scenes: ids });
+        },
+        set_auto_sync: async (enabled) => makeFullEnvelope({ auto_sync: enabled })
+      }
+    };
+    resetBridgeStateForTests();
+    await resolveBackendApi();
+
+    applyBackendEnvelope(
+      makeFullEnvelope({
+        auto_sync: true,
+        favorite_builtin_scenes: [],
+        ambilight_prefs: {
+          monitor_index: 2,
+          color_mode: "average",
+          auto_brightness: false,
+          min_brightness: 12,
+          smoothing_alpha: 0.5
+        },
+        music_prefs: {
+          device_index: 3,
+          palette_mode: "warm",
+          sensitivity: 1.5,
+          smoothing_alpha: 0.6,
+          audio_brightness: false
+        }
+      }),
+      null,
+      null,
+      true
+    );
+
+    assert.equal(appState.autoSync, true);
+    assert.equal(appState.ambilightPrefs.monitor_index, 2);
+    assert.equal(appState.ambilightPrefs.min_brightness, 12);
+    assert.equal(appState.musicPrefs.device_index, 3);
+    assert.equal(migratedCalls.length, 1);
+    assert.deepEqual(migratedCalls[0], [4, 12]);
   });
 });

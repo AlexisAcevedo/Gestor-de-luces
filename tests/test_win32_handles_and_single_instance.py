@@ -13,18 +13,18 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.platform.windows import window_chrome
-from gestor_luces.adapters.system import single_instance as single_instance_module
-from gestor_luces.adapters.system.single_instance import SingleInstanceGuard
-from gestor_luces.adapters.system.windows_autostart import (
+from wiz_console.adapters.platform.windows import window_chrome
+from wiz_console.adapters.system import single_instance as single_instance_module
+from wiz_console.adapters.system.single_instance import SingleInstanceGuard
+from wiz_console.adapters.system.windows_autostart import (
     DEFAULT_VALUE_NAME,
     RUN_KEY_PATH,
     WindowsRegistryAutostart,
     build_autostart_command,
 )
-from gestor_luces.adapters.tray import winforms_host, winforms_paint
-from gestor_luces.adapters.tray import winforms_icon as winforms_icon_module
-from gestor_luces.adapters.tray.winforms_icon import IconCache, _build_icon_image
+from wiz_console.adapters.tray import winforms_host, winforms_paint
+from wiz_console.adapters.tray import winforms_icon as winforms_icon_module
+from wiz_console.adapters.tray.winforms_icon import IconCache, _build_icon_image
 
 
 class _FakeHandle:
@@ -113,6 +113,64 @@ def test_apply_window_icon_unwraps_native_configures_64bit_and_caches_handles(
     assert destroyed == [0x1_0000_0401, 0x1_0000_0402, 0x1_0000_0403, 0x1_0000_0404]
 
 
+def test_release_window_icons_handles_disposed_winforms_handle_and_destroys_cached_icons(
+    tmp_path: Path,
+) -> None:
+    """BUG-001: disposed WinForms Form avoids ObjectDisposedException and frees HICONs."""
+    icon = tmp_path / "app.ico"
+    icon.write_bytes(b"\x00\x00\x01\x00")
+
+    destroyed: list[int] = []
+    next_handle = {"v": 0x1_0000_0800}
+
+    def _load(*_args: Any) -> int:
+        next_handle["v"] += 1
+        return next_handle["v"]
+
+    user32 = types.SimpleNamespace(
+        GetSystemMetrics=_CallableWithSig(lambda idx: 32 if idx in (11, 12) else 16),
+        LoadImageW=_CallableWithSig(_load),
+        SendMessageW=_CallableWithSig(lambda *_a: 0),
+        DestroyIcon=_CallableWithSig(lambda h: destroyed.append(int(h)) or 1),
+    )
+
+    class ObjectDisposedException(Exception):
+        pass
+
+    class _DisposableForm:
+        def __init__(self, hwnd: int) -> None:
+            self.IsDisposed = False
+            self.Disposing = False
+            self.IsHandleCreated = True
+            self._hwnd = hwnd
+
+        @property
+        def Handle(self) -> _FakeHandle:  # noqa: N802
+            if self.IsDisposed:
+                raise ObjectDisposedException(
+                    "Cannot access a disposed object. Object name: 'Form'."
+                )
+            return _FakeHandle(self._hwnd)
+
+    form = _DisposableForm(0x1_0000_9999)
+    wrapped = types.SimpleNamespace(native=form)
+    assert window_chrome.apply_window_icon(wrapped, icon, platform="win32", user32=user32) is True
+
+    # Case 1: IsDisposed is True — skips .Handle and still destroys icons via cached hwnd.
+    form.IsDisposed = True
+    assert window_chrome._resolve_native_hwnd(form) is None
+    window_chrome.release_window_icons(wrapped, platform="win32", user32=user32)
+    assert destroyed == [0x1_0000_0801, 0x1_0000_0802]
+
+    # Case 2: Form raises ObjectDisposedException directly during .Handle access.
+    class _RacyDisposedForm:
+        @property
+        def Handle(self) -> Any:  # noqa: N802
+            raise ObjectDisposedException("Cannot access a disposed object.")
+
+    assert window_chrome._resolve_native_hwnd(_RacyDisposedForm()) is None
+
+
 def test_apply_app_user_model_id_configures_ctypes_signature() -> None:
     """SetCurrentProcessExplicitAppUserModelID receives explicit LPCWSTR/c_long signature."""
     seen: list[str] = []
@@ -121,7 +179,7 @@ def test_apply_app_user_model_id_configures_ctypes_signature() -> None:
 
     assert (
         window_chrome.apply_app_user_model_id(
-            "AlexisAcevedo.GestorDeLuces",
+            "AlexisAcevedo.WizConsole",
             platform="win32",
             shell32=shell32,
         )
@@ -129,7 +187,7 @@ def test_apply_app_user_model_id_configures_ctypes_signature() -> None:
     )
     assert setter.argtypes == [wintypes.LPCWSTR]
     assert setter.restype is ctypes.c_long
-    assert seen == ["AlexisAcevedo.GestorDeLuces"]
+    assert seen == ["AlexisAcevedo.WizConsole"]
 
 
 def test_winforms_icon_destroy_handle_64bit_signature_and_error_cleanup(
@@ -427,8 +485,8 @@ def test_single_instance_guard_access_denied_close_handle_and_wait_failed(
 def test_single_instance_guard_real_release_frees_os_mutex() -> None:
     """Releasing a SingleInstanceGuard closes its OS handle so a new guard acquires primary."""
     suffix = uuid.uuid4().hex
-    mutex = f"Local\\GestorDeLuces.Test.{suffix}"
-    event = f"Local\\GestorDeLuces.Test.Show.{suffix}"
+    mutex = f"Local\\WizConsole.Test.{suffix}"
+    event = f"Local\\WizConsole.Test.Show.{suffix}"
     first = SingleInstanceGuard(mutex_name=mutex, event_name=event)
     second = SingleInstanceGuard(mutex_name=mutex, event_name=event)
     try:

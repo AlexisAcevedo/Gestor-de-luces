@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from gestor_luces.application.rate_limiter import StreamRateLimiter
-from gestor_luces.domain.value_objects import Color
+from wiz_console.application.rate_limiter import StreamRateLimiter
+from wiz_console.domain.value_objects import Color
 
 
 class FakeClock:

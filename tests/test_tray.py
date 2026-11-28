@@ -19,11 +19,13 @@ from typing import Any
 
 import pytest
 
-from gestor_luces.adapters.storage.json_repositories import (
+from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from tests.waits import POLL_SECONDS
+from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
 )
-from gestor_luces.adapters.tray import (
+from wiz_console.adapters.tray import (
     TrayController,
     TrayMenuEntry,
     TrayPreset,
@@ -33,13 +35,15 @@ from gestor_luces.adapters.tray import (
     resolve_entry_action,
     resolve_icon_rgb,
 )
-from gestor_luces.adapters.tray.menu_model import (
+from wiz_console.adapters.tray.menu_model import (
     ACTION_APPLY_PRESET,
     ACTION_CANCEL_SLEEP_TIMER,
     ACTION_HIDE_WINDOW,
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
     ACTION_SHOW_WINDOW,
+    ACTION_TOGGLE_AMBILIGHT,
+    ACTION_TOGGLE_MUSIC_SYNC,
     ACTION_TOGGLE_POWER,
     ACTION_TURN_OFF,
     ACTION_TURN_ON,
@@ -49,18 +53,16 @@ from gestor_luces.adapters.tray.menu_model import (
     closest_brightness_level,
     select_tray_presets,
 )
-from gestor_luces.adapters.tray.pystray_tray import (
+from wiz_console.adapters.tray.pystray_tray import (
     PystrayTrayView,
     _owner_popup_icon_class,
     create_pystray_view,
 )
-from gestor_luces.adapters.tray.tray_icon import REFRESH_THREAD_NAME
-from gestor_luces.adapters.tray.tray_view import WINDOW_TOGGLE_ACTION, TrayView
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
-from tests.waits import POLL_SECONDS
+from wiz_console.adapters.tray.tray_icon import REFRESH_THREAD_NAME
+from wiz_console.adapters.tray.tray_view import WINDOW_TOGGLE_ACTION, TrayView
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
 
 
 async def _wait_for(predicate: Callable[[], bool], timeout: float = 2.0) -> None:
@@ -299,6 +301,8 @@ class FakeTrayActions:
             "temperature": None,
             "presets": [],
             "sleep_timer_active": False,
+            "ambilight_active": False,
+            "music_sync_active": False,
             "theme": "architectural-stone",
         }
         self.power_calls: list[bool] = []
@@ -306,6 +310,8 @@ class FakeTrayActions:
         self.preset_calls: list[str] = []
         self.cancel_calls = 0
         self.toggle_calls = 0
+        self.ambilight_toggle_calls = 0
+        self.music_sync_toggle_calls = 0
         self.refresh_calls = 0
         self.events: list[str] = []
         self.fail_refresh = False
@@ -336,6 +342,20 @@ class FakeTrayActions:
 
     def cancel_sleep_timer(self) -> dict[str, Any]:
         self.cancel_calls += 1
+        return {"ok": True}
+
+    def toggle_ambilight(self) -> dict[str, Any]:
+        self.ambilight_toggle_calls += 1
+        self.snapshot["ambilight_active"] = not bool(self.snapshot.get("ambilight_active"))
+        if self.snapshot["ambilight_active"]:
+            self.snapshot["music_sync_active"] = False
+        return {"ok": True}
+
+    def toggle_music_sync(self) -> dict[str, Any]:
+        self.music_sync_toggle_calls += 1
+        self.snapshot["music_sync_active"] = not bool(self.snapshot.get("music_sync_active"))
+        if self.snapshot["music_sync_active"]:
+            self.snapshot["ambilight_active"] = False
         return {"ok": True}
 
     def get_tray_snapshot(self) -> dict[str, Any]:
@@ -810,3 +830,31 @@ async def test_periodic_poll_keeps_its_cadence_when_the_live_sync_fails() -> Non
         )
 
     assert harness.actions.refresh_calls >= 2
+
+
+def test_tray_stream_toggles_reflect_active_state_and_dispatch() -> None:
+    """Tray spec exposes checkable Ambilight and Music Sync toggles and dispatches them."""
+    spec = build_tray_menu_spec(
+        is_on=True,
+        brightness=80,
+        presets=[],
+        window_visible=True,
+        sleep_timer_active=False,
+        ambilight_active=True,
+        music_sync_active=False,
+    )
+    ambi_entry = _find_entry_by_label(spec, "Ambilight")
+    music_entry = _find_entry_by_label(spec, "Music Sync")
+    assert ambi_entry.action_id == ACTION_TOGGLE_AMBILIGHT
+    assert ambi_entry.checked is True
+    assert music_entry.action_id == ACTION_TOGGLE_MUSIC_SYNC
+    assert music_entry.checked is False
+
+    with _TrayHarness() as harness:
+        harness.tray.dispatch(ACTION_TOGGLE_AMBILIGHT)
+        harness.tray.dispatch(ACTION_TOGGLE_MUSIC_SYNC)
+
+    assert harness.actions.ambilight_toggle_calls == 1
+    assert harness.actions.music_sync_toggle_calls == 1
+    assert harness.actions.snapshot["ambilight_active"] is False
+    assert harness.actions.snapshot["music_sync_active"] is True

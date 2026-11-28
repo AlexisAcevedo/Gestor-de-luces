@@ -7,12 +7,29 @@ import {
   appState, captureFocusKey, clampInt, formatCountdown, isValidIpv4,
   restoreFocusKey, setFieldError, t, withButtonBusy
 } from "./store.js";
-import { setStatusMessage } from "./toasts.js";
+import { setStatusMessage, showToast } from "./toasts.js";
 
 let sleepTimerWasActive = false;
+let pendingBulbDelete = null;
 
 export function resetFixtureUiStateForTests() {
   sleepTimerWasActive = false;
+  if (pendingBulbDelete) {
+    clearTimeout(pendingBulbDelete.timerId);
+    pendingBulbDelete = null;
+  }
+}
+
+export function flushPendingBulbDelete() {
+  if (!pendingBulbDelete) return;
+  clearTimeout(pendingBulbDelete.timerId);
+  const { commit } = pendingBulbDelete;
+  pendingBulbDelete = null;
+  commit();
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("beforeunload", flushPendingBulbDelete);
 }
 
 function createSvgIcon(pathD, strokeWidth = "1.5") {
@@ -56,20 +73,24 @@ export function renderFixtureList() {
   const selectAllCheckbox = document.getElementById("select-all-fixtures");
   if (!container) return;
 
-  const onlineCount = appState.bulbs.filter((b) => b.is_online).length;
+  const visibleBulbs = pendingBulbDelete
+    ? appState.bulbs.filter((b) => b.ip !== pendingBulbDelete.bulb.ip)
+    : appState.bulbs;
+
+  const onlineCount = visibleBulbs.filter((b) => b.is_online).length;
   if (badge) {
-    badge.textContent = t("rail.onlineCount", { online: onlineCount, total: appState.bulbs.length });
+    badge.textContent = t("rail.onlineCount", { online: onlineCount, total: visibleBulbs.length });
   }
 
   if (selectAllCheckbox) {
-    const selectedCount = appState.bulbs.filter((b) => appState.selectedIps.includes(b.ip)).length;
-    selectAllCheckbox.checked = appState.bulbs.length > 0 && selectedCount === appState.bulbs.length;
-    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < appState.bulbs.length;
+    const selectedCount = visibleBulbs.filter((b) => appState.selectedIps.includes(b.ip)).length;
+    selectAllCheckbox.checked = visibleBulbs.length > 0 && selectedCount === visibleBulbs.length;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleBulbs.length;
   }
 
   const focusKey = captureFocusKey(container);
 
-  if (appState.bulbs.length === 0) {
+  if (visibleBulbs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-fixtures-state";
     const p1 = document.createElement("p");
@@ -81,7 +102,7 @@ export function renderFixtureList() {
     return;
   }
 
-  const cards = appState.bulbs.map((bulb) => {
+  const cards = visibleBulbs.map((bulb) => {
     const isSelected = appState.selectedIps.includes(bulb.ip);
     const card = document.createElement("article");
     card.className = `fixture-card${isSelected ? " is-selected" : ""}`;
@@ -130,13 +151,74 @@ export function renderFixtureList() {
       openRenameDialog(bulb);
     });
 
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn-icon-remove";
+    removeBtn.setAttribute("data-focus-key", `fixture-remove:${bulb.ip}`);
+    const removeTooltip = t("rail.removeAria", { name: bulb.name });
+    removeBtn.title = removeTooltip;
+    removeBtn.setAttribute("aria-label", removeTooltip);
+    removeBtn.appendChild(
+      createSvgIcon("M4.5 5.5h11M8 5.5V4h4v1.5M6.5 5.5l.6 10h5.8l.6-10")
+    );
+    removeBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      flushPendingBulbDelete();
+      const commit = () =>
+        invokeApi(() => getBackendApi().remove_bulb(bulb.ip), null, { silent: true });
+      const timerId = setTimeout(() => {
+        if (!pendingBulbDelete || pendingBulbDelete.bulb.ip !== bulb.ip) return;
+        pendingBulbDelete = null;
+        commit();
+      }, 5000);
+      pendingBulbDelete = { bulb, timerId, commit };
+      renderFixtureList();
+      const removedMsg = t("status.bulbRemoved", { name: bulb.name });
+      setStatusMessage(removedMsg);
+      showToast({
+        kind: "ok",
+        message: removedMsg,
+        actionLabel: t("toast.undo"),
+        durationMs: 5000,
+        onAction: () => {
+          if (!pendingBulbDelete || pendingBulbDelete.bulb.ip !== bulb.ip) return;
+          clearTimeout(pendingBulbDelete.timerId);
+          pendingBulbDelete = null;
+          renderFixtureList();
+          setStatusMessage(t("status.bulbRestored", { name: bulb.name }));
+        },
+        onDismiss: () => {
+          if (!pendingBulbDelete || pendingBulbDelete.bulb.ip !== bulb.ip) return;
+          clearTimeout(pendingBulbDelete.timerId);
+          const fn = pendingBulbDelete.commit;
+          pendingBulbDelete = null;
+          fn();
+        }
+      });
+    });
+
+    const topActions = document.createElement("div");
+    topActions.className = "fixture-card-top-actions";
+    topActions.append(renameBtn, removeBtn);
+
     titleRow.append(nameHeading);
     const addressLine = document.createElement("p");
     addressLine.className = "fixture-address";
-    addressLine.textContent = `${bulb.ip} · ${bulb.mac}`;
+    const diagParts = [`${bulb.ip} · ${bulb.mac}`];
+    if (bulb.protocol && bulb.protocol !== "wiz") {
+      diagParts.push(String(bulb.protocol).toUpperCase());
+    }
+    if (typeof bulb.rssi === "number" && Number.isFinite(bulb.rssi)) {
+      diagParts.push(`${bulb.rssi} dBm`);
+    }
+    if (bulb.fw_version) {
+      diagParts.push(`v${bulb.fw_version}`);
+    }
+    addressLine.textContent = diagParts.join(" · ");
     metaDiv.append(titleRow, addressLine);
     selectLabel.append(checkbox, metaDiv);
-    topRow.append(selectLabel, renameBtn);
+    topRow.append(selectLabel, topActions);
 
     const bottomRow = document.createElement("div");
     bottomRow.className = "fixture-card-bottom";
@@ -180,7 +262,131 @@ export function renderFixtureList() {
   restoreFocusKey(container, focusKey);
 }
 
-/* Activa o detiene el sondeo cada 1s mientras el temporizador de apagado este corriendo */
+export function renderZonesStrip() {
+  const listEl = document.getElementById("zone-list");
+  if (!listEl) return;
+  const focusKey = captureFocusKey(listEl);
+  const zones = Array.isArray(appState.zones) ? appState.zones : [];
+  if (zones.length === 0) {
+    const hint = document.createElement("p");
+    hint.className = "zone-empty";
+    hint.textContent = t("zones.emptyHint");
+    listEl.replaceChildren(hint);
+    return;
+  }
+
+  const selectedSorted = appState.selectedIps.slice().sort().join(",");
+  const chips = zones.map((zone) => {
+    const row = document.createElement("div");
+    row.className = "zone-chip-row";
+
+    const zoneSorted = (zone.bulb_ips || []).filter((ip) => appState.bulbs.some((b) => b.ip === ip)).sort().join(",");
+    const isActive = Boolean(zoneSorted) && zoneSorted === selectedSorted;
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "zone-chip-trigger";
+    trigger.setAttribute("data-focus-key", `zone-select:${zone.id}`);
+    trigger.setAttribute("aria-pressed", String(isActive));
+    trigger.textContent = `${zone.name} (${(zone.bulb_ips || []).length})`;
+    trigger.addEventListener("click", () => {
+      const api = getBackendApi();
+      if (!api || typeof api.select_zone !== "function") return;
+      invokeApi(() => api.select_zone(zone.id), () => t("status.zoneSelected", { name: zone.name }));
+    });
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "zone-chip-action";
+    editBtn.setAttribute("data-focus-key", `zone-edit:${zone.id}`);
+    editBtn.setAttribute("aria-label", t("zones.editAria", { name: zone.name }));
+    editBtn.title = t("zones.editAria", { name: zone.name });
+    editBtn.appendChild(createSvgIcon("M13.5 3.5l3 3-9.25 9.25H4.25v-3L13.5 3.5Z", "1.4"));
+    editBtn.addEventListener("click", () => openZoneDialog(zone));
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "zone-chip-action";
+    delBtn.setAttribute("data-focus-key", `zone-del:${zone.id}`);
+    delBtn.setAttribute("aria-label", t("zones.deleteAria", { name: zone.name }));
+    delBtn.title = t("zones.deleteAria", { name: zone.name });
+    delBtn.appendChild(createSvgIcon("M5 6h10M8 6V4.5h4V6m-5.5 0 .75 10h5.5l.75-10", "1.4"));
+    delBtn.addEventListener("click", () => {
+      const api = getBackendApi();
+      if (!api || typeof api.delete_zone !== "function") return;
+      invokeApi(() => api.delete_zone(zone.id), () => t("status.zoneDeleted", { name: zone.name }));
+    });
+
+    row.append(trigger, editBtn, delBtn);
+    return row;
+  });
+  listEl.replaceChildren(...chips);
+  restoreFocusKey(listEl, focusKey);
+}
+
+export function openZoneDialog(existingZone = null) {
+  const dialog = document.getElementById("zone-dialog");
+  const titleEl = document.getElementById("zone-dialog-title");
+  const idInput = document.getElementById("zone-id-input");
+  const nameInput = document.getElementById("zone-name-input");
+  const bulbsList = document.getElementById("zone-bulbs-list");
+  const errorEl = document.getElementById("zone-dialog-error");
+  if (!dialog || !idInput || !nameInput || !bulbsList) return;
+
+  if (existingZone) {
+    idInput.value = existingZone.id;
+    nameInput.value = existingZone.name;
+    if (titleEl) titleEl.textContent = t("dialog.zoneEditTitle");
+  } else {
+    idInput.value = "";
+    nameInput.value = "";
+    if (titleEl) titleEl.textContent = t("dialog.zoneAddTitle");
+  }
+
+  const assignedSet = new Set(existingZone ? (existingZone.bulb_ips || []) : appState.selectedIps);
+  const rows = appState.bulbs.map((bulb) => {
+    const label = document.createElement("label");
+    label.className = "checkbox-control";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.setAttribute("type", "checkbox");
+    cb.name = "zone_bulb";
+    cb.value = bulb.ip;
+    cb.checked = assignedSet.has(bulb.ip);
+    const text = document.createElement("span");
+    text.textContent = `${bulb.name} (${bulb.ip})`;
+    label.append(cb, text);
+    return label;
+  });
+  bulbsList.replaceChildren(...rows);
+  setFieldError(nameInput, errorEl, "");
+  dialog.showModal();
+  nameInput.focus();
+  if (existingZone) nameInput.select();
+}
+
+export function syncAutoSyncPolling(enabled) {
+  const active = Boolean(enabled);
+  appState.autoSync = active;
+  const toggle = document.getElementById("auto-sync-toggle");
+  if (toggle && toggle.checked !== active) {
+    toggle.checked = active;
+  }
+  if (appState.autoSyncTimer) {
+    clearInterval(appState.autoSyncTimer);
+    appState.autoSyncTimer = null;
+  }
+  if (active) {
+    appState.autoSyncTimer = setInterval(() => {
+      if (document.hidden) return;
+      invokeApi(() => getBackendApi().refresh_states(), () => t("status.autoSyncStep"), {
+        silent: true,
+        poll: true,
+        dedupeKey: "poll:autosync"
+      });
+    }, 3000);
+  }
+}
 export function syncSleepTimerPolling() {
   const isActive = Boolean(appState.sleepTimer && appState.sleepTimer.active);
   if (isActive && !appState.sleepPollTimer) {
@@ -285,8 +491,10 @@ export function bindFixtureEvents() {
       event.preventDefault();
       const ipInput = document.getElementById("manual-ip-input");
       const nameInput = document.getElementById("manual-name-input");
+      const protocolSelect = document.getElementById("manual-protocol-select");
       const ip = ipInput ? ipInput.value.trim() : "";
       const name = nameInput ? nameInput.value.trim() : "";
+      const protocol = protocolSelect && protocolSelect.value ? protocolSelect.value : "wiz";
       if (!isValidIpv4(ip)) {
         setFieldError(ipInput, addBulbError, t("dialog.invalidIp"));
         if (ipInput) ipInput.focus();
@@ -294,7 +502,7 @@ export function bindFixtureEvents() {
       }
       setFieldError(ipInput, addBulbError, "");
       const ok = await withButtonBusy(submitAddBtn, () =>
-        invokeApi(() => getBackendApi().add_manual_bulb(ip, name), () => t("status.registeredIp", { ip }))
+        invokeApi(() => getBackendApi().add_manual_bulb(ip, name, protocol), () => t("status.registeredIp", { ip }))
       );
       if (ok) {
         addDialog.close();
@@ -383,22 +591,11 @@ export function bindFixtureEvents() {
   const autoSyncToggle = document.getElementById("auto-sync-toggle");
   if (autoSyncToggle) {
     autoSyncToggle.addEventListener("change", () => {
-      if (appState.autoSyncTimer) {
-        clearInterval(appState.autoSyncTimer);
-        appState.autoSyncTimer = null;
-      }
-      if (autoSyncToggle.checked) {
-        appState.autoSyncTimer = setInterval(() => {
-          if (document.hidden) return;
-          invokeApi(() => getBackendApi().refresh_states(), () => t("status.autoSyncStep"), {
-            silent: true,
-            poll: true,
-            dedupeKey: "poll:autosync"
-          });
-        }, 3000);
-        setStatusMessage(t("status.autoSyncEnabled"));
-      } else {
-        setStatusMessage(t("status.autoSyncPaused"));
+      syncAutoSyncPolling(autoSyncToggle.checked);
+      setStatusMessage(t(autoSyncToggle.checked ? "status.autoSyncEnabled" : "status.autoSyncPaused"));
+      const api = getBackendApi();
+      if (api && typeof api.set_auto_sync === "function") {
+        invokeApi(() => api.set_auto_sync(autoSyncToggle.checked), null, { silent: true });
       }
     });
   }
@@ -434,6 +631,55 @@ export function bindFixtureEvents() {
         b.setAttribute("aria-pressed", "false");
       });
       invokeApi(() => getBackendApi().cancel_sleep_timer(), () => t("status.sleepCancelled"));
+    });
+  }
+
+  const openAddZoneBtn = document.getElementById("open-add-zone-btn");
+  if (openAddZoneBtn) {
+    openAddZoneBtn.addEventListener("click", () => openZoneDialog(null));
+  }
+
+  const zoneNameInput = document.getElementById("zone-name-input");
+  const zoneDialogError = document.getElementById("zone-dialog-error");
+  if (zoneNameInput) {
+    zoneNameInput.addEventListener("input", () => setFieldError(zoneNameInput, zoneDialogError, ""));
+  }
+
+  const zoneForm = document.getElementById("zone-form");
+  const zoneDialog = document.getElementById("zone-dialog");
+  const zoneSubmitBtn = document.getElementById("zone-submit-btn");
+  if (zoneForm && zoneDialog) {
+    zoneForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const idInput = document.getElementById("zone-id-input");
+      const nameInput = document.getElementById("zone-name-input");
+      const bulbsList = document.getElementById("zone-bulbs-list");
+      const zoneId = idInput ? idInput.value.trim() : "";
+      const name = nameInput ? nameInput.value.trim() : "";
+      const checkedIps = bulbsList
+        ? Array.from(bulbsList.querySelectorAll('input[type="checkbox"]'))
+            .filter((cb) => cb.checked)
+            .map((cb) => cb.value)
+        : [];
+      if (!name) return;
+      if (checkedIps.length === 0) {
+        setFieldError(nameInput, zoneDialogError, t("dialog.zoneNoBulbsSelected"));
+        return;
+      }
+
+      setFieldError(nameInput, zoneDialogError, "");
+      const ok = await withButtonBusy(zoneSubmitBtn, () =>
+        invokeApi(
+          () => getBackendApi().save_zone(name, checkedIps, zoneId || null, "room"),
+          () => t("status.zoneSaved", { name })
+        )
+      );
+      if (ok) {
+        zoneDialog.close();
+      } else {
+        setFieldError(nameInput, zoneDialogError, t("dialog.zoneSaveFailed"));
+        if (nameInput) nameInput.focus();
+      }
     });
   }
 }

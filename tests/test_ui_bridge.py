@@ -12,11 +12,11 @@ import asyncio
 import time
 from typing import Any
 
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.service import LightControlService
-from gestor_luces.main import main as run_main
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.service import LightControlService
+from wiz_console.main import main as run_main
 
 
 async def test_webview_bridge_full_lifecycle_over_udp() -> None:
@@ -162,7 +162,7 @@ def test_main_composition_root_smoke_test() -> None:
 
 async def test_webview_bridge_theme_and_fit_window_height(tmp_path) -> None:
     """Verifica `set_theme` y `fit_window_height` expuestos en `WebviewBridge`."""
-    from gestor_luces.adapters.storage.json_repositories import JsonSettingsRepository
+    from wiz_console.adapters.storage.json_repositories import JsonSettingsRepository
 
     fit_calls: list[int] = []
     settings_repo = JsonSettingsRepository(data_dir=tmp_path)
@@ -295,7 +295,7 @@ def test_bridge_sanitizes_internal_errors_from_js() -> None:
     """Internal OS, runtime, timeout, and native callback exceptions never leak paths or traces."""
     from unittest.mock import MagicMock
 
-    from gestor_luces.adapters.ui_webview.bridge import JsApi
+    from wiz_console.adapters.ui_webview.bridge import JsApi
 
     class FailingService(LightControlService):
         def __init__(self) -> None:
@@ -348,3 +348,124 @@ def test_bridge_sanitizes_internal_errors_from_js() -> None:
     assert fit_resp["ok"] is False
     assert "secret" not in fit_resp["error"].lower()
     assert "c:\\" not in fit_resp["error"].lower()
+
+
+async def test_webview_bridge_remove_bulb_over_udp() -> None:
+    """WebviewBridge.remove_bulb removes the bulb and returns the updated inventory."""
+    async with FakeWizBulbServer(mac="a8bb50112299") as server:
+        controller = WizUdpController(probe_candidates=[server.endpoint])
+        service = LightControlService(controller=controller)
+        bridge = WebviewBridge(service=service)
+        try:
+            initial = await asyncio.to_thread(bridge.get_initial_state)
+            assert len(initial["bulbs"]) == 1
+
+            removed = await asyncio.to_thread(bridge.remove_bulb, server.endpoint)
+            assert removed["ok"] is True
+            assert removed["bulbs"] == []
+            assert removed["selected_ips"] == []
+        finally:
+            bridge.shutdown()
+
+
+async def test_webview_bridge_session_prefs_and_tray_stream_toggles(tmp_path) -> None:
+    """WebviewBridge persists session flags and toggles Ambilight/Music Sync for the tray."""
+    from wiz_console.adapters.storage.json_repositories import JsonSettingsRepository
+
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+    service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        settings_repository=settings_repo,
+    )
+    bridge = WebviewBridge(service=service)
+    try:
+        initial = await asyncio.to_thread(bridge.get_initial_state)
+        assert initial["ok"] is True
+        assert initial["auto_sync"] is False
+        assert initial["favorite_builtin_scenes"] == []
+        assert initial["ambilight_prefs"]["min_brightness"] == 10
+
+        auto_resp = await asyncio.to_thread(bridge.set_auto_sync, True)
+        assert auto_resp["ok"] is True
+        assert auto_resp["auto_sync"] is True
+
+        fav_resp = await asyncio.to_thread(bridge.set_favorite_builtin_scenes, [12, 4, 12])
+        assert fav_resp["ok"] is True
+        assert fav_resp["favorite_builtin_scenes"] == [12, 4]
+
+        restarted_service = LightControlService(
+            controller=WizUdpController(probe_candidates=[]),
+            settings_repository=JsonSettingsRepository(data_dir=tmp_path),
+        )
+        assert restarted_service.get_auto_sync() is True
+        assert restarted_service.get_favorite_builtin_scenes() == [12, 4]
+
+        # Starting Ambilight/Music Sync on headless tests with no sampler fails cleanly
+        # while toggle_ambilight / toggle_music_sync remain host-only (blocked from JsApi).
+        from wiz_console.adapters.ui_webview.dispatch import BlockedJsApi, JsApi
+
+        assert isinstance(BlockedJsApi(), BlockedJsApi)
+        js_api = JsApi(bridge)
+        assert not hasattr(js_api, "toggle_ambilight")
+        assert not hasattr(js_api, "toggle_music_sync")
+    finally:
+        bridge.shutdown()
+
+
+async def test_webview_bridge_zones_and_multibulb_custom_scene(tmp_path) -> None:
+    """WebviewBridge exposes save_zone/select_zone/delete_zone and capture_all_targets."""
+    from wiz_console.adapters.storage.json_repositories import (
+        JsonBulbRepository,
+        JsonSceneRepository,
+        JsonZoneRepository,
+    )
+
+    async with (
+        FakeWizBulbServer(mac="aa1122334401") as bulb_a,
+        FakeWizBulbServer(mac="aa1122334402") as bulb_b,
+    ):
+        controller = WizUdpController(probe_candidates=[bulb_a.endpoint, bulb_b.endpoint])
+        service = LightControlService(
+            controller=controller,
+            bulb_repository=JsonBulbRepository(data_dir=tmp_path),
+            scene_repository=JsonSceneRepository(data_dir=tmp_path),
+            zone_repository=JsonZoneRepository(data_dir=tmp_path),
+        )
+        bridge = WebviewBridge(service=service)
+        try:
+            discovered = await asyncio.to_thread(bridge.discover_bulbs)
+            assert discovered["ok"] is True
+
+            saved_zone = await asyncio.to_thread(
+                bridge.save_zone,
+                "Studio Pair",
+                [bulb_a.endpoint, bulb_b.endpoint],
+                None,
+                "room",
+            )
+            assert saved_zone["ok"] is True
+            assert len(saved_zone["zones"]) == 1
+            zone_id = saved_zone["zones"][0]["id"]
+
+            selected = await asyncio.to_thread(bridge.select_zone, zone_id)
+            assert selected["ok"] is True
+            assert selected["selected_ips"] == [bulb_a.endpoint, bulb_b.endpoint]
+
+            await asyncio.to_thread(bridge.set_color, 10, 200, 255, 80, [bulb_a.endpoint])
+            await asyncio.to_thread(bridge.set_temperature, 2800, 45, [bulb_b.endpoint])
+
+            saved_preset = await asyncio.to_thread(
+                bridge.save_custom_scene,
+                "Bridge Multi",
+                bulb_a.endpoint,
+                True,
+            )
+            assert saved_preset["ok"] is True
+            multi = next(s for s in saved_preset["custom_scenes"] if s["name"] == "Bridge Multi")
+            assert set(multi["bulb_states"]) == {bulb_a.endpoint, bulb_b.endpoint}
+
+            deleted = await asyncio.to_thread(bridge.delete_zone, zone_id)
+            assert deleted["ok"] is True
+            assert deleted["zones"] == []
+        finally:
+            bridge.shutdown()

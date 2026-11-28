@@ -172,7 +172,9 @@ describe("behavioral Stage 5b fixes", () => {
     const topRow = card.children[0];
     assert.equal(topRow.children.length, 2);
     assert.equal(topRow.children[0].className, "fixture-select-label");
-    assert.equal(topRow.children[1].className, "btn-icon-rename");
+    assert.equal(topRow.children[1].className, "fixture-card-top-actions");
+    assert.equal(topRow.children[1].children[0].className, "btn-icon-rename");
+    assert.equal(topRow.children[1].children[1].className, "btn-icon-remove");
   });
 
   test("color wheel supports arrow keyboard control and #input-hex commits on change", async () => {

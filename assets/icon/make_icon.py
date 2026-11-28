@@ -12,7 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gestor_luces.adapters.tray.bulb_icon import DEFAULT_GLOW_RGB, render_bulb_image  # noqa: E402
+from wiz_console.adapters.tray.bulb_icon import DEFAULT_GLOW_RGB, render_bulb_image  # noqa: E402
 
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 OUTPUT_DIR = Path(__file__).resolve().parent

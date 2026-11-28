@@ -1,6 +1,6 @@
 """Regenerate ``ui/scenes.json`` from the domain scene catalog (single source of truth).
 
-The built-in scene catalog lives in ``gestor_luces/domain/scenes.py``
+The built-in scene catalog lives in ``wiz_console/domain/scenes.py``
 (``BUILTIN_SCENES``). This script serializes it to ``ui/scenes.json`` so the web
 frontend can paint the scene grid at first paint without waiting for the backend
 handshake and without a second hardcoded copy in ``ui/app.js``.
@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from gestor_luces.domain.scenes import BUILTIN_SCENES
+from wiz_console.domain.scenes import BUILTIN_SCENES
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "ui" / "scenes.json"

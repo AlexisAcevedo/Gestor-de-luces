@@ -1,0 +1,381 @@
+"""Puerto entrante para los casos de uso de iluminacion que consume la UI.
+
+El adaptador primario (el puente de PyWebView) declara aqui que necesita de la
+aplicacion y nunca importa la clase concreta que lo implementa. La composicion
+inyecta la fachada real (`LightControlService`), que satisface este contrato de
+forma estructural (`typing.Protocol`): no hay herencia explicita, asi que los
+dobles de prueba y cualquier fachada futura cumplen solo por tener los mismos
+metodos con la misma firma.
+
+Solo se declaran las operaciones que el puente consume de verdad: las que expone
+a JavaScript la tabla `JS_API_DISPATCH` mas las que usa internamente para armar
+la instantanea de estado y cerrar los flujos continuos.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+from wiz_console.domain.models import Bulb, Zone
+from wiz_console.domain.scenes import CustomScene
+
+
+class LightControlServicePort(Protocol):
+    """Superficie del servicio de iluminacion que el puente de la UI necesita."""
+
+    # --- Preferencias: idioma y tema ---
+    def get_language(self) -> str:
+        """Devuelve el codigo de idioma activo (`en` o `es`)."""
+        ...
+
+    def set_language(self, language: str) -> str:
+        """Valida, actualiza y persiste el idioma activo de la interfaz y la bandeja."""
+        ...
+
+    def get_theme(self) -> str:
+        """Devuelve el identificador del tema visual activo."""
+        ...
+
+    def set_theme(self, theme: str) -> str:
+        """Normaliza, actualiza y persiste el tema visual activo de la consola."""
+        ...
+
+    def get_auto_sync(self) -> bool:
+        """Return whether periodic background polling is enabled."""
+        ...
+
+    def set_auto_sync(self, enabled: bool) -> bool:
+        """Persist whether periodic background polling is enabled."""
+        ...
+
+    def get_favorite_builtin_scenes(self) -> list[int]:
+        """Return persisted favorite built-in WiZ scene IDs (1-36)."""
+        ...
+
+    def set_favorite_builtin_scenes(self, scene_ids: list[int]) -> list[int]:
+        """Validate and persist favorite built-in WiZ scene IDs."""
+        ...
+
+    def get_ambilight_prefs(self) -> dict[str, Any]:
+        """Return persisted Ambilight configuration defaults."""
+        ...
+
+    def get_music_prefs(self) -> dict[str, Any]:
+        """Return persisted Music Sync configuration defaults."""
+        ...
+
+    def get_global_hotkeys(self) -> dict[str, Any]:
+        """Return the opt-in global Windows hotkeys configuration."""
+        ...
+
+    def set_global_hotkeys(
+        self,
+        enabled: bool,
+        bindings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate and persist opt-in global Windows hotkeys configuration."""
+        ...
+
+    def get_transition_seconds(self) -> float:
+        """Return configured crossfade duration in seconds (0.0 = instant)."""
+        ...
+
+    def set_transition_seconds(self, seconds: float) -> float:
+        """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
+        ...
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        ...
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        ...
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        ...
+
+    # --- Inventario de focos ---
+    def list_bulbs(self) -> list[Bulb]:
+        """Devuelve la lista de todos los focos registrados actualmente."""
+        ...
+
+    def get_bulb(self, ip: str) -> Bulb | None:
+        """Obtiene un foco registrado por su direccion IP."""
+        ...
+
+    async def discover_bulbs(self, wait_time: float = 2.5) -> list[Bulb]:
+        """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco."""
+        ...
+
+    async def add_manual_bulb(
+        self,
+        ip: str,
+        name: str | None = None,
+        protocol: str = "wiz",
+    ) -> Bulb:
+        """Registra un foco manualmente por su IP y verifica su estado en la red."""
+        ...
+
+    def rename_bulb(self, ip: str, new_name: str) -> Bulb:
+        """Cambia el nombre amigable de un foco registrado y guarda el cambio."""
+        ...
+
+    def remove_bulb(self, ip: str) -> Bulb:
+        """Remove a registered bulb by IP and persist the updated inventory."""
+        ...
+
+    async def refresh_states(self, ips: list[str] | None = None) -> list[Bulb]:
+        """Consulta en paralelo el estado real (getPilot) de los focos indicados."""
+        ...
+
+    def select_targets(self, ips: list[str]) -> list[str]:
+        """Define que subconjunto de focos recibira los comandos."""
+        ...
+
+    def get_target_ips(self, explicit_ips: list[str] | None = None) -> list[str]:
+        """Resuelve la lista de IPs destino para una operacion de control."""
+        ...
+
+    # --- Control de focos ---
+    async def set_power(
+        self,
+        is_on: bool,
+        brightness: int | None = None,
+        ips: list[str] | None = None,
+    ) -> list[Bulb]:
+        """Enciende o apaga uno o varios focos en paralelo."""
+        ...
+
+    async def set_brightness(
+        self,
+        brightness: int,
+        ips: list[str] | None = None,
+    ) -> list[Bulb]:
+        """Ajusta el brillo (10-100%) en todos los focos objetivo."""
+        ...
+
+    async def set_color(
+        self,
+        r: int,
+        g: int,
+        b: int,
+        brightness: int | None = None,
+        ips: list[str] | None = None,
+    ) -> list[Bulb]:
+        """Aplica un color RGB validado a uno o multiples focos."""
+        ...
+
+    async def set_temperature(
+        self,
+        kelvin: int,
+        brightness: int | None = None,
+        ips: list[str] | None = None,
+    ) -> list[Bulb]:
+        """Aplica una temperatura de color blanco (2200K-6500K) a los focos objetivo."""
+        ...
+
+    async def set_builtin_scene(
+        self,
+        scene_id: int,
+        speed: int | None = None,
+        brightness: int | None = None,
+        ips: list[str] | None = None,
+    ) -> list[Bulb]:
+        """Activa una de las 36 escenas nativas de WiZ en los focos objetivo."""
+        ...
+
+    # --- Escenas personalizadas ---
+    def list_custom_scenes(self) -> list[CustomScene]:
+        """Devuelve la coleccion de escenas personalizadas creadas por el usuario."""
+        ...
+
+    def save_custom_scene_from_current(
+        self,
+        name: str,
+        source_ip: str | None = None,
+        scene_id: str | None = None,
+        capture_all_targets: bool = False,
+    ) -> CustomScene:
+        """Captura la fotografia luminica actual del foco de referencia y la guarda como preset."""
+        ...
+
+    # --- Zonas y habitaciones ---
+    def list_zones(self) -> list[Zone]:
+        """Return all persisted bulb zones."""
+        ...
+
+    def create_or_update_zone(
+        self,
+        name: str,
+        bulb_ips: list[str],
+        *,
+        zone_id: str | None = None,
+        icon: str = "room",
+    ) -> Zone:
+        """Create or update a bulb zone and persist it."""
+        ...
+
+    def delete_zone(self, zone_id: str) -> None:
+        """Delete a zone by ID."""
+        ...
+
+    def select_zone(self, zone_id: str) -> list[str]:
+        """Select all registered bulbs assigned to a zone as targets."""
+        ...
+
+    def rename_custom_scene(self, scene_id: str, new_name: str) -> CustomScene:
+        """Actualiza el nombre de una escena personalizada existente y la persiste."""
+        ...
+
+    def delete_custom_scene(self, scene_id: str) -> None:
+        """Elimina una escena personalizada del inventario y actualiza el archivo JSON."""
+        ...
+
+    def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> CustomScene:
+        """Marca o desmarca un preset como favorito de la bandeja y persiste el cambio."""
+        ...
+
+    async def apply_custom_scene(
+        self,
+        scene_id: str,
+        ips: list[str] | None = None,
+    ) -> list[Bulb]:
+        """Aplica los parametros guardados en una escena personalizada a los focos objetivo."""
+        ...
+
+    # --- Temporizador de apagado ---
+    def start_sleep_timer(
+        self,
+        minutes: float,
+        ips: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Programa el apagado automatico con atenuacion progresiva tras `minutes` minutos."""
+        ...
+
+    def cancel_sleep_timer(self) -> dict[str, Any]:
+        """Cancela el temporizador de apagado activo."""
+        ...
+
+    def get_sleep_timer_status(self) -> dict[str, Any]:
+        """Consulta el estado actual del temporizador de apagado."""
+        ...
+
+    # --- Ambilight ---
+    def list_monitors(self) -> list[dict[str, Any]]:
+        """Devuelve la lista de monitores disponibles para el modo Ambilight."""
+        ...
+
+    def start_ambilight(
+        self,
+        monitor_index: int = 1,
+        color_mode: str = "vibrant",
+        auto_brightness: bool = True,
+        brightness: int = 85,
+        smoothing_alpha: float = 0.38,
+        ips: list[str] | None = None,
+        min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
+    ) -> dict[str, Any]:
+        """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
+        ...
+
+    def stop_ambilight(self) -> dict[str, Any]:
+        """Detiene el flujo continuo de Ambilight."""
+        ...
+
+    def get_ambilight_status(self) -> dict[str, Any]:
+        """Devuelve el estado actual de la sincronizacion Ambilight."""
+        ...
+
+    # --- Sincronizacion musical ---
+    def list_audio_devices(self) -> list[dict[str, Any]]:
+        """Devuelve la lista de dispositivos WASAPI Loopback disponibles para el modo Musica."""
+        ...
+
+    def start_music_sync(
+        self,
+        palette_mode: str = "spectrum",
+        sensitivity: float = 1.0,
+        smoothing_alpha: float = 0.50,
+        audio_brightness: bool = True,
+        brightness: int = 85,
+        device_index: int | None = None,
+        ips: list[str] | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Inicia la sincronizacion acustica WASAPI Loopback hacia los focos objetivo."""
+        ...
+
+    def stop_music_sync(self, close_sampler: bool = False) -> dict[str, Any]:
+        """Detiene la sincronizacion musical y opcionalmente cierra el flujo WASAPI."""
+        ...
+
+    def get_music_sync_status(self) -> dict[str, Any]:
+        """Devuelve el estado actual y telemetria espectral de la sincronizacion musical."""
+        ...
+
+    # --- Automatizacion circadiana y amanecer ---
+    def get_circadian_config(self) -> dict[str, Any]:
+        """Return normalized circadian lighting configuration."""
+        ...
+
+    def set_circadian_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply circadian lighting configuration."""
+        ...
+
+    def get_wakeup_ramp_config(self) -> dict[str, Any]:
+        """Return normalized sunrise wake-up ramp configuration."""
+        ...
+
+    def set_wakeup_ramp_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and schedule sunrise wake-up ramp configuration."""
+        ...
+
+    def get_wakeup_ramp_status(self) -> dict[str, Any]:
+        """Return live status of the sunrise wake-up ramp."""
+        ...
+
+    def get_session_triggers(self) -> dict[str, Any]:
+        """Return normalized Windows lock/sleep session trigger settings."""
+        ...
+
+    def set_session_triggers(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist Windows session trigger preferences."""
+        ...
+
+    async def handle_session_event(self, event: str) -> dict[str, Any]:
+        """Apply opt-in lighting behavior for a normalized Windows session event."""
+        ...
+
+    def get_context_automation(self) -> dict[str, Any]:
+        """Return normalized foreground profile & On-Air configuration."""
+        ...
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply foreground profile & On-Air automation settings."""
+        ...
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        """Return live foreground profile and On-Air indicator status."""
+        ...
+
+    def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
+        """Start a sunrise wake-up ramp immediately."""
+        ...
+
+    def cancel_wakeup_ramp(self) -> dict[str, Any]:
+        """Cancel any active sunrise wake-up ramp."""
+        ...
+
+    def ensure_automation_tasks(self) -> None:
+        """Start enabled background automation loops on the running event loop."""
+        ...
+
+    def close_all_resources(self) -> None:
+        """Detiene los flujos activos y libera de forma segura audio, pantalla y UDP."""
+        ...

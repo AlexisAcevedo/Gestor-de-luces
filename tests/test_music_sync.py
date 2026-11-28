@@ -24,18 +24,22 @@ from typing import Any
 
 import numpy as np
 
-from gestor_luces.adapters.ambilight import MssScreenSampler
-from gestor_luces.adapters.audio import WasapiLoopbackSampler, analyze_pcm_audio_frame
-from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-from gestor_luces.application.ambilight_stream import AmbilightStreamManager
-from gestor_luces.application.music_stream import MusicSyncStreamManager
-from gestor_luces.application.rate_limiter import StreamRateLimiter
-from gestor_luces.application.service import LightControlService
-from gestor_luces.domain.value_objects import Color
-from gestor_luces.ports.repositories import AudioSampler
 from tests.simulators.fake_wiz_bulb import FakeWizBulbServer
 from tests.waits import wait_for, wait_until_async
+from wiz_console.adapters.ambilight import MssScreenSampler
+from wiz_console.adapters.audio import (
+    BeatDetector,
+    WasapiLoopbackSampler,
+    analyze_pcm_audio_frame,
+)
+from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+from wiz_console.adapters.wiz.udp_controller import WizUdpController
+from wiz_console.application.ambilight_stream import AmbilightStreamManager
+from wiz_console.application.music_stream import MusicSyncStreamManager
+from wiz_console.application.rate_limiter import StreamRateLimiter
+from wiz_console.application.service import LightControlService
+from wiz_console.domain.value_objects import Color
+from wiz_console.ports.repositories import AudioSampler
 
 
 def _make_stereo_sine_wave(
@@ -456,3 +460,98 @@ async def test_webview_bridge_music_sync_lifecycle() -> None:
         finally:
             bridge.shutdown()
             assert audio_sampler.closed is True
+
+
+def test_beat_detector_onset_cooldown_and_custom_palette() -> None:
+    """BeatDetector triggers on energy spikes with cooldown, and custom palette maps bands."""
+    now = {"t": 1.0}
+    detector = BeatDetector(
+        history_len=8,
+        threshold_ratio=1.38,
+        min_energy=0.12,
+        cooldown_seconds=0.14,
+        clock=lambda: now["t"],
+    )
+    for _ in range(5):
+        beat, intensity = detector.update(0.20)
+        assert beat is False
+        assert intensity == 0.0
+        now["t"] += 0.05
+
+    # Spike above 1.38 * 0.20 triggers beat
+    now["t"] += 0.20
+    beat, intensity = detector.update(0.65)
+    assert beat is True
+    assert intensity == 0.65
+
+    # Within 140ms cooldown must NOT double-trigger
+    now["t"] += 0.05
+    beat2, _ = detector.update(0.90)
+    assert beat2 is False
+
+    # Custom palette maps 80Hz bass wave to custom bass hex (#00ffd0)
+    bass_wave = _make_stereo_sine_wave(80.0, sample_rate=48000)
+    custom = analyze_pcm_audio_frame(
+        bass_wave,
+        sample_rate=48000,
+        channels=2,
+        palette_mode="custom",
+        custom_palette={"bass": "#00ffd0", "mid": "#ffffff", "treble": "#ffffff"},
+    )
+    assert custom["color"].g > 180 and custom["color"].b > 140 and custom["color"].r < 40
+
+
+async def test_music_sync_per_bulb_bands_and_beat_boost() -> None:
+    """PR 2A.4: Bass-mapped and Treble-mapped bulbs receive distinct colors and beat pulse."""
+    audio_sampler = CyclingAudioSampler(
+        frames=[
+            {
+                "rms": 0.80,
+                "bass": 0.95,
+                "mid": 0.10,
+                "treble": 0.85,
+                "beat": True,
+                "beat_intensity": 0.90,
+                "brightness": 70,
+                "color": Color(220, 40, 220),
+            }
+        ]
+    )
+    async with (
+        FakeWizBulbServer(mac="a8bb50aaa111") as bass_bulb,
+        FakeWizBulbServer(mac="a8bb50bbb222") as treble_bulb,
+    ):
+        controller = WizUdpController(probe_candidates=[bass_bulb.endpoint, treble_bulb.endpoint])
+        service = LightControlService(
+            controller=controller,
+            rate_limiter=StreamRateLimiter(max_hz=50.0, alpha=1.0, min_color_delta=1),
+            audio_sampler=audio_sampler,
+            music_manager=MusicSyncStreamManager(sampler=audio_sampler, interval_seconds=0.02),
+        )
+        await service.discover_bulbs()
+
+        status = service.start_music_sync(
+            palette_mode="spectrum",
+            sensitivity=1.0,
+            smoothing_alpha=1.0,
+            audio_brightness=True,
+            brightness=80,
+            band_map={bass_bulb.endpoint: "bass", treble_bulb.endpoint: "treble"},
+            beat_boost=True,
+        )
+        assert status["band_map"] == {
+            bass_bulb.endpoint: "bass",
+            treble_bulb.endpoint: "treble",
+        }
+        assert status["beat_boost"] is True
+
+        await wait_until_async(
+            lambda: (
+                bass_bulb.pilot_state.get("r", 0) > 180
+                and treble_bulb.pilot_state.get("b", 0) > 180
+            ),
+            "per-band music sync never sent distinct bass and treble colors",
+        )
+        await service.stop_music_sync()
+        assert bass_bulb.pilot_state["r"] > bass_bulb.pilot_state["b"] * 2
+        assert treble_bulb.pilot_state["b"] > treble_bulb.pilot_state["r"] * 2

@@ -64,14 +64,14 @@ function runBootScript({ hash = "", storage = undefined, includeColorSchemeMeta 
   };
 }
 
-function createStorage(prefsObj) {
+function createStorage(prefsObj, key = "wiz_console_ui_prefs") {
   const data = new Map();
   if (prefsObj !== undefined) {
-    data.set("gestor_luces_ui_prefs", typeof prefsObj === "string" ? prefsObj : JSON.stringify(prefsObj));
+    data.set(key, typeof prefsObj === "string" ? prefsObj : JSON.stringify(prefsObj));
   }
   return {
-    getItem(key) {
-      return data.has(key) ? data.get(key) : null;
+    getItem(k) {
+      return data.has(k) ? data.get(k) : null;
     }
   };
 }
@@ -172,5 +172,12 @@ describe("theme-boot.js", () => {
     });
     assert.equal(invalidLang.lang, "en");
     assert.equal(invalidLang.htmlLang, "en");
+
+    const fromLegacyKey = runBootScript({
+      hash: "",
+      storage: createStorage({ theme: "atmospheric-dark", language: "es" }, "gestor_luces_ui_prefs")
+    });
+    assert.equal(fromLegacyKey.theme, "atmospheric-dark");
+    assert.equal(fromLegacyKey.lang, "es");
   });
 });

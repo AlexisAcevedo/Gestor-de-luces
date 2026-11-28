@@ -155,6 +155,14 @@
           </div>
         </header>
 
+        <div class="zones-section" id="zones-section">
+          <div class="zones-header">
+            <span class="zones-title" data-i18n="zones.title">Zones</span>
+            <button type="button" class="btn btn-compact btn-ghost" id="open-add-zone-btn" data-i18n="zones.newBtn">+ New Zone</button>
+          </div>
+          <div class="zone-list" id="zone-list" role="group" aria-label="Fixture zones" data-i18n-aria-label="zones.listAria"></div>
+        </div>
+
         <div
           class="fixture-list"
           id="fixture-list"
@@ -258,7 +266,18 @@
             </svg>
             <h2 id="dimming-heading" class="well-title" data-i18n="dimming.title">Brightness</h2>
           </div>
-          <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
+          <div class="well-header-actions">
+            <label class="sr-only" for="transition-seconds-select" data-i18n="dimming.transitionAria">Transition crossfade duration</label>
+            <select id="transition-seconds-select" class="compact-select" aria-label="Transition crossfade duration" data-i18n-aria-label="dimming.transitionAria">
+              <option value="0" data-i18n="dimming.transitionInstant">0s Instant</option>
+              <option value="0.5">0.5s</option>
+              <option value="1">1.0s</option>
+              <option value="2">2.0s</option>
+              <option value="3.5">3.5s</option>
+              <option value="5">5.0s</option>
+            </select>
+            <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
+          </div>
         </div>
 
         <div class="slider-row">
@@ -756,13 +775,23 @@
                   type="range"
                   id="ambilight-min-brightness-slider"
                   class="console-slider"
-                  min="5"
+                  min="10"
                   max="20"
                   step="1"
                   value="10"
                 >
                 <p class="well-description floor-hint" data-i18n="ambi.minBrightnessHint">Prevents dark movie scenes from dimming the fixture below this threshold.</p>
               </div>
+
+              <label class="checkbox-control" for="ambilight-letterbox-crop">
+                <input type="checkbox" id="ambilight-letterbox-crop" checked>
+                <span data-i18n="ambi.letterboxCrop">Auto-crop cinema black bars</span>
+              </label>
+            </div>
+
+            <div class="field-group" id="ambilight-region-map-group">
+              <span class="field-label" id="ambilight-region-map-label" data-i18n="ambi.regionMapLabel">Screen Zone per Bulb</span>
+              <div id="ambilight-region-map" class="per-bulb-map-list" role="group" aria-labelledby="ambilight-region-map-label"></div>
             </div>
           </div>
         </div>
@@ -781,6 +810,7 @@
           <div class="music-telemetry-card">
             <div class="ambilight-preview-header">
               <span class="timer-status-badge" id="music-status-badge" data-active="false" data-i18n="music.statusStandby">STANDBY</span>
+              <span class="beat-pill" id="music-beat-pill" data-beat="false" data-i18n="music.beatPill">BEAT</span>
               <span class="telemetry-meta" id="music-frames-readout" data-i18n="music.telemetryZero">0 FPS · 0 frames</span>
             </div>
 
@@ -890,6 +920,29 @@
                   <span class="palette-swatch-dot palette-dot-chill" aria-hidden="true"></span>
                   <span data-i18n="music.paletteChill">Aurora Chill (Ocean/Teal)</span>
                 </button>
+                <button
+                  type="button"
+                  class="chip-btn music-palette-btn"
+                  data-palette-mode="custom"
+                  aria-pressed="false"
+                >
+                  <span class="palette-swatch-dot palette-dot-custom" aria-hidden="true"></span>
+                  <span data-i18n="music.paletteCustom">Custom Palette</span>
+                </button>
+              </div>
+              <div class="custom-palette-row" id="music-custom-palette-row" hidden>
+                <div class="custom-palette-item">
+                  <label for="music-custom-bass" data-i18n="music.bandBass">Bass</label>
+                  <input type="color" id="music-custom-bass" value="#ff2a55">
+                </div>
+                <div class="custom-palette-item">
+                  <label for="music-custom-mid" data-i18n="music.bandMid">Mid</label>
+                  <input type="color" id="music-custom-mid" value="#22e58b">
+                </div>
+                <div class="custom-palette-item">
+                  <label for="music-custom-treble" data-i18n="music.bandTreble">Treble</label>
+                  <input type="color" id="music-custom-treble" value="#389bff">
+                </div>
               </div>
             </div>
 
@@ -1000,6 +1053,15 @@
                 <input type="checkbox" id="music-audio-brightness" checked>
                 <span data-i18n="music.audioBrightness">Modulate brightness with audio volume</span>
               </label>
+              <label class="checkbox-control" for="music-beat-boost">
+                <input type="checkbox" id="music-beat-boost" checked>
+                <span data-i18n="music.beatBoost">Pulse brightness on detected beats</span>
+              </label>
+            </div>
+
+            <div class="field-group" id="music-band-map-group">
+              <span class="field-label" id="music-band-map-label" data-i18n="music.bandMapLabel">Frequency Band per Bulb</span>
+              <div id="music-band-map" class="per-bulb-map-list" role="group" aria-labelledby="music-band-map-label"></div>
             </div>
           </div>
         </div>
@@ -1054,6 +1116,135 @@
           </div>
         </div>
       </details>
+
+      <!-- Collapsible Automation & Context Bar -->
+      <details class="control-well automation-well" id="automation-details" data-persist-open="automation" aria-labelledby="automation-heading">
+        <summary class="well-header sleep-timer-header">
+          <div class="well-title-group">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <div>
+              <span id="automation-heading" class="well-title" data-i18n="auto.title">Circadian &amp; Context Automation</span>
+              <p class="well-description" data-i18n="auto.description">Opt-in daylight Kelvin curve and sunrise wake-up ramp.</p>
+            </div>
+          </div>
+          <div class="sleep-summary-meta">
+            <span class="timer-status-badge" id="automation-badge" data-active="false" data-i18n="auto.badgeIdle">Inactive</span>
+            <svg class="icon details-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M5.5 7.75L10 12.25l4.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </summary>
+
+        <div class="automation-controls" id="automation-controls">
+          <div class="automation-block">
+            <label class="checkbox-control" for="circadian-enabled">
+              <input type="checkbox" id="circadian-enabled">
+              <span data-i18n="auto.circadianEnabled">Enable circadian Kelvin &amp; brightness curve</span>
+            </label>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="circadian-sunrise" data-i18n="auto.sunriseLabel">Sunrise</label>
+                <input type="time" id="circadian-sunrise" value="07:00">
+              </div>
+              <div class="field-group">
+                <label for="circadian-sunset" data-i18n="auto.sunsetLabel">Sunset</label>
+                <input type="time" id="circadian-sunset" value="20:00">
+              </div>
+              <button type="button" class="btn btn-ghost" id="save-circadian-btn" data-i18n="auto.applyBtn">Apply Schedule</button>
+            </div>
+          </div>
+
+          <div class="automation-block">
+            <label class="checkbox-control" for="wakeup-enabled">
+              <input type="checkbox" id="wakeup-enabled">
+              <span data-i18n="auto.wakeupEnabled">Enable daily sunrise wake-up ramp</span>
+            </label>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="wakeup-time" data-i18n="auto.wakeupTimeLabel">Wake Time</label>
+                <input type="time" id="wakeup-time" value="07:00">
+              </div>
+              <div class="field-group">
+                <label for="wakeup-duration" data-i18n="auto.wakeupDurationLabel">Ramp (min)</label>
+                <input type="number" id="wakeup-duration" min="1" max="60" step="1" value="20">
+              </div>
+              <button type="button" class="btn btn-ghost" id="save-wakeup-btn" data-i18n="auto.saveWakeupBtn">Save</button>
+              <button type="button" class="btn btn-primary" id="trigger-wakeup-btn" data-i18n="auto.triggerWakeupBtn">Test Sunrise</button>
+              <button type="button" class="btn btn-ghost" id="cancel-wakeup-btn" data-i18n="auto.cancelWakeupBtn" disabled>Stop</button>
+            </div>
+          </div>
+
+          <div class="automation-block">
+            <label class="checkbox-control" for="session-off-on-lock">
+              <input type="checkbox" id="session-off-on-lock">
+              <span data-i18n="auto.sessionOffLock">Turn lights off when locking Windows</span>
+            </label>
+            <label class="checkbox-control" for="session-restore-on-unlock">
+              <input type="checkbox" id="session-restore-on-unlock">
+              <span data-i18n="auto.sessionRestoreUnlock">Restore previous lighting on unlock or wake</span>
+            </label>
+            <label class="checkbox-control" for="session-off-on-sleep">
+              <input type="checkbox" id="session-off-on-sleep">
+              <span data-i18n="auto.sessionOffSleep">Turn lights off before system sleep</span>
+            </label>
+          </div>
+
+          <div class="automation-block">
+            <div class="automation-inline-row">
+              <label class="checkbox-control" for="context-enabled">
+                <input type="checkbox" id="context-enabled">
+                <span data-i18n="auto.contextEnabled">Enable foreground app lighting profiles</span>
+              </label>
+              <span class="badge-pill" id="context-status-pill"></span>
+            </div>
+            <div class="automation-inline-row">
+              <label class="checkbox-control" for="on-air-enabled">
+                <input type="checkbox" id="on-air-enabled">
+                <span data-i18n="auto.onAirEnabled">On-Air light when mic or camera is active</span>
+              </label>
+              <div class="field-group">
+                <label for="on-air-color" data-i18n="auto.onAirColorLabel">On-Air Color</label>
+                <input type="color" id="on-air-color" value="#ff2a55">
+              </div>
+            </div>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="context-rule-process" data-i18n="auto.ruleProcessLabel">Process (.exe)</label>
+                <input type="text" id="context-rule-process" placeholder="code.exe" maxlength="64" spellcheck="false">
+              </div>
+              <div class="field-group">
+                <label for="context-rule-scene" data-i18n="auto.ruleSceneLabel">Scene #</label>
+                <input type="number" id="context-rule-scene" min="1" max="36" step="1" value="12">
+              </div>
+              <button type="button" class="btn btn-ghost" id="add-context-rule-btn" data-i18n="auto.addRuleBtn">Add Rule</button>
+            </div>
+            <div id="context-rules-list" class="context-rules-list"></div>
+          </div>
+
+          <div class="automation-block">
+            <div class="automation-inline-row">
+              <label class="checkbox-control" for="local-api-enabled">
+                <input type="checkbox" id="local-api-enabled">
+                <span data-i18n="auto.localApiEnabled">Enable loopback HTTP API (127.0.0.1)</span>
+              </label>
+              <div class="field-group">
+                <label for="local-api-port" data-i18n="auto.localApiPortLabel">Port</label>
+                <input type="number" id="local-api-port" min="1024" max="65535" value="18899">
+              </div>
+            </div>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="local-api-token" data-i18n="auto.localApiTokenLabel">Bearer Token</label>
+                <input type="text" id="local-api-token" readonly spellcheck="false" autocomplete="off">
+              </div>
+              <button type="button" class="btn btn-ghost" id="rotate-local-api-token-btn" data-i18n="auto.rotateTokenBtn">Rotate Token</button>
+            </div>
+          </div>
+        </div>
+      </details>
     </main>
   </div>
 
@@ -1090,6 +1281,14 @@
             maxlength="80"
             autocomplete="off"
           >
+        </div>
+
+        <div class="field-group">
+          <label for="manual-protocol-select" data-i18n="dialog.addProtocolLabel">LAN Protocol</label>
+          <select id="manual-protocol-select" class="compact-select">
+            <option value="wiz" data-i18n="dialog.protocolWiz">Philips WiZ (UDP 38899)</option>
+            <option value="govee" data-i18n="dialog.protocolGovee">Govee LAN (UDP 4003)</option>
+          </select>
         </div>
       </div>
 
@@ -1144,6 +1343,80 @@
           <div><dt><kbd>1</kbd>&ndash;<kbd>6</kbd></dt><dd data-i18n="shortcuts.tabs">Switch emission mode tab</dd></div>
           <div><dt><kbd>?</kbd></dt><dd data-i18n="shortcuts.help">Show this help</dd></div>
         </dl>
+
+        <fieldset class="hotkey-settings-fieldset" id="global-hotkeys-fieldset">
+          <legend data-i18n="hotkeys.sectionTitle">Global Windows Hotkeys</legend>
+          <p class="well-description" id="global-hotkeys-hint" data-i18n="hotkeys.hint">Works while minimized to the tray on Windows. Focus a field and press a modifier + key combination, or leave blank to unbind.</p>
+          <p class="field-hint" id="global-hotkeys-unsupported" data-i18n="hotkeys.unsupported" hidden>Global hotkeys are available only when running the Windows desktop host.</p>
+
+          <label class="checkbox-control" for="global-hotkeys-enabled">
+            <input type="checkbox" id="global-hotkeys-enabled" name="global_hotkeys_enabled">
+            <span data-i18n="hotkeys.enableLabel">Enable system-wide shortcuts (opt-in)</span>
+          </label>
+
+          <div class="hotkey-grid">
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_power" data-i18n="hotkeys.action.toggle_power">Toggle power</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_power" name="hotkey_toggle_power" class="hotkey-input" data-hotkey-action="toggle_power" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_power">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_power" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_power" aria-label="Clear Toggle power shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_power" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-brightness_up" data-i18n="hotkeys.action.brightness_up">Brightness +10%</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-brightness_up" name="hotkey_brightness_up" class="hotkey-input" data-hotkey-action="brightness_up" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-brightness_up">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="brightness_up" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.brightness_up" aria-label="Clear Brightness +10% shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-brightness_up" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-brightness_down" data-i18n="hotkeys.action.brightness_down">Brightness -10%</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-brightness_down" name="hotkey_brightness_down" class="hotkey-input" data-hotkey-action="brightness_down" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-brightness_down">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="brightness_down" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.brightness_down" aria-label="Clear Brightness -10% shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-brightness_down" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_ambilight" data-i18n="hotkeys.action.toggle_ambilight">Toggle Ambilight</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_ambilight" name="hotkey_toggle_ambilight" class="hotkey-input" data-hotkey-action="toggle_ambilight" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_ambilight">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_ambilight" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_ambilight" aria-label="Clear Toggle Ambilight shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_ambilight" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_music_sync" data-i18n="hotkeys.action.toggle_music_sync">Toggle Music Sync</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_music_sync" name="hotkey_toggle_music_sync" class="hotkey-input" data-hotkey-action="toggle_music_sync" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_music_sync">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_music_sync" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_music_sync" aria-label="Clear Toggle Music Sync shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_music_sync" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_window" data-i18n="hotkeys.action.toggle_window">Show / hide window</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_window" name="hotkey_toggle_window" class="hotkey-input" data-hotkey-action="toggle_window" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_window">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_window" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_window" aria-label="Clear Show / hide window shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_window" role="alert" hidden></span>
+            </div>
+          </div>
+
+          <p class="field-error" id="global-hotkeys-error" role="alert" hidden></p>
+
+          <div class="hotkey-actions-row">
+            <button type="button" class="btn btn-ghost" id="reset-global-hotkeys-btn" data-i18n="hotkeys.resetBtn">Reset Defaults</button>
+            <button type="button" class="btn btn-primary" id="save-global-hotkeys-btn" data-i18n="hotkeys.saveBtn">Save Global Hotkeys</button>
+          </div>
+        </fieldset>
       </div>
       <footer class="dialog-footer">
         <button type="submit" class="btn btn-primary" data-i18n="shortcuts.close">Close</button>
@@ -1181,11 +1454,55 @@
             <span data-i18n="dialog.presetOverwrite">Overwrite preset parameters with current live bulb state</span>
           </label>
         </div>
+
+        <div class="field-group" id="custom-scene-multibulb-row" hidden>
+          <label class="checkbox-control" for="custom-scene-multibulb-input">
+            <input type="checkbox" id="custom-scene-multibulb-input">
+            <span data-i18n="dialog.presetMultibulb">Capture individual per-bulb state for multi-bulb recall</span>
+          </label>
+        </div>
       </div>
 
       <footer class="dialog-footer">
         <button type="button" class="btn btn-ghost" data-close-dialog="custom-scene-dialog" data-i18n="dialog.cancel">Cancel</button>
         <button type="submit" class="btn btn-primary" id="custom-scene-submit-btn" data-i18n="dialog.presetSaveSubmit">Save Preset</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal Dialog: Create or Edit Zone (Light-dismiss enabled via closedby="any") -->
+  <dialog id="zone-dialog" class="console-dialog" closedby="any" aria-labelledby="zone-dialog-title">
+    <form id="zone-form" method="dialog" class="dialog-surface">
+      <header class="dialog-header">
+        <h2 id="zone-dialog-title" class="dialog-title" data-i18n="dialog.zoneAddTitle">Create Zone</h2>
+      </header>
+
+      <div class="dialog-body">
+        <input type="hidden" id="zone-id-input">
+        <div class="field-group">
+          <label for="zone-name-input" data-i18n="dialog.zoneNameLabel">Zone Name</label>
+          <input
+            type="text"
+            id="zone-name-input"
+            placeholder="Living Room"
+            data-i18n-placeholder="dialog.zoneNamePlaceholder"
+            maxlength="80"
+            required
+            autocomplete="off"
+          >
+        </div>
+
+        <fieldset class="zone-bulbs-fieldset" id="zone-bulbs-fieldset">
+          <legend data-i18n="dialog.zoneBulbsLegend">Fixtures in Zone</legend>
+          <div class="zone-bulbs-list" id="zone-bulbs-list"></div>
+        </fieldset>
+
+        <p class="field-error" id="zone-dialog-error" role="alert" hidden></p>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-close-dialog="zone-dialog" data-i18n="dialog.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="zone-submit-btn" data-i18n="dialog.zoneSaveSubmit">Save Zone</button>
       </footer>
     </form>
   </dialog>

@@ -8,13 +8,14 @@ from typing import Any
 import pytest
 from PIL import Image
 
-from gestor_luces.adapters.system.windows_autostart import (
+from wiz_console.adapters.system.windows_autostart import (
     DEFAULT_VALUE_NAME,
+    LEGACY_VALUE_NAME,
     RUN_KEY_PATH,
     WindowsRegistryAutostart,
     build_autostart_command,
 )
-from gestor_luces.adapters.ui_webview.app_menu import (
+from wiz_console.adapters.ui_webview.app_menu import (
     ACTION_EXIT,
     ACTION_SHOW_ABOUT,
     ACTION_SHOW_SHORTCUTS,
@@ -29,9 +30,9 @@ from gestor_luces.adapters.ui_webview.app_menu import (
     build_about_title,
     build_app_menu,
 )
-from gestor_luces.main import parse_args, resolve_icon_path, resolve_png_icon_path
-from gestor_luces.ports.autostart import AutostartManager
-from gestor_luces.resources import resolve_asset_path
+from wiz_console.main import parse_args, resolve_icon_path, resolve_png_icon_path
+from wiz_console.ports.autostart import AutostartManager
+from wiz_console.resources import resolve_asset_path
 
 
 class FakeRegistry:
@@ -146,11 +147,11 @@ def test_desktop_application_show_about_localizes_title_and_body(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`show_about()` cambia titulo y cuerpo segun el idioma actual del puente."""
-    from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-    from gestor_luces.adapters.wiz.udp_controller import WizUdpController
-    from gestor_luces.application.service import LightControlService
-    from gestor_luces.desktop import app as desktop_app
-    from gestor_luces.desktop.app import DesktopApplication
+    from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+    from wiz_console.adapters.wiz.udp_controller import WizUdpController
+    from wiz_console.application.service import LightControlService
+    from wiz_console.desktop import app as desktop_app
+    from wiz_console.desktop.app import DesktopApplication
 
     shown: list[tuple[str, str]] = []
     monkeypatch.setattr(
@@ -187,10 +188,10 @@ def test_desktop_application_show_about_localizes_title_and_body(
 
 
 def test_build_autostart_command_always_minimized() -> None:
-    frozen = build_autostart_command(frozen=True, executable=r"C:\Apps\GestorDeLuces.exe")
-    assert frozen == r'"C:\Apps\GestorDeLuces.exe" --minimized'
+    frozen = build_autostart_command(frozen=True, executable=r"C:\Apps\WizConsole.exe")
+    assert frozen == r'"C:\Apps\WizConsole.exe" --minimized'
     dev = build_autostart_command(frozen=False, executable=r"C:\Nope\python.exe")
-    assert dev.endswith("-m gestor_luces.main --minimized")
+    assert dev.endswith("-m wiz_console.main --minimized")
 
 
 def test_autostart_adapter_enable_disable_with_fake_registry() -> None:
@@ -223,8 +224,36 @@ def test_autostart_refreshes_stale_path_only_when_enabled() -> None:
     assert autostart.registered_command() == r'"D:\New\app.exe" --minimized'
 
 
+def test_autostart_migrates_legacy_entry_and_disable_cleans_both() -> None:
+    assert DEFAULT_VALUE_NAME == "WizConsole"
+    assert LEGACY_VALUE_NAME == "GestorDeLuces"
+
+    registry = FakeRegistry()
+    registry.values[(RUN_KEY_PATH, LEGACY_VALUE_NAME)] = r'"C:\Old\GestorDeLuces.exe" --minimized'
+    autostart = WindowsRegistryAutostart(
+        registry=registry, command_factory=lambda: r'"C:\Apps\WizConsole.exe" --minimized'
+    )
+
+    assert autostart.is_enabled() is False
+    assert autostart.refresh_if_stale() is True
+    assert autostart.is_enabled() is True
+    assert registry.values[(RUN_KEY_PATH, DEFAULT_VALUE_NAME)] == (
+        r'"C:\Apps\WizConsole.exe" --minimized'
+    )
+    assert (RUN_KEY_PATH, LEGACY_VALUE_NAME) not in registry.values
+
+    # Second call is idempotent.
+    assert autostart.refresh_if_stale() is False
+
+    # disable() removes both current and lingering legacy entries.
+    registry.values[(RUN_KEY_PATH, LEGACY_VALUE_NAME)] = r'"C:\Old\GestorDeLuces.exe" --minimized'
+    autostart.disable()
+    assert (RUN_KEY_PATH, DEFAULT_VALUE_NAME) not in registry.values
+    assert (RUN_KEY_PATH, LEGACY_VALUE_NAME) not in registry.values
+
+
 def test_bridge_autostart_methods(tmp_path: Path) -> None:
-    from gestor_luces.main import build_application
+    from wiz_console.main import build_application
 
     registry = FakeRegistry()
     autostart = WindowsRegistryAutostart(
@@ -245,8 +274,8 @@ def test_bridge_autostart_methods(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("method", ["get_autostart", "set_autostart"])
 def test_bridge_without_autostart_reports_unavailable(tmp_path: Path, method: str) -> None:
-    from gestor_luces.adapters.ui_webview.bridge import WebviewBridge
-    from gestor_luces.main import build_application
+    from wiz_console.adapters.ui_webview.bridge import WebviewBridge
+    from wiz_console.main import build_application
 
     service, bridge = build_application(data_dir=tmp_path, autostart=None)
     bridge.shutdown()
@@ -263,14 +292,14 @@ def test_bridge_without_autostart_reports_unavailable(tmp_path: Path, method: st
 def test_module_entry_point_delegates_to_main_and_exits_with_its_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`python -m gestor_luces` corre `main()` y propaga su codigo de salida como SystemExit."""
+    """`python -m wiz_console` corre `main()` y propaga su codigo de salida como SystemExit."""
     import runpy
 
-    from gestor_luces import main as main_module
+    from wiz_console import main as main_module
 
     monkeypatch.setattr(main_module, "main", lambda: 3)
 
     with pytest.raises(SystemExit) as exit_info:
-        runpy.run_module("gestor_luces", run_name="__main__")
+        runpy.run_module("wiz_console", run_name="__main__")
 
     assert exit_info.value.code == 3
