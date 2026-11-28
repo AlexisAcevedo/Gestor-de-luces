@@ -44,7 +44,11 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         "context-rule-process": { tag: "input", type: "text", value: "" },
         "context-rule-scene": { tag: "input", type: "number", value: "12" },
         "add-context-rule-btn": { tag: "button" },
-        "context-rules-list": { tag: "div" }
+        "context-rules-list": { tag: "div" },
+        "local-api-enabled": { tag: "input", type: "checkbox", checked: false },
+        "local-api-port": { tag: "input", type: "number", value: "18899" },
+        "local-api-token": { tag: "input", type: "text", value: "" },
+        "rotate-local-api-token-btn": { tag: "button" }
       }
     });
     dom.install();
@@ -80,6 +84,7 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
       rules: []
     };
     appState.contextStatus = { supported: true, active_reason: null, on_air_active: false, foreground_process: null };
+    appState.localApi = { enabled: false, port: 18899, token: "" };
   });
 
   afterEach(() => {
@@ -113,6 +118,14 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         set_context_automation: async (cfg) => {
           calls.push(["set_context_automation", cfg]);
           return { ok: true, context_automation: cfg, error: null };
+        },
+        set_local_api_config: async (cfg) => {
+          calls.push(["set_local_api_config", cfg]);
+          return { ok: true, local_api: Object.assign({}, cfg, { token: "tok-1" }), error: null };
+        },
+        rotate_local_api_token: async () => {
+          calls.push(["rotate_local_api_token"]);
+          return { ok: true, local_api: { enabled: true, port: 18899, token: "tok-2" }, error: null };
         }
       }
     };
@@ -159,5 +172,16 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
     assert.equal(calls[4][0], "set_context_automation");
     assert.equal(calls[4][1].rules[0].process_name, "code.exe");
     assert.equal(calls[4][1].rules[0].value, "12");
+
+    dom.getById("local-api-enabled").checked = true;
+    dom.getById("local-api-enabled").dispatchEvent("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[5][0], "set_local_api_config");
+    assert.equal(calls[5][1].enabled, true);
+
+    dom.getById("rotate-local-api-token-btn").click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[6][0], "rotate_local_api_token");
+    assert.equal(dom.getById("local-api-token").value, "tok-2");
   });
 });

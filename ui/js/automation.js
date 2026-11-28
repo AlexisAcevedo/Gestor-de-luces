@@ -69,6 +69,7 @@ export function renderAutomationPanel() {
   const ctx = appState.contextAutomation || {};
   const onAir = ctx.on_air || {};
   const ctxStatus = appState.contextStatus || {};
+  const localApi = appState.localApi || {};
 
   const badge = document.getElementById("automation-badge");
   if (badge) {
@@ -80,7 +81,8 @@ export function renderAutomationPanel() {
         session.restore_on_unlock ||
         session.off_on_sleep ||
         ctx.enabled ||
-        onAir.enabled
+        onAir.enabled ||
+        localApi.enabled
     );
     badge.setAttribute("data-active", String(anyActive));
     badge.textContent = anyActive ? t("auto.badgeActive") : t("auto.badgeIdle");
@@ -138,6 +140,17 @@ export function renderAutomationPanel() {
       : ctxStatus.active_reason || "";
   }
   renderContextRulesList(ctx);
+
+  const localApiEnabled = document.getElementById("local-api-enabled");
+  if (localApiEnabled) localApiEnabled.checked = Boolean(localApi.enabled);
+  const localApiPort = document.getElementById("local-api-port");
+  if (localApiPort && document.activeElement !== localApiPort) {
+    localApiPort.value = String(clampInt(localApi.port ?? 18899, 1024, 65535));
+  }
+  const localApiToken = document.getElementById("local-api-token");
+  if (localApiToken && document.activeElement !== localApiToken) {
+    localApiToken.value = String(localApi.token || "");
+  }
 }
 
 export function bindAutomationEvents() {
@@ -262,5 +275,30 @@ export function bindAutomationEvents() {
       if (procInput) procInput.value = "";
       saveContextAutomation(Object.assign({}, prev, { rules: existing }));
     });
+  }
+
+  const pushLocalApiConfig = () => {
+    const prev = appState.localApi || {};
+    const nextCfg = {
+      enabled: Boolean(document.getElementById("local-api-enabled")?.checked),
+      port: clampInt(document.getElementById("local-api-port")?.value ?? 18899, 1024, 65535),
+      token: String(prev.token || "")
+    };
+    return invokeApi(
+      () => getBackendApi().set_local_api_config(nextCfg),
+      () => t("status.localApiSaved")
+    );
+  };
+  for (const id of ["local-api-enabled", "local-api-port"]) {
+    const inp = document.getElementById(id);
+    if (inp) inp.addEventListener("change", pushLocalApiConfig);
+  }
+  const rotateTokenBtn = document.getElementById("rotate-local-api-token-btn");
+  if (rotateTokenBtn) {
+    rotateTokenBtn.addEventListener("click", () =>
+      withButtonBusy(rotateTokenBtn, () =>
+        invokeApi(() => getBackendApi().rotate_local_api_token(), () => t("status.localApiTokenRotated"))
+      )
+    );
   }
 }

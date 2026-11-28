@@ -52,6 +52,7 @@ export function createBrowserMockApi() {
     on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
     rules: []
   };
+  let mockLocalApi = { enabled: false, port: 18899, token: "" };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -121,6 +122,7 @@ export function createBrowserMockApi() {
       context_automation: JSON.parse(JSON.stringify(mockContextAutomation)),
       context_status: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
       transition_seconds: mockTransitionSeconds,
+      local_api: Object.assign({}, mockLocalApi),
       error: null
     });
   }
@@ -184,18 +186,20 @@ export function createBrowserMockApi() {
       };
       return buildMockEnvelope();
     },
-    add_manual_bulb: (ip, name) => {
+    add_manual_bulb: (ip, name, protocol = "wiz") => {
       const cleaned = String(ip || "").trim();
       if (!cleaned) {
         return Promise.resolve({ ok: false, bulbs: mockBulbs, selected_ips: mockSelected, scenes: SCENE_CATALOG.slice(), error: "IP cannot be empty." });
       }
-      const label = String(name || "").trim() || `WiZ Bulb (${cleaned})`;
+      const proto = String(protocol || "wiz").trim().toLowerCase() === "govee" ? "govee" : "wiz";
+      const label = String(name || "").trim() || `${proto === "govee" ? "Govee Bulb" : "WiZ Bulb"} (${cleaned})`;
       const existing = mockBulbs.find((b) => b.ip === cleaned);
       if (existing) {
         existing.name = label;
+        existing.protocol = proto;
       } else {
         mockBulbs.push({
-          ip: cleaned, mac: "a8bb50001122", name: label, module_name: "ESP01_SHRGB1C_31", is_online: true,
+          ip: cleaned, mac: "a8bb50001122", name: label, module_name: proto === "govee" ? "GOVEE_LAN_RGB" : "ESP01_SHRGB1C_31", protocol: proto, is_online: true,
           state: { is_on: true, brightness: 100, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
         });
         if (!mockSelected.includes(cleaned)) mockSelected.push(cleaned);
@@ -465,6 +469,15 @@ export function createBrowserMockApi() {
     },
     set_transition_seconds: (seconds) => {
       mockTransitionSeconds = Math.max(0, Math.min(5, Number(seconds) || 0));
+      return buildMockEnvelope();
+    },
+    set_local_api_config: (config) => {
+      mockLocalApi = Object.assign({}, mockLocalApi, config || {});
+      if (mockLocalApi.enabled && !mockLocalApi.token) mockLocalApi.token = "mock-bearer-token";
+      return buildMockEnvelope();
+    },
+    rotate_local_api_token: () => {
+      mockLocalApi.token = `mock-token-${Date.now()}`;
       return buildMockEnvelope();
     }
   };

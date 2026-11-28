@@ -170,6 +170,7 @@ export const appState = {
     rules: []
   },
   contextStatus: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
+  localApi: { enabled: false, port: 18899, token: "" },
   globalHotkeys: {
     enabled: false,
     supported: false,
