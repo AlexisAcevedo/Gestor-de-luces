@@ -14,7 +14,8 @@ from typing import Any
 _LOGGER = logging.getLogger(__name__)
 
 RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
-DEFAULT_VALUE_NAME = "GestorDeLuces"
+DEFAULT_VALUE_NAME = "WizConsole"
+LEGACY_VALUE_NAME = "GestorDeLuces"
 MINIMIZED_FLAG = "--minimized"
 _CONTROL_CHARS = ("\x00", "\r", "\n")
 
@@ -76,17 +77,29 @@ class WindowsRegistryAutostart:
         self._value_name = cleaned_name
         self._command_factory = command_factory or build_autostart_command
 
-    def _read(self) -> str | None:
+    def _read_value(self, value_name: str) -> str | None:
         try:
             with self._reg.OpenKey(
                 self._reg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, self._reg.KEY_READ
             ) as key:
-                value, kind = self._reg.QueryValueEx(key, self._value_name)
+                value, kind = self._reg.QueryValueEx(key, value_name)
         except FileNotFoundError:
             return None
         if kind != self._reg.REG_SZ or not isinstance(value, str) or not value.strip():
             return None
         return value
+
+    def _read(self) -> str | None:
+        return self._read_value(self._value_name)
+
+    def _delete_value(self, value_name: str) -> None:
+        try:
+            with self._reg.OpenKey(
+                self._reg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, self._reg.KEY_SET_VALUE
+            ) as key:
+                self._reg.DeleteValue(key, value_name)
+        except FileNotFoundError:
+            return
 
     def registered_command(self) -> str | None:
         """Return the command currently stored in the registry, if any."""
@@ -109,23 +122,54 @@ class WindowsRegistryAutostart:
             self._reg.SetValueEx(key, self._value_name, 0, self._reg.REG_SZ, command)
 
     def disable(self) -> None:
-        try:
-            with self._reg.OpenKey(
-                self._reg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, self._reg.KEY_SET_VALUE
-            ) as key:
-                self._reg.DeleteValue(key, self._value_name)
-        except FileNotFoundError:
-            return
+        self._delete_value(self._value_name)
+        if self._value_name == DEFAULT_VALUE_NAME:
+            with_legacy_cleanup_err = False
+            try:
+                self._delete_value(LEGACY_VALUE_NAME)
+            except OSError:
+                with_legacy_cleanup_err = True
+            if with_legacy_cleanup_err:
+                _LOGGER.debug("Failed to remove legacy autostart entry.", exc_info=True)
 
     def refresh_if_stale(self) -> bool:
-        """Rewrite the entry when the app moved (portable build) since it was registered."""
+        """Refresh stale executable paths and migrate the legacy GestorDeLuces entry."""
         try:
             current = self._read()
         except OSError:
             _LOGGER.debug("Failed to read autostart entry during refresh.", exc_info=True)
             return False
+
         if current is None:
-            return False
+            if self._value_name != DEFAULT_VALUE_NAME:
+                return False
+            try:
+                legacy = self._read_value(LEGACY_VALUE_NAME)
+            except OSError:
+                _LOGGER.debug("Failed to read legacy autostart entry.", exc_info=True)
+                return False
+            if legacy is None:
+                return False
+            try:
+                self.enable()
+                self._delete_value(LEGACY_VALUE_NAME)
+            except OSError:
+                _LOGGER.exception("Failed to migrate legacy autostart entry.")
+                return False
+            _LOGGER.info(
+                "Migrated Windows autostart entry from '%s' to '%s'.",
+                LEGACY_VALUE_NAME,
+                self._value_name,
+            )
+            return True
+
+        if self._value_name == DEFAULT_VALUE_NAME:
+            try:
+                if self._read_value(LEGACY_VALUE_NAME) is not None:
+                    self._delete_value(LEGACY_VALUE_NAME)
+            except OSError:
+                _LOGGER.debug("Failed to clean up redundant legacy autostart entry.", exc_info=True)
+
         expected = self._command_factory()
         if current == expected:
             return False

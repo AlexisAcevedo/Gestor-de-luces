@@ -346,3 +346,54 @@ def test_settings_repository_and_service_theme_persistence(tmp_path: Path) -> No
     # Un tema desconocido cae de forma segura a DEFAULT_THEME
     assert service.set_theme("neon-pink") == "architectural-stone"
     assert service.get_theme() == "architectural-stone"
+
+
+def test_resolve_default_data_dir_migrates_legacy_windows_and_unix_dirs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Migrates legacy GestorDeLuces data once without overwriting newer WizConsole files."""
+    from gestor_luces.adapters.storage.json_repositories import (
+        APP_DATA_DIR_NAME,
+        LEGACY_APP_DATA_DIR_NAME,
+        LEGACY_UNIX_DATA_DIR_NAME,
+        UNIX_DATA_DIR_NAME,
+        resolve_default_data_dir,
+    )
+
+    local_root = tmp_path / "localappdata"
+    legacy_win = local_root / LEGACY_APP_DATA_DIR_NAME
+    legacy_win.mkdir(parents=True)
+    (legacy_win / "bulbs.json").write_text('[{"ip": "192.168.1.50"}]', encoding="utf-8")
+    (legacy_win / "custom_scenes.json").write_text('[{"id": "s1"}]', encoding="utf-8")
+    (legacy_win / "settings.json").write_text('{"language": "es"}', encoding="utf-8")
+    (legacy_win / "unrelated.txt").write_text("ignore", encoding="utf-8")
+
+    monkeypatch.setenv("LOCALAPPDATA", str(local_root))
+    resolved = resolve_default_data_dir()
+    assert resolved == local_root / APP_DATA_DIR_NAME
+    assert (resolved / "bulbs.json").read_text(encoding="utf-8") == '[{"ip": "192.168.1.50"}]'
+    assert (resolved / "custom_scenes.json").read_text(encoding="utf-8") == '[{"id": "s1"}]'
+    assert (resolved / "settings.json").read_text(encoding="utf-8") == '{"language": "es"}'
+    assert not (resolved / "unrelated.txt").exists()
+    # Legacy directory remains untouched as backup.
+    assert (legacy_win / "bulbs.json").is_file()
+
+    # Subsequent launches must be idempotent and preserve newer target edits.
+    (resolved / "settings.json").write_text('{"language": "en"}', encoding="utf-8")
+    resolved_again = resolve_default_data_dir()
+    assert resolved_again == resolved
+    assert (resolved / "settings.json").read_text(encoding="utf-8") == '{"language": "en"}'
+
+    # Non-Windows / unset LOCALAPPDATA fallback migrates ~/.gestor_de_luces -> ~/.wiz_console.
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    fake_home = tmp_path / "home"
+    legacy_unix = fake_home / LEGACY_UNIX_DATA_DIR_NAME
+    legacy_unix.mkdir(parents=True)
+    (legacy_unix / "settings.json").write_text('{"theme": "atmospheric-dark"}', encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+
+    resolved_unix = resolve_default_data_dir()
+    assert resolved_unix == fake_home / UNIX_DATA_DIR_NAME
+    assert (resolved_unix / "settings.json").read_text(
+        encoding="utf-8"
+    ) == '{"theme": "atmospheric-dark"}'

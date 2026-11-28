@@ -10,6 +10,7 @@ from PIL import Image
 
 from gestor_luces.adapters.system.windows_autostart import (
     DEFAULT_VALUE_NAME,
+    LEGACY_VALUE_NAME,
     RUN_KEY_PATH,
     WindowsRegistryAutostart,
     build_autostart_command,
@@ -221,6 +222,34 @@ def test_autostart_refreshes_stale_path_only_when_enabled() -> None:
     command["value"] = r'"D:\New\app.exe" --minimized'
     assert autostart.refresh_if_stale() is True
     assert autostart.registered_command() == r'"D:\New\app.exe" --minimized'
+
+
+def test_autostart_migrates_legacy_entry_and_disable_cleans_both() -> None:
+    assert DEFAULT_VALUE_NAME == "WizConsole"
+    assert LEGACY_VALUE_NAME == "GestorDeLuces"
+
+    registry = FakeRegistry()
+    registry.values[(RUN_KEY_PATH, LEGACY_VALUE_NAME)] = r'"C:\Old\GestorDeLuces.exe" --minimized'
+    autostart = WindowsRegistryAutostart(
+        registry=registry, command_factory=lambda: r'"C:\Apps\WizConsole.exe" --minimized'
+    )
+
+    assert autostart.is_enabled() is False
+    assert autostart.refresh_if_stale() is True
+    assert autostart.is_enabled() is True
+    assert registry.values[(RUN_KEY_PATH, DEFAULT_VALUE_NAME)] == (
+        r'"C:\Apps\WizConsole.exe" --minimized'
+    )
+    assert (RUN_KEY_PATH, LEGACY_VALUE_NAME) not in registry.values
+
+    # Second call is idempotent.
+    assert autostart.refresh_if_stale() is False
+
+    # disable() removes both current and lingering legacy entries.
+    registry.values[(RUN_KEY_PATH, LEGACY_VALUE_NAME)] = r'"C:\Old\GestorDeLuces.exe" --minimized'
+    autostart.disable()
+    assert (RUN_KEY_PATH, DEFAULT_VALUE_NAME) not in registry.values
+    assert (RUN_KEY_PATH, LEGACY_VALUE_NAME) not in registry.values
 
 
 def test_bridge_autostart_methods(tmp_path: Path) -> None:
