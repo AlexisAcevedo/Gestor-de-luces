@@ -105,6 +105,10 @@ class BulbInventoryService:
                     )
             if existing is not None and not existing.name.startswith("WiZ Bulb ("):
                 bulb.name = existing.name
+            if existing is not None and bulb.fw_version is None:
+                bulb.fw_version = existing.fw_version
+            if existing is not None and bulb.rssi is None:
+                bulb.rssi = existing.rssi
             self._ctx.bulbs[bulb.ip] = bulb
 
         await self.refresh_states([b.ip for b in discovered])
@@ -186,6 +190,11 @@ class BulbInventoryService:
             if live_state is not None:
                 bulb.state = live_state
                 bulb.is_online = True
+                rssi_reader = getattr(self._ctx.controller, "get_last_rssi", None)
+                if callable(rssi_reader):
+                    latest_rssi = rssi_reader(ip)
+                    if isinstance(latest_rssi, int) and not isinstance(latest_rssi, bool):
+                        bulb.rssi = latest_rssi
             else:
                 bulb.is_online = False
             return bulb

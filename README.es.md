@@ -61,6 +61,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Reglas opcionales por ejecutable en primer plano (`ContextRule`) e indicador local Al Aire por micrófono o cámara en `ConsentStore` (`OnAirConfig`), con restauración automática al finalizar la llamada o salir de la aplicación.
 10. Transiciones Graduales Configurables (`TransitionEngine`):
    - Interpolación suave (`ease-in-out`) para cambios de color RGB y Kelvin (`0.0s` instantáneo por defecto o `0.5s–5.0s`) con cancelación preventiva por bombilla y precedencia de flujos continuos.
+11. Detección de Capacidades y Diagnóstico Wi-Fi / Firmware:
+   - Inferencia automática de capacidades ópticas (`BulbCapabilities` mediante `infer_bulb_capabilities`) junto a insignias de intensidad de señal Wi-Fi (`dBm`) y versión de firmware en el cajón de luminarias con adaptación automática de controles RGB.
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).

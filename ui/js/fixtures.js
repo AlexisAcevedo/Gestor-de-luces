@@ -205,7 +205,14 @@ export function renderFixtureList() {
     titleRow.append(nameHeading);
     const addressLine = document.createElement("p");
     addressLine.className = "fixture-address";
-    addressLine.textContent = `${bulb.ip} · ${bulb.mac}`;
+    const diagParts = [`${bulb.ip} · ${bulb.mac}`];
+    if (typeof bulb.rssi === "number" && Number.isFinite(bulb.rssi)) {
+      diagParts.push(`${bulb.rssi} dBm`);
+    }
+    if (bulb.fw_version) {
+      diagParts.push(`v${bulb.fw_version}`);
+    }
+    addressLine.textContent = diagParts.join(" · ");
     metaDiv.append(titleRow, addressLine);
     selectLabel.append(checkbox, metaDiv);
     topRow.append(selectLabel, topActions);

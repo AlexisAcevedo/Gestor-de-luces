@@ -430,6 +430,7 @@
       "status.contextAutomationSaved": "Context & On-Air rules updated.",
       "dimming.transitionAria": "Transition crossfade duration",
       "dimming.transitionInstant": "0s Instant",
+      "stage.rgbUnsupportedHint": "Selected fixture supports white tones only (no RGB hardware).",
       "status.transitionSet": "Transition crossfade set to {seconds}s."
     },
 
@@ -852,6 +853,7 @@
       "status.contextAutomationSaved": "Reglas contextuales y Al Aire actualizadas.",
       "dimming.transitionAria": "Duración de transición gradual",
       "dimming.transitionInstant": "0s Instantánea",
+      "stage.rgbUnsupportedHint": "La luminaria seleccionada solo admite tonos blancos (sin hardware RGB).",
       "status.transitionSet": "Transición gradual ajustada a {seconds}s."
     }
   };

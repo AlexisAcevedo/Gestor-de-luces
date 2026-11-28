@@ -106,6 +106,57 @@ class LightState:
         )
 
 
+@dataclass(frozen=True)
+class BulbCapabilities:
+    """Inferred optical and dimming capabilities for a luminaire hardware module."""
+
+    supports_rgb: bool = True
+    supports_tunable_white: bool = True
+    supports_dimming: bool = True
+    min_kelvin: int = 2200
+    max_kelvin: int = 6500
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize hardware capabilities for the UI bridge."""
+        return {
+            "supports_rgb": self.supports_rgb,
+            "supports_tunable_white": self.supports_tunable_white,
+            "supports_dimming": self.supports_dimming,
+            "min_kelvin": self.min_kelvin,
+            "max_kelvin": self.max_kelvin,
+        }
+
+
+def infer_bulb_capabilities(module_name: str | None) -> BulbCapabilities:
+    """Infer color/CCT/dimming support from a WiZ hardware module identifier."""
+    token = (module_name or "").strip().upper()
+    if "RGB" in token or not token:
+        return BulbCapabilities(
+            supports_rgb=True,
+            supports_tunable_white=True,
+            supports_dimming=True,
+            min_kelvin=2200,
+            max_kelvin=6500,
+        )
+    if "TW" in token or "SHDW" in token:
+        return BulbCapabilities(
+            supports_rgb=False,
+            supports_tunable_white=True,
+            supports_dimming=True,
+            min_kelvin=2700,
+            max_kelvin=6500,
+        )
+    if "DIM" in token or "FIL" in token:
+        return BulbCapabilities(
+            supports_rgb=False,
+            supports_tunable_white=False,
+            supports_dimming=True,
+            min_kelvin=2700,
+            max_kelvin=2700,
+        )
+    return BulbCapabilities()
+
+
 @dataclass
 class Bulb:
     """Entidad que representa un foco inteligente WiZ identificado por su IP y MAC."""
@@ -116,6 +167,8 @@ class Bulb:
     module_name: str = "ESP01_SHRGB1C_31"
     is_online: bool = True
     state: LightState = field(default_factory=LightState)
+    rssi: int | None = None
+    fw_version: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.ip, str):
@@ -126,6 +179,18 @@ class Bulb:
         self.ip = validate_local_endpoint(self.ip)
         if not self.name or not self.name.strip():
             self.name = f"WiZ Bulb ({self.ip})"
+        if self.rssi is not None and (
+            isinstance(self.rssi, bool) or not isinstance(self.rssi, int)
+        ):
+            self.rssi = None
+        if self.fw_version is not None:
+            cleaned_fw = str(self.fw_version).strip()
+            self.fw_version = cleaned_fw[:64] if cleaned_fw else None
+
+    @property
+    def capabilities(self) -> BulbCapabilities:
+        """Return inferred RGB/CCT/dimming capabilities from `module_name`."""
+        return infer_bulb_capabilities(self.module_name)
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa la entidad completa (metadatos + estado) para la UI o persistencia."""
@@ -135,6 +200,9 @@ class Bulb:
             "name": self.name,
             "module_name": self.module_name,
             "is_online": self.is_online,
+            "rssi": self.rssi,
+            "fw_version": self.fw_version,
+            "capabilities": self.capabilities.to_dict(),
             "state": self.state.to_dict(),
         }
 
@@ -156,6 +224,10 @@ class Bulb:
                 raise ValueError(f"Bulb {field_name} must be a string.")
         raw_state = data.get("state")
         state = LightState.from_dict(raw_state) if isinstance(raw_state, dict) else LightState()
+        raw_rssi = data.get("rssi")
+        rssi = raw_rssi if isinstance(raw_rssi, int) and not isinstance(raw_rssi, bool) else None
+        raw_fw = data.get("fw_version")
+        fw_version = raw_fw if isinstance(raw_fw, str) and raw_fw.strip() else None
         return cls(
             ip=raw_ip,
             mac=raw_mac if raw_mac is not None else "unknown",
@@ -163,6 +235,8 @@ class Bulb:
             module_name=raw_module if raw_module is not None else "ESP01_SHRGB1C_31",
             is_online=bool(data.get("is_online", True)),
             state=state,
+            rssi=rssi,
+            fw_version=fw_version,
         )
 
 

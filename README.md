@@ -60,6 +60,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Opt-in Win32 foreground executable rules (`ContextRule`) and local Windows ConsentStore microphone/camera On-Air override (`OnAirConfig`), automatically restoring prior lighting when leaving a call or tracked application.
 10. Configurable Crossfade Transitions (`TransitionEngine`):
    - Smooth ease-in-out RGB and Kelvin crossfade interpolation (`0.0s` instant default or `0.5s–5.0s`) with per-bulb preemption and instant stream override.
+11. Bulb Capability Inference & Wi-Fi/Firmware Diagnostics:
+   - Automatic optical capability inference (`BulbCapabilities` via `infer_bulb_capabilities(module_name)`) plus live Wi-Fi RSSI (`dBm`) and firmware version badges in the fixture drawer with adaptive RGB UI gating.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).
