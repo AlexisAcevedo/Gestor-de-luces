@@ -21,8 +21,8 @@ ERROR_ALREADY_EXISTS = 183
 WAIT_OBJECT_0 = 0
 WAIT_FAILED = 0xFFFFFFFF
 WAIT_TIMEOUT_MS = 500
-MUTEX_NAME = "Local\\GestorDeLuces.SingleInstance"
-EVENT_NAME = "Local\\GestorDeLuces.ShowWindow"
+MUTEX_NAME = "Local\\WizConsole.SingleInstance"
+EVENT_NAME = "Local\\WizConsole.ShowWindow"
 
 
 def _load_kernel32() -> Any:
@@ -169,7 +169,7 @@ class SingleInstanceGuard:
                     )
                     break
 
-        thread = threading.Thread(target=_worker, name="GestorLucesSingleInstance", daemon=True)
+        thread = threading.Thread(target=_worker, name="WizConsoleSingleInstance", daemon=True)
         with self._lock:
             self._listener_thread = thread
         thread.start()

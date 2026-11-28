@@ -27,7 +27,7 @@ from gestor_luces.domain.scenes import list_builtin_scenes
 
 _LOGGER = logging.getLogger(__name__)
 
-ASYNC_LOOP_THREAD_NAME = "GestorLucesAsyncLoop"
+ASYNC_LOOP_THREAD_NAME = "WizConsoleAsyncLoop"
 
 #: Cuanto espera el puente a que el hilo del bucle entre en `run_forever`. El hilo arranca en
 #: el constructor y puede tardar en ser planificado en una maquina cargada, pero un bucle que

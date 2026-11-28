@@ -1,5 +1,5 @@
 # PyInstaller spec: one-folder, windowed build shared by the portable zip and the installer.
-# Run from the repository root:  pyinstaller packaging/gestor_luces.spec --noconfirm
+# Run from the repository root:  pyinstaller packaging/wiz_console.spec --noconfirm
 from pathlib import Path
 import re
 
@@ -39,11 +39,11 @@ version_file.write_text(
                     OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
-      StringStruct('CompanyName', 'Gestor de Luces'),
+      StringStruct('CompanyName', 'AlexisAcevedo'),
       StringStruct('FileDescription', 'WiZ Architectural Lighting Console'),
       StringStruct('FileVersion', '{VERSION}'),
-      StringStruct('InternalName', 'GestorDeLuces'),
-      StringStruct('OriginalFilename', 'GestorDeLuces.exe'),
+      StringStruct('InternalName', 'WizConsole'),
+      StringStruct('OriginalFilename', 'WizConsole.exe'),
       StringStruct('ProductName', 'WiZ Architectural Lighting Console'),
       StringStruct('ProductVersion', '{VERSION}')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])]),
@@ -83,7 +83,7 @@ exe = EXE(  # noqa: F821
     a.scripts,
     [],
     exclude_binaries=True,
-    name="GestorDeLuces",
+    name="WizConsole",
     console=False,
     icon=str(ROOT / "assets" / "icon" / "app.ico"),
     version=str(version_file),
@@ -95,5 +95,5 @@ coll = COLLECT(  # noqa: F821
     a.binaries,
     a.datas,
     upx=False,
-    name="GestorDeLuces",
+    name="WizConsole",
 )

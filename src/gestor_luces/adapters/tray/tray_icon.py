@@ -49,8 +49,8 @@ from gestor_luces.domain.value_objects import DEFAULT_THEME
 
 _LOGGER = logging.getLogger(__name__)
 
-ICON_THREAD_NAME = "GestorLucesTray"
-REFRESH_THREAD_NAME = "GestorLucesTrayRefresh"
+ICON_THREAD_NAME = "WizConsoleTray"
+REFRESH_THREAD_NAME = "WizConsoleTrayRefresh"
 
 Executor = Callable[[Callable[[], None]], None]
 ViewFactory = Callable[[Dispatch], TrayView | None]
@@ -95,7 +95,7 @@ class TrayActions(Protocol):
 
 
 def _default_executor(task: Callable[[], None]) -> None:
-    threading.Thread(target=task, name="GestorLucesTrayAction", daemon=True).start()
+    threading.Thread(target=task, name="WizConsoleTrayAction", daemon=True).start()
 
 
 def _default_view_factory(dispatch: Dispatch) -> TrayView | None:

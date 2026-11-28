@@ -59,7 +59,7 @@ WS_EX_TOOLWINDOW = 0x00000080
 #: Identidad propia de la aplicacion en la barra de tareas de Windows. Sin ella el proceso
 #: hereda la identidad y el icono de `python.exe`: la barra agrupa las ventanas bajo el
 #: interprete y muestra su logo aunque la ventana tenga otro icono.
-APP_USER_MODEL_ID = "AlexisAcevedo.GestorDeLuces"
+APP_USER_MODEL_ID = "AlexisAcevedo.WizConsole"
 
 WM_SETICON = 0x0080
 WIN_ICON_SMALL = 0

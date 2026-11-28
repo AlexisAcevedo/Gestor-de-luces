@@ -645,7 +645,7 @@ def test_configure_logging_uses_rotating_file_handler(
         rotating = [h for h in added_handlers if isinstance(h, RotatingFileHandler)]
         assert len(rotating) == 1
         handler = rotating[0]
-        assert Path(handler.baseFilename) == tmp_path / "gestor_luces.log"
+        assert Path(handler.baseFilename) == tmp_path / "wiz_console.log"
         assert handler.maxBytes == main_module.LOG_MAX_BYTES
         assert handler.backupCount == main_module.LOG_BACKUP_COUNT
     finally:

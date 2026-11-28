@@ -85,8 +85,8 @@ def _unique_names() -> tuple[str, str]:
     """Nombres de mutex y evento unicos por test (estado global de la sesion de Windows)."""
     suffix = uuid.uuid4().hex
     return (
-        f"Local\\GestorDeLuces.Test.{suffix}",
-        f"Local\\GestorDeLuces.Test.Show.{suffix}",
+        f"Local\\WizConsole.Test.{suffix}",
+        f"Local\\WizConsole.Test.Show.{suffix}",
     )
 
 

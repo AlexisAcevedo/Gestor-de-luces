@@ -132,7 +132,7 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 ├── assets/
 │   └── icon/                    # make_icon.py plus generated app.ico / app.png
 ├── packaging/
-│   ├── gestor_luces.spec        # PyInstaller one-folder build definition
+│   ├── wiz_console.spec         # PyInstaller one-folder build definition
 │   └── installer.iss            # Inno Setup per-user installer script
 ├── scripts/
 │   └── build.ps1                # Icon + PyInstaller + portable ZIP + installer
@@ -211,8 +211,8 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 
 No Python installation is required. Download the latest release from [**GitHub Releases**](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/releases/latest):
 
-- **Installer (`GestorDeLuces-Setup-<version>.exe`)**: Per-user setup (no administrator rights needed) that creates Start Menu shortcuts, optional desktop icon, and optional "Start with Windows" registration.
-- **Portable (`GestorDeLuces-portable-<version>.zip`)**: Extract anywhere and run `GestorDeLuces.exe` (keep the `_internal` folder next to the executable).
+- **Installer (`WizConsole-Setup-<version>.exe`)**: Per-user setup (no administrator rights needed) that creates Start Menu shortcuts, optional desktop icon, and optional "Start with Windows" registration (preserving the installer `AppId` for seamless in-place upgrades from `GestorDeLuces`).
+- **Portable (`WizConsole-portable-<version>.zip`)**: Extract anywhere and run `WizConsole.exe` (keep the `_internal` folder next to the executable).
 
 **System Requirements:**
 - Windows 10 (Build 1809+) or Windows 11 (64-bit).
@@ -349,14 +349,14 @@ Use `-SkipInstaller` to build only the app folder and the portable ZIP.
 
 | Output (in `dist/`) | Description |
 |---|---|
-| `GestorDeLuces\GestorDeLuces.exe` | Portable one-folder app. Keep the `_internal` folder next to the executable. |
-| `GestorDeLuces-portable-<version>.zip` | The same folder zipped. Extract anywhere and run `GestorDeLuces.exe`. |
-| `GestorDeLuces-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
+| `WizConsole\WizConsole.exe` | Portable one-folder app. Keep the `_internal` folder next to the executable. |
+| `WizConsole-portable-<version>.zip` | The same folder zipped. Extract anywhere and run `WizConsole.exe`. |
+| `WizConsole-Setup-<version>.exe` | Per-user installer (no administrator rights): Start Menu entry, optional desktop shortcut, uninstaller. |
 | `SHA256SUMS.txt` | SHA-256 checksums for all release artifacts generated in `dist/`. |
 
-Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `scripts/build.ps1` signs `GestorDeLuces.exe` **before** building the portable ZIP and Inno Setup installer (so both archives carry the signed executable), then signs the installer using SHA-256 and HTTPS RFC 3161 timestamping (`https://timestamp.digicert.com`).
+Build requirements: the project virtual environment (`pip install -e ".[dev]"`), and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) for the installer. If Inno Setup is missing, the script skips the installer with a warning. If `signtool.exe` is in `PATH` and `SIGN_CERT_SHA1` is set to a code-signing certificate thumbprint, `scripts/build.ps1` signs `WizConsole.exe` **before** building the portable ZIP and Inno Setup installer (so both archives carry the signed executable), then signs the installer using SHA-256 and HTTPS RFC 3161 timestamping (`https://timestamp.digicert.com`).
 
-`packaging/gestor_luces.spec` excludes helper Python scripts (such as `make_icon.py`) from packaged `assets/`. `packaging/installer.iss` launches post-install execution with `runasoriginaluser`, removes the `HKCU\...\Run` autostart key unconditionally during uninstall, and provides bilingual English/Spanish `[CustomMessages]`.
+`packaging/wiz_console.spec` excludes helper Python scripts (such as `make_icon.py`) from packaged `assets/`. `packaging/installer.iss` preserves the original `AppId` for seamless upgrades, launches post-install execution with `runasoriginaluser`, removes both `WizConsole` and legacy `GestorDeLuces` `HKCU\...\Run` autostart keys during uninstall, and provides bilingual English/Spanish `[CustomMessages]`.
 
 ### Releasing
 
@@ -366,12 +366,12 @@ Releases are built and published by CI; the commands above are for local builds.
 2. Write `docs/releases/X.Y.Z.md` with the notes for that release ([convention](docs/releases/README.md)).
 3. Merge, then tag the merged commit and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-`.github/workflows/release.yml` pins all third-party actions by commit SHA, pins Inno Setup (`6.7.1`), and scopes `contents: write` exclusively to the `publish` job. `guard` fails in seconds when the tag disagrees with `pyproject.toml` or when the notes file is missing; `build` produces the installer and the portable ZIP on a Windows runner; `verify` runs `sha256sum -c SHA256SUMS.txt` and `GestorDeLuces.exe --smoke-test` against the exact bytes that will ship; `publish` uploads to a **draft** release, compares the digests GitHub reports with the built files, and only then makes the release public. To rehearse, run the workflow manually with `dry_run` enabled: it repeats every step except the final publication and discards the draft.
+`.github/workflows/release.yml` pins all third-party actions by commit SHA, pins Inno Setup (`6.7.1`), and scopes `contents: write` exclusively to the `publish` job. `guard` fails in seconds when the tag disagrees with `pyproject.toml` or when the notes file is missing; `build` produces the installer and the portable ZIP on a Windows runner; `verify` runs `sha256sum -c SHA256SUMS.txt` and `WizConsole.exe --smoke-test` against the exact bytes that will ship; `publish` uploads to a **draft** release, compares the digests GitHub reports with the built files, and only then makes the release public. To rehearse, run the workflow manually with `dry_run` enabled: it repeats every step except the final publication and discards the draft.
 
 Notes for target machines:
 - Windows 10/11 64-bit with the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11 and most up-to-date Windows 10). The installer warns when it is missing but does not install it.
 - Unless built with `SIGN_CERT_SHA1`, executables are unsigned, so Windows SmartScreen shows "Windows protected your PC": choose **More info** then **Run anyway**. Verify the download against `SHA256SUMS.txt`.
-- Per-user installation writes to `%LOCALAPPDATA%\Programs\GestorDeLuces` (no administrator prompt required); if you share the Windows account or require system-wide write-protected binaries under `C:\Program Files`, run the installer with administrator privileges or pass `/ALLUSERS`.
+- Per-user installation writes to `%LOCALAPPDATA%\Programs\WizConsole` (no administrator prompt required); if you share the Windows account or require system-wide write-protected binaries under `C:\Program Files`, run the installer with administrator privileges or pass `/ALLUSERS`.
 - User data lives in `%LOCALAPPDATA%\WizConsole` (with automatic one-time migration from legacy `%LOCALAPPDATA%\GestorDeLuces`, keeping the original files as backup), never next to the executable.
 - If the portable folder is moved while "Start with Windows" is enabled, the registry entry is corrected on the next launch.
 - Occasionally `Compress-Archive` fails with a locked file right after PyInstaller finishes (antivirus scanning); re-run the script.

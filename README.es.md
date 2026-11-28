@@ -133,7 +133,7 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 ├── assets/
 │   └── icon/                    # make_icon.py más app.ico / app.png generados
 ├── packaging/
-│   ├── gestor_luces.spec        # Definición del build PyInstaller (carpeta)
+│   ├── wiz_console.spec         # Definición del build PyInstaller (carpeta)
 │   └── installer.iss            # Script del instalador por usuario (Inno Setup)
 ├── scripts/
 │   └── build.ps1                # Icono + PyInstaller + ZIP portable + instalador
@@ -212,8 +212,8 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 
 No requiere tener Python instalado. Descargá la última versión desde [**GitHub Releases**](https://github.com/AlexisAcevedo/wiz-architectural-lighting-console/releases/latest):
 
-- **Instalador (`GestorDeLuces-Setup-<versión>.exe`)**: Instalación por usuario (sin pedir permisos de administrador) con accesos en el Menú Inicio, icono opcional en el escritorio y registro opcional de "Iniciar con Windows".
-- **Portable (`GestorDeLuces-portable-<versión>.zip`)**: Extraelo en cualquier carpeta y ejecutá `GestorDeLuces.exe` (mantené la carpeta `_internal` junto al ejecutable).
+- **Instalador (`WizConsole-Setup-<versión>.exe`)**: Instalación por usuario (sin permisos de administrador) con accesos en el Menú Inicio, icono opcional en el escritorio y registro opcional de "Iniciar con Windows" (preservando el `AppId` para actualizar desde `GestorDeLuces` sin duplicar entradas).
+- **Portable (`WizConsole-portable-<versión>.zip`)**: Extraer en cualquier carpeta y ejecutar `WizConsole.exe` (mantener la carpeta `_internal` junto al ejecutable).
 
 **Requisitos del Sistema:**
 - Windows 10 (Compilación 1809+) o Windows 11 (64 bits).
@@ -350,14 +350,14 @@ Con `-SkipInstaller` se construyen solo la carpeta de la app y el ZIP portable.
 
 | Salida (en `dist/`) | Descripción |
 |---|---|
-| `GestorDeLuces\GestorDeLuces.exe` | App portable en carpeta. La carpeta `_internal` debe quedar junto al ejecutable. |
-| `GestorDeLuces-portable-<versión>.zip` | La misma carpeta comprimida. Se extrae en cualquier lado y se ejecuta `GestorDeLuces.exe`. |
-| `GestorDeLuces-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
+| `WizConsole\WizConsole.exe` | App portable en carpeta. La carpeta `_internal` debe quedar junto al ejecutable. |
+| `WizConsole-portable-<versión>.zip` | La misma carpeta comprimida. Se extrae en cualquier lado y se ejecuta `WizConsole.exe`. |
+| `WizConsole-Setup-<versión>.exe` | Instalador por usuario (sin permisos de administrador): acceso en el Menú Inicio, acceso directo opcional en el escritorio y desinstalador. |
 | `SHA256SUMS.txt` | Hashes SHA-256 de todos los artefactos generados en `dist/`. |
 
-Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `scripts/build.ps1` firma `GestorDeLuces.exe` **antes** de crear el ZIP portable y el instalador de Inno Setup (para que ambos incluyan el ejecutable firmado) y luego firma el instalador con SHA-256 y sello de tiempo RFC 3161 por HTTPS (`https://timestamp.digicert.com`).
+Requisitos para compilar: el entorno virtual del proyecto (`pip install -e ".[dev]"`), e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) para el instalador. Si falta Inno Setup, el script omite el instalador con una advertencia. Si `signtool.exe` está en el `PATH` y se define la variable de entorno `SIGN_CERT_SHA1` con el thumbprint del certificado, `scripts/build.ps1` firma `WizConsole.exe` **antes** de crear el ZIP portable y el instalador de Inno Setup (para que ambos incluyan el ejecutable firmado) y luego firma el instalador con SHA-256 y sello de tiempo RFC 3161 por HTTPS (`https://timestamp.digicert.com`).
 
-`packaging/gestor_luces.spec` excluye scripts auxiliares de Python (como `make_icon.py`) del directorio `assets/` empaquetado. `packaging/installer.iss` inicia la ejecución post-instalación con `runasoriginaluser`, elimina de forma incondicional la clave de autoinicio en `HKCU\...\Run` al desinstalar e incluye mensajes personalizados bilingües en inglés y español (`[CustomMessages]`).
+`packaging/wiz_console.spec` excluye scripts auxiliares de Python (como `make_icon.py`) del directorio `assets/` empaquetado. `packaging/installer.iss` preserva el `AppId` original para actualizaciones limpias, inicia la ejecución post-instalación con `runasoriginaluser`, elimina tanto la clave `WizConsole` como la entrada legacy `GestorDeLuces` en `HKCU\...\Run` al desinstalar e incluye mensajes personalizados bilingües en inglés y español (`[CustomMessages]`).
 
 ### Publicar una release
 
@@ -367,12 +367,12 @@ Las releases las compila y publica el CI; los comandos de arriba son para compil
 2. Escribir `docs/releases/X.Y.Z.md` con las notas de esa release ([convención](docs/releases/README.md)).
 3. Mergear, y después taggear el commit mergeado y pushear el tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-`.github/workflows/release.yml` fija todas las acciones de terceros por su SHA de commit, fija la versión de Inno Setup (`6.7.1`) y restringe `contents: write` exclusivamente al job `publish`. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `GestorDeLuces.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
+`.github/workflows/release.yml` fija todas las acciones de terceros por su SHA de commit, fija la versión de Inno Setup (`6.7.1`) y restringe `contents: write` exclusivamente al job `publish`. `guard` falla en segundos cuando el tag no coincide con `pyproject.toml` o cuando falta el archivo de notas; `build` genera el instalador y el ZIP portable en un runner Windows; `verify` corre `sha256sum -c SHA256SUMS.txt` y `WizConsole.exe --smoke-test` sobre exactamente los bytes que se van a publicar; `publish` sube a una release en **borrador**, compara los digests que informa GitHub contra los archivos compilados y recién entonces publica. Para ensayar, se corre el workflow a mano con `dry_run` activado: repite todos los pasos menos la publicación final y descarta el borrador.
 
 Notas para las PCs de destino:
 - Windows 10/11 de 64 bits con el Runtime de Microsoft Edge WebView2 (viene en Windows 11 y en la mayoría de los Windows 10 actualizados). El instalador avisa si falta, pero no lo instala.
 - Salvo que se compile con `SIGN_CERT_SHA1`, los ejecutables no están firmados, así que SmartScreen muestra "Windows protegió tu PC": elegí **Más información** y luego **Ejecutar de todas formas**. Verificá la descarga contra `SHA256SUMS.txt`.
-- La instalación por defecto es por usuario en `%LOCALAPPDATA%\Programs\GestorDeLuces` (no pide permisos de administrador); si se requiere proteger los binarios bajo `C:\Program Files`, ejecutá el instalador como administrador o con `/ALLUSERS`.
+- La instalación por defecto es por usuario en `%LOCALAPPDATA%\Programs\WizConsole` (no pide permisos de administrador); si se requiere proteger los binarios bajo `C:\Program Files`, ejecutá el instalador como administrador o con `/ALLUSERS`.
 - Los datos del usuario viven en `%LOCALAPPDATA%\WizConsole` (con migración automática única desde `%LOCALAPPDATA%\GestorDeLuces`, conservando los archivos originales como respaldo), nunca junto al ejecutable.
 - Si se mueve la carpeta portable con "Iniciar con Windows" activado, la entrada del registro se corrige en el siguiente arranque.
 - A veces `Compress-Archive` falla por un archivo bloqueado justo después de PyInstaller (el antivirus lo está escaneando); volvé a correr el script.

@@ -121,7 +121,7 @@ def test_apply_app_user_model_id_configures_ctypes_signature() -> None:
 
     assert (
         window_chrome.apply_app_user_model_id(
-            "AlexisAcevedo.GestorDeLuces",
+            "AlexisAcevedo.WizConsole",
             platform="win32",
             shell32=shell32,
         )
@@ -129,7 +129,7 @@ def test_apply_app_user_model_id_configures_ctypes_signature() -> None:
     )
     assert setter.argtypes == [wintypes.LPCWSTR]
     assert setter.restype is ctypes.c_long
-    assert seen == ["AlexisAcevedo.GestorDeLuces"]
+    assert seen == ["AlexisAcevedo.WizConsole"]
 
 
 def test_winforms_icon_destroy_handle_64bit_signature_and_error_cleanup(
@@ -427,8 +427,8 @@ def test_single_instance_guard_access_denied_close_handle_and_wait_failed(
 def test_single_instance_guard_real_release_frees_os_mutex() -> None:
     """Releasing a SingleInstanceGuard closes its OS handle so a new guard acquires primary."""
     suffix = uuid.uuid4().hex
-    mutex = f"Local\\GestorDeLuces.Test.{suffix}"
-    event = f"Local\\GestorDeLuces.Test.Show.{suffix}"
+    mutex = f"Local\\WizConsole.Test.{suffix}"
+    event = f"Local\\WizConsole.Test.Show.{suffix}"
     first = SingleInstanceGuard(mutex_name=mutex, event_name=event)
     second = SingleInstanceGuard(mutex_name=mutex, event_name=event)
     try:
