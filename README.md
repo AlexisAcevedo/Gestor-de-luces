@@ -64,6 +64,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Automatic optical capability inference (`BulbCapabilities` via `infer_bulb_capabilities(module_name)`) plus live Wi-Fi RSSI (`dBm`) and firmware version badges in the fixture drawer with adaptive RGB UI gating.
 12. Complete CLI & Opt-In Loopback HTTP API (`LocalHttpApiServer`):
    - CLI targeting by saved `--name`, plus `brightness`, `scene`, `preset`, and `zones` subcommands, alongside an opt-in `127.0.0.1` HTTP API (`Bearer` auth via `hmac.compare_digest`, 16 KiB body cap, disabled by default).
+13. Multi-Vendor LAN Foundation (WiZ + Govee LAN, `v0.8.0`):
+   - Vendor-agnostic `Bulb.protocol` routing via `CompositeLightController` (`adapters/registry.py`) and `GoveeLanController` (`adapters/govee/lan_controller.py`, UDP 4003), preserving single-console control across mixed WiZ and Govee LAN fixtures.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).

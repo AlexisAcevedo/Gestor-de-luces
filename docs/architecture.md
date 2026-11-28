@@ -79,6 +79,7 @@ The core principle behind this project is **strict isolation of business invaria
 4. **Adapters Layer (`wiz_console.adapters`)**:
    - Implements ports with real-world infrastructure:
      - `adapters.wiz.udp_controller`: Manages UDP broadcast discovery and unicast JSON-RPC datagrams via `pywizlight`.
+     - `adapters.govee.lan_controller` & `adapters.registry`: Implements Govee LAN UDP (`4003`) behind `LightController` and routes commands across WiZ and Govee bulbs via `CompositeLightController`.
      - `adapters.storage.json_repositories`: Implements filesystem atomic persistence into `%LOCALAPPDATA%\WizConsole` (migrating legacy `%LOCALAPPDATA%\GestorDeLuces` files automatically on first launch).
      - `adapters.ambilight.mss_sampler`: Implements `ScreenSampler` using high-speed Win32 GDI screen buffers via `mss` with `ScreenShotError` boundary recovery, single-grab multi-region slicing (`sample_regions` across `full`, `left`, `right`, `top`, `bottom`, `center`), and automatic cinema letterbox cropping (`detect_letterbox_bounds`).
      - `adapters.audio.wasapi_sampler`: Implements `AudioSampler` using `PyAudioWPatch` loopback capture (`wasapi_session.py`, `wasapi_devices.py`) with COM/session lifecycle locking, hot-unplug recovery, leak-free teardown, cached FFT plans/buffers, `BeatDetector` onset tracking in `wasapi_capture.py`, and pure domain per-band/custom-palette mapping in `domain/music_colors.py`.

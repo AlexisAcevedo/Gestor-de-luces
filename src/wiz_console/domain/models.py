@@ -157,9 +157,13 @@ def infer_bulb_capabilities(module_name: str | None) -> BulbCapabilities:
     return BulbCapabilities()
 
 
+SUPPORTED_PROTOCOLS: frozenset[str] = frozenset({"wiz", "govee"})
+DEFAULT_PROTOCOL = "wiz"
+
+
 @dataclass
 class Bulb:
-    """Entidad que representa un foco inteligente WiZ identificado por su IP y MAC."""
+    """Entidad que representa un foco inteligente identificado por su IP y MAC."""
 
     ip: str
     mac: str = "unknown"
@@ -169,6 +173,7 @@ class Bulb:
     state: LightState = field(default_factory=LightState)
     rssi: int | None = None
     fw_version: str | None = None
+    protocol: str = DEFAULT_PROTOCOL
 
     def __post_init__(self) -> None:
         if not isinstance(self.ip, str):
@@ -177,8 +182,13 @@ class Bulb:
         if not self.ip:
             raise ValueError("Bulb IP address cannot be empty.")
         self.ip = validate_local_endpoint(self.ip)
+        cleaned_proto = str(self.protocol or DEFAULT_PROTOCOL).strip().lower()
+        if cleaned_proto not in SUPPORTED_PROTOCOLS:
+            raise ValueError(f"Unsupported lighting protocol: {self.protocol!r}.")
+        self.protocol = cleaned_proto
         if not self.name or not self.name.strip():
-            self.name = f"WiZ Bulb ({self.ip})"
+            prefix = "Govee Bulb" if self.protocol == "govee" else "WiZ Bulb"
+            self.name = f"{prefix} ({self.ip})"
         if self.rssi is not None and (
             isinstance(self.rssi, bool) or not isinstance(self.rssi, int)
         ):
@@ -199,6 +209,7 @@ class Bulb:
             "mac": self.mac,
             "name": self.name,
             "module_name": self.module_name,
+            "protocol": self.protocol,
             "is_online": self.is_online,
             "rssi": self.rssi,
             "fw_version": self.fw_version,
@@ -215,10 +226,12 @@ class Bulb:
         raw_mac = data.get("mac", "unknown")
         raw_name = data.get("name", "")
         raw_module = data.get("module_name", "ESP01_SHRGB1C_31")
+        raw_protocol = data.get("protocol", DEFAULT_PROTOCOL)
         for field_name, field_val in (
             ("mac", raw_mac),
             ("name", raw_name),
             ("module_name", raw_module),
+            ("protocol", raw_protocol),
         ):
             if field_val is not None and not isinstance(field_val, str):
                 raise ValueError(f"Bulb {field_name} must be a string.")
@@ -237,6 +250,7 @@ class Bulb:
             state=state,
             rssi=rssi,
             fw_version=fw_version,
+            protocol=raw_protocol if raw_protocol is not None else DEFAULT_PROTOCOL,
         )
 
 

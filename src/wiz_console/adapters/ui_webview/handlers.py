@@ -139,12 +139,13 @@ class BridgeHandlers:
         """Escanea la red local en busca de focos Philips WiZ y sincroniza su estado."""
         return self._call(lambda: self._service.discover_bulbs(wait_time=2.0), timeout=15.0)
 
-    def add_manual_bulb(self, ip: str, name: str = "") -> dict[str, Any]:
+    def add_manual_bulb(self, ip: str, name: str = "", protocol: str = "wiz") -> dict[str, Any]:
         """Agrega un foco por direccion IP explicita y verifica su disponibilidad UDP."""
         return self._call(
             lambda: self._service.add_manual_bulb(
                 ip=_req_str(ip, field="ip"),
                 name=_opt_str(name, field="name"),
+                protocol=_opt_str(protocol, field="protocol") or "wiz",
             )
         )
 

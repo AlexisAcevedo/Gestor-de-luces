@@ -186,18 +186,20 @@ export function createBrowserMockApi() {
       };
       return buildMockEnvelope();
     },
-    add_manual_bulb: (ip, name) => {
+    add_manual_bulb: (ip, name, protocol = "wiz") => {
       const cleaned = String(ip || "").trim();
       if (!cleaned) {
         return Promise.resolve({ ok: false, bulbs: mockBulbs, selected_ips: mockSelected, scenes: SCENE_CATALOG.slice(), error: "IP cannot be empty." });
       }
-      const label = String(name || "").trim() || `WiZ Bulb (${cleaned})`;
+      const proto = String(protocol || "wiz").trim().toLowerCase() === "govee" ? "govee" : "wiz";
+      const label = String(name || "").trim() || `${proto === "govee" ? "Govee Bulb" : "WiZ Bulb"} (${cleaned})`;
       const existing = mockBulbs.find((b) => b.ip === cleaned);
       if (existing) {
         existing.name = label;
+        existing.protocol = proto;
       } else {
         mockBulbs.push({
-          ip: cleaned, mac: "a8bb50001122", name: label, module_name: "ESP01_SHRGB1C_31", is_online: true,
+          ip: cleaned, mac: "a8bb50001122", name: label, module_name: proto === "govee" ? "GOVEE_LAN_RGB" : "ESP01_SHRGB1C_31", protocol: proto, is_online: true,
           state: { is_on: true, brightness: 100, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
         });
         if (!mockSelected.includes(cleaned)) mockSelected.push(cleaned);
