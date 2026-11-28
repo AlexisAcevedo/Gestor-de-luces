@@ -171,6 +171,9 @@ class ServiceContext:
                     )
                     continue
                 self.bulbs[saved_bulb.ip] = saved_bulb
+                registrar = getattr(self.controller, "register_bulb", None)
+                if callable(registrar):
+                    registrar(saved_bulb.ip, saved_bulb.protocol)
             self.selected_ips = list(self.bulbs.keys())
 
         if self.scene_repo is not None:

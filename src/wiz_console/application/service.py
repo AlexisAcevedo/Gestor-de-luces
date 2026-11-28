@@ -214,9 +214,14 @@ class LightControlService:
         """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco."""
         return await self._inventory.discover_bulbs(wait_time=wait_time)
 
-    async def add_manual_bulb(self, ip: str, name: str | None = None) -> Bulb:
+    async def add_manual_bulb(
+        self,
+        ip: str,
+        name: str | None = None,
+        protocol: str = "wiz",
+    ) -> Bulb:
         """Registra un foco manualmente por su IP y verifica su estado en la red."""
-        return await self._inventory.add_manual_bulb(ip, name=name)
+        return await self._inventory.add_manual_bulb(ip, name=name, protocol=protocol)
 
     def rename_bulb(self, ip: str, new_name: str) -> Bulb:
         """Cambia el nombre amigable de un foco registrado y guarda el cambio."""

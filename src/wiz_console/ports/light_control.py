@@ -109,7 +109,12 @@ class LightControlServicePort(Protocol):
         """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco."""
         ...
 
-    async def add_manual_bulb(self, ip: str, name: str | None = None) -> Bulb:
+    async def add_manual_bulb(
+        self,
+        ip: str,
+        name: str | None = None,
+        protocol: str = "wiz",
+    ) -> Bulb:
         """Registra un foco manualmente por su IP y verifica su estado en la red."""
         ...
 
