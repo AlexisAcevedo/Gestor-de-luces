@@ -4,11 +4,13 @@
 
 import { getBackendApi, invokeApi } from "./bridge-client.js";
 import {
+  appState,
   clampInt,
   getPrimaryBulb,
   t,
   updateSliderFill
 } from "./store.js";
+import { setStatusMessage } from "./toasts.js";
 
 /*
  * Respaldo obligatorio de light-dismiss para navegadores que aun no implementan
@@ -249,6 +251,298 @@ export function setupWindowFit() {
   requestFit(true);
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => requestFit(true));
+  }
+}
+
+export const DEFAULT_GLOBAL_HOTKEY_BINDINGS = Object.freeze({
+  toggle_power: "Ctrl+Alt+P",
+  brightness_up: "Ctrl+Alt+Up",
+  brightness_down: "Ctrl+Alt+Down",
+  toggle_ambilight: "Ctrl+Alt+A",
+  toggle_music_sync: "Ctrl+Alt+M",
+  toggle_window: "Ctrl+Alt+W"
+});
+
+const HOTKEY_ACTION_KEYS = Object.keys(DEFAULT_GLOBAL_HOTKEY_BINDINGS);
+const MODIFIER_ALIASES = {
+  ctrl: "Ctrl",
+  control: "Ctrl",
+  alt: "Alt",
+  shift: "Shift",
+  win: "Win",
+  windows: "Win",
+  super: "Win",
+  meta: "Win"
+};
+const SPECIAL_KEYS = {
+  up: "Up",
+  arrowup: "Up",
+  down: "Down",
+  arrowdown: "Down",
+  left: "Left",
+  arrowleft: "Left",
+  right: "Right",
+  arrowright: "Right",
+  space: "Space",
+  " ": "Space",
+  home: "Home",
+  end: "End",
+  pageup: "PageUp",
+  pgup: "PageUp",
+  pagedown: "PageDown",
+  pgdn: "PageDown"
+};
+
+export function normalizeHotkeyComboInput(raw) {
+  const cleaned = String(raw || "").trim();
+  if (!cleaned) return "";
+  const parts = cleaned.split("+").map((p) => p.trim());
+  if (parts.some((p) => !p)) return null;
+  const mods = new Set();
+  let primaryKey = null;
+  for (const part of parts) {
+    const mod = MODIFIER_ALIASES[part.toLowerCase()];
+    if (mod) {
+      if (primaryKey !== null) return null;
+      mods.add(mod);
+    } else if (primaryKey !== null) {
+      return null;
+    } else {
+      primaryKey = part;
+    }
+  }
+  if (mods.size === 0 || !primaryKey) return null;
+
+  let canonicalKey = null;
+  const lower = primaryKey.toLowerCase();
+  if (/^[a-z0-9]$/i.test(primaryKey)) {
+    canonicalKey = primaryKey.toUpperCase();
+  } else if (/^f([1-9]|1[0-2])$/.test(lower)) {
+    canonicalKey = primaryKey.toUpperCase();
+  } else if (Object.hasOwn(SPECIAL_KEYS, lower)) {
+    canonicalKey = SPECIAL_KEYS[lower];
+  }
+  if (!canonicalKey) return null;
+
+  const orderedMods = ["Ctrl", "Alt", "Shift", "Win"].filter((m) => mods.has(m));
+  return [...orderedMods, canonicalKey].join("+");
+}
+
+function captureHotkeyFromEvent(event) {
+  if (!event || event.isComposing) return null;
+  const key = event.key || "";
+  if (["Control", "Alt", "Shift", "Meta", "OS"].includes(key)) return null;
+  const mods = [];
+  if (event.ctrlKey) mods.push("Ctrl");
+  if (event.altKey) mods.push("Alt");
+  if (event.shiftKey) mods.push("Shift");
+  if (event.metaKey) mods.push("Win");
+  if (mods.length === 0) return null;
+
+  let canonicalKey = null;
+  const lower = key.toLowerCase();
+  if (/^[a-z0-9]$/i.test(key)) {
+    canonicalKey = key.toUpperCase();
+  } else if (/^f([1-9]|1[0-2])$/.test(lower)) {
+    canonicalKey = key.toUpperCase();
+  } else if (Object.hasOwn(SPECIAL_KEYS, lower)) {
+    canonicalKey = SPECIAL_KEYS[lower];
+  } else if (event.code === "Space") {
+    canonicalKey = "Space";
+  }
+  if (!canonicalKey) return null;
+  return [...mods, canonicalKey].join("+");
+}
+
+function formatHotkeyErrorMessage(code) {
+  if (code === "in_use") return t("hotkeys.errInUse");
+  if (code === "register_failed") return t("hotkeys.errRegisterFailed");
+  return code ? String(code) : "";
+}
+
+export function renderGlobalHotkeys() {
+  const hk = appState.globalHotkeys || { enabled: false, supported: false, bindings: {}, errors: {} };
+  const enabledCheckbox = document.getElementById("global-hotkeys-enabled");
+  if (enabledCheckbox) {
+    enabledCheckbox.checked = Boolean(hk.enabled);
+    enabledCheckbox.disabled = !hk.supported;
+  }
+
+  const unsupportedNotice = document.getElementById("global-hotkeys-unsupported");
+  if (unsupportedNotice) unsupportedNotice.hidden = Boolean(hk.supported);
+
+  const errorSummary = document.getElementById("global-hotkeys-error");
+  if (errorSummary) {
+    errorSummary.textContent = "";
+    errorSummary.hidden = true;
+  }
+
+  const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+  HOTKEY_ACTION_KEYS.forEach((action) => {
+    const input = document.getElementById(`hotkey-input-${action}`);
+    if (input) {
+      if (input !== activeEl) {
+        input.value = (hk.bindings && Object.hasOwn(hk.bindings, action))
+          ? hk.bindings[action]
+          : DEFAULT_GLOBAL_HOTKEY_BINDINGS[action];
+      }
+      input.disabled = !hk.supported;
+      const errCode = hk.errors && hk.errors[action];
+      if (errCode) {
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+    }
+    const clearBtn = document.querySelector(`[data-hotkey-clear="${action}"]`);
+    if (clearBtn) clearBtn.disabled = !hk.supported;
+
+    const rowErr = document.getElementById(`hotkey-error-${action}`);
+    if (rowErr) {
+      const msg = formatHotkeyErrorMessage(hk.errors && hk.errors[action]);
+      rowErr.textContent = msg;
+      rowErr.hidden = !msg;
+    }
+  });
+
+  const saveBtn = document.getElementById("save-global-hotkeys-btn");
+  const resetBtn = document.getElementById("reset-global-hotkeys-btn");
+  if (saveBtn) saveBtn.disabled = !hk.supported;
+  if (resetBtn) resetBtn.disabled = !hk.supported;
+}
+
+export function bindGlobalHotkeyEvents() {
+  const errorSummary = document.getElementById("global-hotkeys-error");
+  const showSummaryError = (msg) => {
+    if (!errorSummary) return;
+    errorSummary.textContent = msg;
+    errorSummary.hidden = !msg;
+  };
+
+  HOTKEY_ACTION_KEYS.forEach((action) => {
+    const input = document.getElementById(`hotkey-input-${action}`);
+    if (input) {
+      input.addEventListener("input", () => {
+        input.removeAttribute("aria-invalid");
+        const rowErr = document.getElementById(`hotkey-error-${action}`);
+        if (rowErr) {
+          rowErr.textContent = "";
+          rowErr.hidden = true;
+        }
+        showSummaryError("");
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Tab" || event.key === "Escape") return;
+        if (
+          (event.key === "Backspace" || event.key === "Delete") &&
+          !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey
+        ) {
+          event.preventDefault();
+          input.value = "";
+          input.removeAttribute("aria-invalid");
+          return;
+        }
+        const captured = captureHotkeyFromEvent(event);
+        if (captured) {
+          event.preventDefault();
+          input.value = captured;
+          input.removeAttribute("aria-invalid");
+          showSummaryError("");
+        }
+      });
+    }
+
+    const clearBtn = document.querySelector(`[data-hotkey-clear="${action}"]`);
+    if (clearBtn && input) {
+      clearBtn.addEventListener("click", () => {
+        input.value = "";
+        input.removeAttribute("aria-invalid");
+        const rowErr = document.getElementById(`hotkey-error-${action}`);
+        if (rowErr) {
+          rowErr.textContent = "";
+          rowErr.hidden = true;
+        }
+        showSummaryError("");
+      });
+    }
+  });
+
+  const resetBtn = document.getElementById("reset-global-hotkeys-btn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      HOTKEY_ACTION_KEYS.forEach((action) => {
+        const input = document.getElementById(`hotkey-input-${action}`);
+        if (input) {
+          input.value = DEFAULT_GLOBAL_HOTKEY_BINDINGS[action];
+          input.removeAttribute("aria-invalid");
+        }
+        const rowErr = document.getElementById(`hotkey-error-${action}`);
+        if (rowErr) {
+          rowErr.textContent = "";
+          rowErr.hidden = true;
+        }
+      });
+      showSummaryError("");
+      setStatusMessage(t("hotkeys.resetDone"));
+    });
+  }
+
+  const saveBtn = document.getElementById("save-global-hotkeys-btn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const enabledCheckbox = document.getElementById("global-hotkeys-enabled");
+      const enabled = Boolean(enabledCheckbox && enabledCheckbox.checked);
+      const nextBindings = {};
+      const seen = new Map();
+
+      for (const action of HOTKEY_ACTION_KEYS) {
+        const input = document.getElementById(`hotkey-input-${action}`);
+        const rowErr = document.getElementById(`hotkey-error-${action}`);
+        if (rowErr) {
+          rowErr.textContent = "";
+          rowErr.hidden = true;
+        }
+        const normalized = normalizeHotkeyComboInput(input ? input.value : "");
+        if (normalized === null) {
+          if (input) {
+            input.setAttribute("aria-invalid", "true");
+            if (typeof input.focus === "function") input.focus();
+          }
+          if (rowErr) {
+            rowErr.textContent = t("hotkeys.errInvalid");
+            rowErr.hidden = false;
+          }
+          showSummaryError(t("hotkeys.errInvalid"));
+          return;
+        }
+        if (normalized && seen.has(normalized)) {
+          if (input) {
+            input.setAttribute("aria-invalid", "true");
+            if (typeof input.focus === "function") input.focus();
+          }
+          if (rowErr) {
+            rowErr.textContent = t("hotkeys.errDuplicate");
+            rowErr.hidden = false;
+          }
+          showSummaryError(t("hotkeys.errDuplicate"));
+          return;
+        }
+        if (normalized) seen.set(normalized, action);
+        nextBindings[action] = normalized;
+      }
+
+      const api = getBackendApi();
+      if (!api || typeof api.set_global_hotkeys !== "function") return;
+      saveBtn.disabled = true;
+      try {
+        await invokeApi(
+          () => api.set_global_hotkeys(enabled, nextBindings),
+          () => t("hotkeys.saved")
+        );
+      } finally {
+        saveBtn.disabled = !appState.globalHotkeys.supported;
+      }
+    });
   }
 }
 

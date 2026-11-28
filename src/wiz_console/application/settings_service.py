@@ -6,7 +6,11 @@ from typing import Any
 
 from wiz_console.application.service_context import ServiceContext
 from wiz_console.domain.scenes import get_builtin_scene
-from wiz_console.domain.value_objects import SUPPORTED_LANGUAGES, normalize_theme
+from wiz_console.domain.value_objects import (
+    SUPPORTED_LANGUAGES,
+    normalize_global_hotkeys,
+    normalize_theme,
+)
 
 
 class SettingsService:
@@ -86,3 +90,31 @@ class SettingsService:
     def get_music_prefs(self) -> dict[str, Any]:
         """Return persisted Music Sync configuration defaults."""
         return dict(self._ctx.music_prefs)
+
+    def get_global_hotkeys(self) -> dict[str, Any]:
+        """Return the normalized global Windows hotkeys configuration."""
+        return {
+            "enabled": bool(self._ctx.global_hotkeys.get("enabled", False)),
+            "bindings": dict(self._ctx.global_hotkeys.get("bindings", {})),
+        }
+
+    def set_global_hotkeys(
+        self,
+        enabled: bool,
+        bindings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate, update, and persist opt-in global Windows hotkeys configuration."""
+        merged_bindings = dict(self._ctx.global_hotkeys.get("bindings", {}))
+        if bindings is not None:
+            if not isinstance(bindings, dict):
+                raise ValueError("global_hotkeys.bindings must be an object.")
+            merged_bindings.update(bindings)
+        normalized = normalize_global_hotkeys(
+            {
+                "enabled": enabled,
+                "bindings": merged_bindings,
+            }
+        )
+        self._ctx.global_hotkeys = normalized
+        self._ctx.persist_settings()
+        return self.get_global_hotkeys()

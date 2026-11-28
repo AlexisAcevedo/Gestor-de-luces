@@ -32,14 +32,16 @@ JS_API_EXCLUDED: frozenset[str] = frozenset(
     {
         "get_tray_snapshot",
         "set_fit_window_callback",
+        "set_global_hotkey_runtime",
         "set_state_change_listener",
         "shutdown",
         # Solo la bandeja: refresca el estado real sin notificar a la vista.
         "refresh_tray_states",
-        # Solo la bandeja: invierte el estado real sin pasar por la vista web.
+        # Solo la bandeja / hotkeys globales: invierte el estado real sin pasar por la vista web.
         "toggle_power",
         "toggle_ambilight",
         "toggle_music_sync",
+        "trigger_global_hotkey",
     }
 )
 
@@ -71,6 +73,7 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
     "set_color": BridgeHandlers.set_color,
     "set_custom_scene_favorite": BridgeHandlers.set_custom_scene_favorite,
     "set_favorite_builtin_scenes": BridgeHandlers.set_favorite_builtin_scenes,
+    "set_global_hotkeys": BridgeHandlers.set_global_hotkeys,
     "set_language": BridgeLifecycle.set_language,
     "set_power": BridgeHandlers.set_power,
     "set_temperature": BridgeHandlers.set_temperature,

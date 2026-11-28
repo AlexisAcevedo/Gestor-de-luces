@@ -28,6 +28,8 @@ from wiz_console.domain.value_objects import (
     DEFAULT_THEME,
     Color,
     LightMode,
+    default_global_hotkeys,
+    normalize_global_hotkeys,
     normalize_language,
     normalize_theme,
     validate_local_endpoint,
@@ -126,6 +128,7 @@ class ServiceContext:
             "brightness": 85,
             "device_index": None,
         }
+        self.global_hotkeys: dict[str, Any] = default_global_hotkeys()
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -163,6 +166,13 @@ class ServiceContext:
             raw_music = loaded_settings.get("music_prefs")
             if isinstance(raw_music, dict):
                 self.music_prefs.update(raw_music)
+            if "global_hotkeys" in loaded_settings:
+                try:
+                    self.global_hotkeys = normalize_global_hotkeys(
+                        loaded_settings["global_hotkeys"]
+                    )
+                except ValueError:
+                    self.global_hotkeys = default_global_hotkeys()
             raw_selected = loaded_settings.get("selected_ips")
             if isinstance(raw_selected, list) and self.bulbs:
                 restored = [ip for ip in raw_selected if isinstance(ip, str) and ip in self.bulbs]
@@ -249,6 +259,10 @@ class ServiceContext:
                 "favorite_builtin_scenes": list(self.favorite_builtin_scenes),
                 "ambilight_prefs": dict(self.ambilight_prefs),
                 "music_prefs": dict(self.music_prefs),
+                "global_hotkeys": {
+                    "enabled": bool(self.global_hotkeys.get("enabled", False)),
+                    "bindings": dict(self.global_hotkeys.get("bindings", {})),
+                },
             }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True

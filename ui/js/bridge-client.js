@@ -29,6 +29,17 @@ export function createBrowserMockApi() {
     device_index: -1, palette_mode: "spectrum", sensitivity: 1.0,
     smoothing_alpha: 0.50, audio_brightness: true, brightness: 85
   };
+  let mockGlobalHotkeys = {
+    enabled: false,
+    bindings: {
+      toggle_power: "Ctrl+Alt+P",
+      brightness_up: "Ctrl+Alt+Up",
+      brightness_down: "Ctrl+Alt+Down",
+      toggle_ambilight: "Ctrl+Alt+A",
+      toggle_music_sync: "Ctrl+Alt+M",
+      toggle_window: "Ctrl+Alt+W"
+    }
+  };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -76,6 +87,12 @@ export function createBrowserMockApi() {
       favorite_builtin_scenes: mockFavoriteBuiltinScenes.slice(),
       ambilight_prefs: Object.assign({}, mockAmbilightPrefs),
       music_prefs: Object.assign({}, mockMusicPrefs),
+      global_hotkeys: {
+        enabled: mockGlobalHotkeys.enabled,
+        bindings: Object.assign({}, mockGlobalHotkeys.bindings)
+      },
+      global_hotkeys_supported: false,
+      global_hotkey_errors: {},
       bulbs: JSON.parse(JSON.stringify(mockBulbs)), selected_ips: mockSelected.slice(),
       scenes: SCENE_CATALOG.slice(), custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
       sleep_timer: {
@@ -136,6 +153,15 @@ export function createBrowserMockApi() {
           }
         });
       }
+      return buildMockEnvelope();
+    },
+    set_global_hotkeys: (enabled, bindings) => {
+      mockGlobalHotkeys = {
+        enabled: Boolean(enabled),
+        bindings: bindings && typeof bindings === "object"
+          ? Object.assign({}, mockGlobalHotkeys.bindings, bindings)
+          : Object.assign({}, mockGlobalHotkeys.bindings)
+      };
       return buildMockEnvelope();
     },
     add_manual_bulb: (ip, name) => {

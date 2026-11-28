@@ -11,13 +11,155 @@ from __future__ import annotations
 
 import ipaddress
 import math
+import re
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "es")
 DEFAULT_LANGUAGE: str = "en"
 SUPPORTED_THEMES: tuple[str, ...] = ("architectural-stone", "atmospheric-dark")
 DEFAULT_THEME: str = "architectural-stone"
+
+HOTKEY_ACTIONS: tuple[str, ...] = (
+    "toggle_power",
+    "brightness_up",
+    "brightness_down",
+    "toggle_ambilight",
+    "toggle_music_sync",
+    "toggle_window",
+)
+DEFAULT_GLOBAL_HOTKEY_BINDINGS: dict[str, str] = {
+    "toggle_power": "Ctrl+Alt+P",
+    "brightness_up": "Ctrl+Alt+Up",
+    "brightness_down": "Ctrl+Alt+Down",
+    "toggle_ambilight": "Ctrl+Alt+A",
+    "toggle_music_sync": "Ctrl+Alt+M",
+    "toggle_window": "Ctrl+Alt+W",
+}
+_HOTKEY_MODIFIER_ORDER: tuple[str, ...] = ("Ctrl", "Alt", "Shift", "Win")
+_HOTKEY_MODIFIER_ALIASES: dict[str, str] = {
+    "ctrl": "Ctrl",
+    "control": "Ctrl",
+    "alt": "Alt",
+    "shift": "Shift",
+    "win": "Win",
+    "windows": "Win",
+    "super": "Win",
+    "meta": "Win",
+}
+_HOTKEY_SPECIAL_KEY_ALIASES: dict[str, str] = {
+    "up": "Up",
+    "arrowup": "Up",
+    "down": "Down",
+    "arrowdown": "Down",
+    "left": "Left",
+    "arrowleft": "Left",
+    "right": "Right",
+    "arrowright": "Right",
+    "space": "Space",
+    "home": "Home",
+    "end": "End",
+    "pageup": "PageUp",
+    "pgup": "PageUp",
+    "pagedown": "PageDown",
+    "pgdn": "PageDown",
+}
+_FUNCTION_KEY_RE = re.compile(r"^f([1-9]|1[0-2])$")
+
+
+def default_global_hotkeys() -> dict[str, Any]:
+    """Return a fresh copy of the default opt-in global hotkeys configuration."""
+    return {
+        "enabled": False,
+        "bindings": dict(DEFAULT_GLOBAL_HOTKEY_BINDINGS),
+    }
+
+
+def normalize_hotkey_combo(value: object) -> str:
+    """Normalize a keyboard shortcut string to canonical ``Ctrl+Alt+Shift+Win+<Key>`` form."""
+    if not isinstance(value, str):
+        raise ValueError("Hotkey combination must be a string.")
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+    parts = [part.strip() for part in cleaned.split("+")]
+    if any(not part for part in parts):
+        raise ValueError(f"Malformed hotkey combination: {value!r}.")
+
+    modifiers: set[str] = set()
+    key_token: str | None = None
+    for part in parts:
+        lower = part.lower()
+        canonical_mod = _HOTKEY_MODIFIER_ALIASES.get(lower)
+        if canonical_mod is not None:
+            if key_token is not None:
+                raise ValueError(f"Modifiers must precede the key in hotkey: {value!r}.")
+            modifiers.add(canonical_mod)
+        elif key_token is not None:
+            raise ValueError(f"Hotkey must specify a single primary key: {value!r}.")
+        else:
+            key_token = part
+
+    if not modifiers or key_token is None:
+        raise ValueError(f"Hotkey must include at least one modifier and one key: {value!r}.")
+
+    key_lower = key_token.lower()
+    if (
+        len(key_token) == 1 and key_token.isascii() and key_token.isalnum()
+    ) or _FUNCTION_KEY_RE.fullmatch(key_lower):
+        canonical_key = key_token.upper()
+    elif key_lower in _HOTKEY_SPECIAL_KEY_ALIASES:
+        canonical_key = _HOTKEY_SPECIAL_KEY_ALIASES[key_lower]
+    else:
+        raise ValueError(f"Unsupported hotkey key: {key_token!r}.")
+
+    ordered_mods = [mod for mod in _HOTKEY_MODIFIER_ORDER if mod in modifiers]
+    return "+".join([*ordered_mods, canonical_key])
+
+
+def normalize_global_hotkeys(value: object) -> dict[str, Any]:
+    """Validate and normalize global hotkey configuration (enabled flag and action bindings)."""
+    if value is None:
+        return default_global_hotkeys()
+    if not isinstance(value, dict):
+        raise ValueError("global_hotkeys must be an object.")
+
+    enabled = value.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("global_hotkeys.enabled must be a boolean.")
+
+    raw_bindings = value.get("bindings", {})
+    if raw_bindings is None:
+        raw_bindings = {}
+    if not isinstance(raw_bindings, dict):
+        raise ValueError("global_hotkeys.bindings must be an object.")
+
+    for action in raw_bindings:
+        if action not in HOTKEY_ACTIONS:
+            raise ValueError(f"Unknown hotkey action: {action!r}.")
+
+    bindings = dict(DEFAULT_GLOBAL_HOTKEY_BINDINGS)
+    for action in HOTKEY_ACTIONS:
+        if action in raw_bindings:
+            bindings[action] = normalize_hotkey_combo(raw_bindings[action])
+
+    seen_combos: dict[str, str] = {}
+    for action in HOTKEY_ACTIONS:
+        combo = bindings[action]
+        if not combo:
+            continue
+        if combo in seen_combos:
+            raise ValueError(
+                f"Duplicate hotkey binding '{combo}' for '{seen_combos[combo]}' and '{action}'."
+            )
+        seen_combos[combo] = action
+
+    return {
+        "enabled": enabled,
+        "bindings": bindings,
+    }
+
 
 DEFAULT_WIZ_UDP_PORT = 38899
 MIN_LOOPBACK_PORT = 1024

@@ -107,6 +107,7 @@ _JS_API_SURFACE = frozenset(
         "set_color",
         "set_custom_scene_favorite",
         "set_favorite_builtin_scenes",
+        "set_global_hotkeys",
         "set_language",
         "set_power",
         "set_temperature",

@@ -42,12 +42,14 @@ from wiz_console.adapters.storage.json_repositories import (
 )
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 from wiz_console.adapters.system.windows_autostart import WindowsRegistryAutostart
+from wiz_console.adapters.system.windows_hotkeys import WindowsGlobalHotkeyManager
 from wiz_console.adapters.tray import TrayController
 from wiz_console.adapters.ui_webview.bridge import WebviewBridge
 from wiz_console.adapters.wiz.udp_controller import WizUdpController
 from wiz_console.application.service import LightControlService
 from wiz_console.desktop import DesktopApplication
 from wiz_console.ports.autostart import AutostartManager
+from wiz_console.ports.hotkeys import GlobalHotkeyManager
 from wiz_console.resources import resolve_asset_path, resolve_resource_root
 
 # Reexportes de la capa de plataforma Windows: las pruebas y los consumidores historicos
@@ -150,6 +152,13 @@ def _default_autostart() -> AutostartManager | None:
     if sys.platform != "win32":
         return None
     return WindowsRegistryAutostart()
+
+
+def _default_hotkeys() -> GlobalHotkeyManager | None:
+    """Win32 RegisterHotKey manager on Windows; None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    return WindowsGlobalHotkeyManager()
 
 
 def build_application(
@@ -298,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             multi_instance=getattr(args, "multi_instance", False),
             guard=guard,
             autostart=autostart,
+            hotkeys=_default_hotkeys(),
         )
         apply_app_user_model_id()
         app.create_window()

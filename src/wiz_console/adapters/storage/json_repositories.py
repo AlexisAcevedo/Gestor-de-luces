@@ -26,6 +26,7 @@ from wiz_console.domain.scenes import CustomScene
 from wiz_console.domain.value_objects import (
     DEFAULT_LANGUAGE,
     DEFAULT_THEME,
+    normalize_global_hotkeys,
     normalize_language,
     normalize_theme,
     validate_local_endpoint,
@@ -375,6 +376,11 @@ def _sanitize_settings(raw: dict[str, Any]) -> dict[str, Any]:
         merged["ambilight_prefs"] = _sanitize_ambilight_prefs(merged["ambilight_prefs"])
     if "music_prefs" in merged:
         merged["music_prefs"] = _sanitize_music_prefs(merged["music_prefs"])
+    if "global_hotkeys" in merged:
+        try:
+            merged["global_hotkeys"] = normalize_global_hotkeys(merged["global_hotkeys"])
+        except ValueError:
+            del merged["global_hotkeys"]
     return merged
 
 

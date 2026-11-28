@@ -151,6 +151,18 @@ class LightControlService:
         """Return persisted Music Sync configuration defaults."""
         return self._settings.get_music_prefs()
 
+    def get_global_hotkeys(self) -> dict[str, Any]:
+        """Return opt-in global Windows hotkeys configuration."""
+        return self._settings.get_global_hotkeys()
+
+    def set_global_hotkeys(
+        self,
+        enabled: bool,
+        bindings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate and persist opt-in global Windows hotkeys configuration."""
+        return self._settings.set_global_hotkeys(enabled, bindings=bindings)
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()

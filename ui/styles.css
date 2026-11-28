@@ -2456,6 +2456,79 @@
     color: var(--text-primary);
   }
 
+  .hotkey-settings-fieldset {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .hotkey-settings-fieldset legend {
+    padding: 0 6px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+  }
+
+  .hotkey-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .hotkey-row {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .hotkey-row-error {
+    grid-column: 1 / -1;
+  }
+
+  .hotkey-input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hotkey-input {
+    width: 148px;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+
+  .hotkey-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .hotkey-input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+
+  .hotkey-clear-btn {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 0.78rem;
+  }
+
+  .hotkey-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
   @container stage (max-width: 460px) {
     .ambilight-workbench,
     .music-workbench {
