@@ -158,6 +158,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
 
   const langChanged = typeof envelope.language === "string" ? syncLanguageUi(envelope.language) : false;
   if (typeof envelope.theme === "string") syncThemeUi(envelope.theme);
+  if (typeof envelope.transition_seconds === "number") {
+    appState.transitionSeconds = envelope.transition_seconds;
+  }
   if (typeof envelope.auto_sync === "boolean" && appState.autoSync !== envelope.auto_sync) {
     syncAutoSyncPolling(envelope.auto_sync);
   }
@@ -196,6 +199,15 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
   if (envelope.session_triggers && typeof envelope.session_triggers === "object") {
     appState.sessionTriggers = envelope.session_triggers;
+  }
+  if (envelope.context_automation && typeof envelope.context_automation === "object") {
+    appState.contextAutomation = envelope.context_automation;
+  }
+  if (envelope.context_status && typeof envelope.context_status === "object") {
+    appState.contextStatus = envelope.context_status;
+  }
+  if (envelope.local_api && typeof envelope.local_api === "object") {
+    appState.localApi = envelope.local_api;
   }
   if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
     const prev = appState.globalHotkeys || {};
@@ -303,6 +315,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     envelope.wakeup_ramp ||
     envelope.wakeup_ramp_status ||
     envelope.session_triggers ||
+    envelope.context_automation ||
+    envelope.context_status ||
+    envelope.local_api ||
     langChanged
   ) {
     renderAutomationPanel();
@@ -310,7 +325,10 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   const streamToggled =
     (hasAmbi && wasAmbiActive !== Boolean(appState.ambilight && appState.ambilight.active)) ||
     (hasMusic && wasMusicActive !== Boolean(appState.musicSync && appState.musicSync.active));
-  if (streamToggled && !bulbsChanged) {
+  if (
+    (streamToggled || typeof envelope.transition_seconds === "number") &&
+    !bulbsChanged
+  ) {
     renderStageHeaderAndControls();
   }
   if (

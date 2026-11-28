@@ -122,6 +122,7 @@ class DesktopApplication:
         autostart: AutostartManager | None = None,
         hotkeys: GlobalHotkeyManager | None = None,
         session_monitor: SessionMonitor | None = None,
+        local_api: Any | None = None,
         webview_module: Any = None,
     ) -> None:
         self._service = service
@@ -136,6 +137,7 @@ class DesktopApplication:
         self._autostart = autostart
         self._hotkeys = hotkeys
         self._session_monitor = session_monitor
+        self._local_api = local_api
         self._webview_module = webview_module
 
         self._webview: Any = None
@@ -283,6 +285,7 @@ class DesktopApplication:
             self._sync_hotkeys(force=True)
         if self._session_monitor is not None:
             self._session_monitor.start(self.on_session_event)
+        self._sync_local_api()
         if self._tray is not None:
             self._tray.start()
         try:
@@ -334,6 +337,8 @@ class DesktopApplication:
             self._run_cleanup_step("global hotkeys", self._hotkeys.stop)
         if self._session_monitor is not None:
             self._run_cleanup_step("session monitor", self._session_monitor.stop)
+        if self._local_api is not None:
+            self._run_cleanup_step("local HTTP API", self._local_api.stop)
         if self._tray is not None:
             self._run_cleanup_step("system tray", self._tray.stop)
         self._run_cleanup_step("webview bridge", self._bridge.shutdown)
@@ -716,9 +721,31 @@ class DesktopApplication:
         if self._tray is not None:
             self._tray.request_refresh()
 
+    def _sync_local_api(self) -> None:
+        """Start, reconfigure, or stop the opt-in loopback HTTP API based on persisted settings."""
+        if self._local_api is None:
+            return
+        getter = getattr(self._service, "get_local_api_config", None)
+        if not callable(getter):
+            return
+        cfg = getter()
+        enabled = bool(cfg.get("enabled", False))
+        token = str(cfg.get("token", "") or "").strip()
+        port = int(cfg.get("port", 18899))
+        try:
+            if enabled and token:
+                self._local_api.start(port=port, token=token)
+            else:
+                self._local_api.stop()
+        except OSError:
+            _LOGGER.warning(
+                "Unable to bind loopback Local HTTP API on port %s.", port, exc_info=True
+            )
+
     def on_state_changed(self) -> None:
         """Reacciona a una mutacion hecha desde la UI: titulo, bandeja y menu si cambio idioma."""
         self._sync_hotkeys()
+        self._sync_local_api()
         self.sync_theme_titlebar()
         if self._tray is not None:
             self._tray.request_refresh()

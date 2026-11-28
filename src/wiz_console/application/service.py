@@ -42,6 +42,7 @@ from wiz_console.application.zone_service import ZoneService
 from wiz_console.domain.models import Bulb, Zone
 from wiz_console.domain.scenes import BulbSceneState, CustomScene
 from wiz_console.domain.value_objects import Color, LightMode
+from wiz_console.ports.context_monitor import ContextMonitor
 from wiz_console.ports.repositories import (
     AudioSampler,
     BulbRepository,
@@ -78,6 +79,7 @@ class LightControlService:
         zone_repository: ZoneRepository | None = None,
         screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
         audio_sampler_factory: Callable[[], AudioSampler] | None = None,
+        context_monitor: ContextMonitor | None = None,
     ) -> None:
         context = ServiceContext(
             controller=controller,
@@ -93,6 +95,7 @@ class LightControlService:
             zone_repository=zone_repository,
             screen_sampler_factory=screen_sampler_factory,
             audio_sampler_factory=audio_sampler_factory,
+            context_monitor=context_monitor,
         )
         self._ctx = context
         self._settings = SettingsService(context)
@@ -170,6 +173,26 @@ class LightControlService:
         """Validate and persist opt-in global Windows hotkeys configuration."""
         return self._settings.set_global_hotkeys(enabled, bindings=bindings)
 
+    def get_transition_seconds(self) -> float:
+        """Return configured crossfade duration in seconds (0.0 = instant)."""
+        return self._settings.get_transition_seconds()
+
+    def set_transition_seconds(self, seconds: float) -> float:
+        """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
+        return self._settings.set_transition_seconds(seconds)
+
+    def get_local_api_config(self) -> dict[str, Any]:
+        """Return persisted opt-in loopback Local HTTP API settings."""
+        return self._settings.get_local_api_config()
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+        return self._settings.set_local_api_config(config)
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        return self._settings.rotate_local_api_token()
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()
@@ -191,9 +214,14 @@ class LightControlService:
         """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco."""
         return await self._inventory.discover_bulbs(wait_time=wait_time)
 
-    async def add_manual_bulb(self, ip: str, name: str | None = None) -> Bulb:
+    async def add_manual_bulb(
+        self,
+        ip: str,
+        name: str | None = None,
+        protocol: str = "wiz",
+    ) -> Bulb:
         """Registra un foco manualmente por su IP y verifica su estado en la red."""
-        return await self._inventory.add_manual_bulb(ip, name=name)
+        return await self._inventory.add_manual_bulb(ip, name=name, protocol=protocol)
 
     def rename_bulb(self, ip: str, new_name: str) -> Bulb:
         """Cambia el nombre amigable de un foco registrado y guarda el cambio."""
@@ -493,6 +521,22 @@ class LightControlService:
     async def handle_session_event(self, event: str) -> dict[str, Any]:
         """Apply opt-in lighting behavior for a normalized Windows session event."""
         return await self._automation.handle_session_event(event)
+
+    def get_context_automation(self) -> dict[str, Any]:
+        """Return normalized foreground profile & On-Air configuration."""
+        return self._automation.get_context_automation()
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply foreground profile & On-Air automation settings."""
+        return self._automation.set_context_automation(config)
+
+    def get_context_automation_status(self) -> dict[str, Any]:
+        """Return live foreground profile and On-Air indicator status."""
+        return self._automation.get_context_automation_status()
+
+    async def evaluate_context_once(self) -> dict[str, Any]:
+        """Sample local host context once and apply matching rule or On-Air state."""
+        return await self._automation.evaluate_context_once()
 
     def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
         """Start a sunrise wake-up ramp immediately."""

@@ -139,12 +139,13 @@ class BridgeHandlers:
         """Escanea la red local en busca de focos Philips WiZ y sincroniza su estado."""
         return self._call(lambda: self._service.discover_bulbs(wait_time=2.0), timeout=15.0)
 
-    def add_manual_bulb(self, ip: str, name: str = "") -> dict[str, Any]:
+    def add_manual_bulb(self, ip: str, name: str = "", protocol: str = "wiz") -> dict[str, Any]:
         """Agrega un foco por direccion IP explicita y verifica su disponibilidad UDP."""
         return self._call(
             lambda: self._service.add_manual_bulb(
                 ip=_req_str(ip, field="ip"),
                 name=_opt_str(name, field="name"),
+                protocol=_opt_str(protocol, field="protocol") or "wiz",
             )
         )
 
@@ -516,6 +517,26 @@ class BridgeHandlers:
 
         return self._call(_update)
 
+    def set_transition_seconds(self, seconds: float) -> dict[str, Any]:
+        """Validate and persist crossfade transition duration in seconds `[0.0, 5.0]`."""
+        return self._call(
+            lambda: self._service.set_transition_seconds(_req_float(seconds, field="seconds"))
+        )
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_local_api_config(dict(config))
+
+        return self._call(_update)
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        return self._call(lambda: self._service.rotate_local_api_token())
+
     def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
         """Start a sunrise wake-up ramp immediately."""
         return self._call(lambda: self._service.trigger_wakeup_ramp(ips=_opt_ips(ips)))
@@ -531,6 +552,16 @@ class BridgeHandlers:
             if not isinstance(config, dict):
                 raise ValueError("config must be an object.")
             self._service.set_session_triggers(dict(config))
+
+        return self._call(_update)
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist foreground profile and On-Air automation settings."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_context_automation(dict(config))
 
         return self._call(_update)
 
