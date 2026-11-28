@@ -145,6 +145,8 @@ Para una explicación exhaustiva de los patrones de diseño, modelo de hilos y p
 │   ├── architecture.es.md       # Especificación técnica de arquitectura y concurrencia (ES)
 │   ├── wiz_protocol.md          # Protocolo WiZ UDP y esquemas RPC (EN)
 │   ├── wiz_protocol.es.md       # Protocolo WiZ UDP y esquemas RPC (ES)
+│   ├── roadmap.md               # Hoja de ruta y estrategia de PRs v0.5.0–v0.8.0 (EN)
+│   ├── roadmap.es.md            # Hoja de ruta y estrategia de PRs v0.5.0–v0.8.0 (ES)
 │   └── design/
 │       ├── ui_redesign_spec.md     # Especificación de rediseño de UI (EN)
 │       └── ui_redesign_spec.es.md  # Especificación de rediseño de UI (ES)
@@ -381,6 +383,7 @@ Notas para las PCs de destino:
 
 ## Documentación Técnica Detallada
 
+- [Hoja de Ruta y Estrategia de PRs](docs/roadmap.es.md): Plan por etapas para el rebrand interno a WizConsole y las funcionalidades `v0.5.0`–`v0.8.0`.
 - [Arquitectura y Concurrencia](docs/architecture.es.md): Análisis detallado del diseño hexagonal, ciclo de vida de los hilos y prevención de condiciones de carrera.
 - [Protocolo WiZ UDP y Modos de Streaming](docs/wiz_protocol.es.md): Especificación técnica de los paquetes JSON-RPC, regulación a 10 Hz y catálogo de escenas.
 - [Especificación de Rediseño de UI](docs/design/ui_redesign_spec.es.md): Dirección de diseño para la exploración de rediseño de UI en dos worktrees.

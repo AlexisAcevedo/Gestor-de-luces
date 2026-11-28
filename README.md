@@ -144,6 +144,8 @@ Detailed technical breakdown, concurrency models, and thread lifecycle documenta
 │   ├── architecture.es.md       # Architectural deep-dive and concurrency design (ES)
 │   ├── wiz_protocol.md          # WiZ UDP protocol specifications and RPC schema (EN)
 │   ├── wiz_protocol.es.md       # WiZ UDP protocol specifications and RPC schema (ES)
+│   ├── roadmap.md               # Product roadmap and PR strategy v0.5.0–v0.8.0 (EN)
+│   ├── roadmap.es.md            # Product roadmap and PR strategy v0.5.0–v0.8.0 (ES)
 │   └── design/
 │       ├── ui_redesign_spec.md     # UI redesign specification (EN)
 │       └── ui_redesign_spec.es.md  # UI redesign specification (ES)
@@ -380,6 +382,7 @@ Notes for target machines:
 
 ## Further Reading
 
+- [Product Roadmap & PR Strategy](docs/roadmap.md): Staged implementation plan for the WizConsole internal rebrand and `v0.5.0`–`v0.8.0` feature tiers.
 - [Architecture & Concurrency Deep Dive](docs/architecture.md): Detailed analysis of the Hexagonal design, threading topology, and race condition prevention.
 - [WiZ UDP Protocol & Streaming Specification](docs/wiz_protocol.md): Low-level documentation of JSON-RPC datagram formats, rate limiting, and scene catalogs.
 - [UI Redesign Specification](docs/design/ui_redesign_spec.md): Design direction for the dual-worktree UI redesign exploration.
