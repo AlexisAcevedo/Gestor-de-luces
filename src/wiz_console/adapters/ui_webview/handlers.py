@@ -127,6 +127,7 @@ class BridgeHandlers:
         """
 
         async def _init() -> None:
+            self._service.ensure_automation_tasks()
             if not self._service.list_bulbs():
                 await self._service.discover_bulbs(wait_time=1.8)
             else:
@@ -492,6 +493,36 @@ class BridgeHandlers:
         """Obtiene la telemetria espectral (Graves, Medios, Agudos y RMS) en tiempo real."""
         # Sondeo de 250ms de barras espectrales: no reconstruye el menu de la bandeja.
         return self._poll_section("music_sync", self._service.get_music_sync_status)
+
+    # --- Automatizacion circadiana y amanecer ---------------------------------------
+
+    def set_circadian_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist circadian lighting configuration."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_circadian_config(dict(config))
+
+        return self._call(_update)
+
+    def set_wakeup_ramp_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist sunrise wake-up ramp configuration."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_wakeup_ramp_config(dict(config))
+
+        return self._call(_update)
+
+    def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
+        """Start a sunrise wake-up ramp immediately."""
+        return self._call(lambda: self._service.trigger_wakeup_ramp(ips=_opt_ips(ips)))
+
+    def cancel_wakeup_ramp(self) -> dict[str, Any]:
+        """Cancel any active sunrise wake-up ramp."""
+        return self._call(lambda: self._service.cancel_wakeup_ramp())
 
     def _poll_section(self, key: str, reader: Any) -> dict[str, Any]:
         """Read a single live-stream status section on the bridge loop for delta polling."""

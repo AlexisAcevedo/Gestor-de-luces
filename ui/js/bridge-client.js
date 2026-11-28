@@ -41,6 +41,9 @@ export function createBrowserMockApi() {
       toggle_window: "Ctrl+Alt+W"
     }
   };
+  let mockCircadian = { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 };
+  let mockWakeupRamp = { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] };
+  let mockWakeupStatus = { active: false, progress: 0.0 };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -103,6 +106,9 @@ export function createBrowserMockApi() {
       },
       ambilight: JSON.parse(JSON.stringify(mockAmbilight)), monitors: mockMonitors.slice(),
       music_sync: JSON.parse(JSON.stringify(mockMusicSync)), audio_devices: mockAudioDevices.slice(),
+      circadian: Object.assign({}, mockCircadian),
+      wakeup_ramp: Object.assign({}, mockWakeupRamp),
+      wakeup_ramp_status: Object.assign({}, mockWakeupStatus),
       error: null
     });
   }
@@ -420,6 +426,22 @@ export function createBrowserMockApi() {
     get_music_sync_status: () => {
       if (mockMusicSync.active) mockMusicSync.frames_sent += 3;
       return Promise.resolve({ ok: true, music_sync: JSON.parse(JSON.stringify(mockMusicSync)), error: null });
+    },
+    set_circadian_config: (config) => {
+      mockCircadian = Object.assign({}, mockCircadian, config || {});
+      return buildMockEnvelope();
+    },
+    set_wakeup_ramp_config: (config) => {
+      mockWakeupRamp = Object.assign({}, mockWakeupRamp, config || {});
+      return buildMockEnvelope();
+    },
+    trigger_wakeup_ramp: () => {
+      mockWakeupStatus = { active: true, progress: 0.0 };
+      return buildMockEnvelope();
+    },
+    cancel_wakeup_ramp: () => {
+      mockWakeupStatus = { active: false, progress: 0.0 };
+      return buildMockEnvelope();
     }
   };
 }

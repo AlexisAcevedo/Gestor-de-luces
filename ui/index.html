@@ -1105,6 +1105,68 @@
           </div>
         </div>
       </details>
+
+      <!-- Collapsible Automation & Context Bar -->
+      <details class="control-well automation-well" id="automation-details" data-persist-open="automation" aria-labelledby="automation-heading">
+        <summary class="well-header sleep-timer-header">
+          <div class="well-title-group">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <div>
+              <span id="automation-heading" class="well-title" data-i18n="auto.title">Circadian &amp; Context Automation</span>
+              <p class="well-description" data-i18n="auto.description">Opt-in daylight Kelvin curve and sunrise wake-up ramp.</p>
+            </div>
+          </div>
+          <div class="sleep-summary-meta">
+            <span class="timer-status-badge" id="automation-badge" data-active="false" data-i18n="auto.badgeIdle">Inactive</span>
+            <svg class="icon details-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M5.5 7.75L10 12.25l4.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </summary>
+
+        <div class="automation-controls" id="automation-controls">
+          <div class="automation-block">
+            <label class="checkbox-control" for="circadian-enabled">
+              <input type="checkbox" id="circadian-enabled">
+              <span data-i18n="auto.circadianEnabled">Enable circadian Kelvin &amp; brightness curve</span>
+            </label>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="circadian-sunrise" data-i18n="auto.sunriseLabel">Sunrise</label>
+                <input type="time" id="circadian-sunrise" value="07:00">
+              </div>
+              <div class="field-group">
+                <label for="circadian-sunset" data-i18n="auto.sunsetLabel">Sunset</label>
+                <input type="time" id="circadian-sunset" value="20:00">
+              </div>
+              <button type="button" class="btn btn-ghost" id="save-circadian-btn" data-i18n="auto.applyBtn">Apply Schedule</button>
+            </div>
+          </div>
+
+          <div class="automation-block">
+            <label class="checkbox-control" for="wakeup-enabled">
+              <input type="checkbox" id="wakeup-enabled">
+              <span data-i18n="auto.wakeupEnabled">Enable daily sunrise wake-up ramp</span>
+            </label>
+            <div class="automation-inline-row">
+              <div class="field-group">
+                <label for="wakeup-time" data-i18n="auto.wakeupTimeLabel">Wake Time</label>
+                <input type="time" id="wakeup-time" value="07:00">
+              </div>
+              <div class="field-group">
+                <label for="wakeup-duration" data-i18n="auto.wakeupDurationLabel">Ramp (min)</label>
+                <input type="number" id="wakeup-duration" min="1" max="60" step="1" value="20">
+              </div>
+              <button type="button" class="btn btn-ghost" id="save-wakeup-btn" data-i18n="auto.saveWakeupBtn">Save</button>
+              <button type="button" class="btn btn-primary" id="trigger-wakeup-btn" data-i18n="auto.triggerWakeupBtn">Test Sunrise</button>
+              <button type="button" class="btn btn-ghost" id="cancel-wakeup-btn" data-i18n="auto.cancelWakeupBtn" disabled>Stop</button>
+            </div>
+          </div>
+        </div>
+      </details>
     </main>
   </div>
 

@@ -1864,6 +1864,43 @@
     gap: 8px;
   }
 
+  .automation-well {
+    margin-top: 10px;
+  }
+
+  .automation-controls {
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .automation-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .automation-inline-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+  }
+
+  .automation-inline-row input[type="time"],
+  .automation-inline-row input[type="number"] {
+    min-height: 32px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-well-recessed);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.85rem;
+  }
+
   .minutes-input-group {
     display: inline-flex;
     align-items: center;

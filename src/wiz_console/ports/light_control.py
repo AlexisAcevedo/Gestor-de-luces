@@ -294,6 +294,39 @@ class LightControlServicePort(Protocol):
         """Devuelve el estado actual y telemetria espectral de la sincronizacion musical."""
         ...
 
+    # --- Automatizacion circadiana y amanecer ---
+    def get_circadian_config(self) -> dict[str, Any]:
+        """Return normalized circadian lighting configuration."""
+        ...
+
+    def set_circadian_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and apply circadian lighting configuration."""
+        ...
+
+    def get_wakeup_ramp_config(self) -> dict[str, Any]:
+        """Return normalized sunrise wake-up ramp configuration."""
+        ...
+
+    def set_wakeup_ramp_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, persist, and schedule sunrise wake-up ramp configuration."""
+        ...
+
+    def get_wakeup_ramp_status(self) -> dict[str, Any]:
+        """Return live status of the sunrise wake-up ramp."""
+        ...
+
+    def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
+        """Start a sunrise wake-up ramp immediately."""
+        ...
+
+    def cancel_wakeup_ramp(self) -> dict[str, Any]:
+        """Cancel any active sunrise wake-up ramp."""
+        ...
+
+    def ensure_automation_tasks(self) -> None:
+        """Start enabled background automation loops on the running event loop."""
+        ...
+
     def close_all_resources(self) -> None:
         """Detiene los flujos activos y libera de forma segura audio, pantalla y UDP."""
         ...

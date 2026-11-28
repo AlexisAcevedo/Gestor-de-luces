@@ -53,6 +53,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 6. Temporizador de Apagado Progresivo (Sleep Timer):
    - Cuenta regresiva configurable (1 a 240 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
+7. Curva Circadiana y Rampa de Despertar:
+   - Curva horaria opcional de Kelvin y brillo (`CircadianConfig`) más rampa de amanecer programada localmente (`WakeupRampConfig`) sobre bombillas o zonas seleccionadas.
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).

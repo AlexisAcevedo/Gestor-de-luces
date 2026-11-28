@@ -246,6 +246,22 @@
       "music.smoothingPresetsAria": "Music smoothing presets",
       "music.audioBrightness": "Modulate brightness with audio volume",
 
+      /* Automation */
+      "auto.title": "Circadian & Context Automation",
+      "auto.description": "Opt-in daylight Kelvin curve and sunrise wake-up ramp.",
+      "auto.badgeIdle": "Inactive",
+      "auto.badgeActive": "Active",
+      "auto.circadianEnabled": "Enable circadian Kelvin & brightness curve",
+      "auto.sunriseLabel": "Sunrise",
+      "auto.sunsetLabel": "Sunset",
+      "auto.applyBtn": "Apply Schedule",
+      "auto.wakeupEnabled": "Enable daily sunrise wake-up ramp",
+      "auto.wakeupTimeLabel": "Wake Time",
+      "auto.wakeupDurationLabel": "Ramp (min)",
+      "auto.saveWakeupBtn": "Save",
+      "auto.triggerWakeupBtn": "Test Sunrise",
+      "auto.cancelWakeupBtn": "Stop",
+
       /* Dialogos modales */
       "dialog.cancel": "Cancel",
       "dialog.addTitle": "Add Bulb by IP",
@@ -392,7 +408,13 @@
       "status.musicBeatBoostOff": "Beat brightness pulse disabled.",
       "status.musicCustomPaletteChanged": "Custom music palette updated.",
       "status.musicBandChanged": "Music frequency band assignment updated.",
-      "status.languageChanged": "Interface language changed to English."
+      "status.languageChanged": "Interface language changed to English.",
+      "status.circadianEnabled": "Circadian lighting schedule enabled.",
+      "status.circadianDisabled": "Circadian lighting schedule paused.",
+      "status.wakeupSaved": "Wake-up sunrise ramp scheduled.",
+      "status.wakeupDisabled": "Wake-up sunrise ramp disabled.",
+      "status.wakeupTriggered": "Sunrise wake-up ramp started.",
+      "status.wakeupCancelled": "Sunrise wake-up ramp stopped."
     },
 
     es: {
@@ -632,6 +654,22 @@
 
       /* Dialogos modales */
       "dialog.cancel": "Cancelar",
+
+      /* Automatizacion */
+      "auto.title": "Automatización Circadiana y Contextual",
+      "auto.description": "Curva solar Kelvin opcional y rampa de amanecer para despertar.",
+      "auto.badgeIdle": "Inactivo",
+      "auto.badgeActive": "Activo",
+      "auto.circadianEnabled": "Activar curva circadiana de Kelvin y brillo",
+      "auto.sunriseLabel": "Amanecer",
+      "auto.sunsetLabel": "Atardecer",
+      "auto.applyBtn": "Aplicar horario",
+      "auto.wakeupEnabled": "Activar rampa diaria de amanecer",
+      "auto.wakeupTimeLabel": "Hora",
+      "auto.wakeupDurationLabel": "Rampa (min)",
+      "auto.saveWakeupBtn": "Guardar",
+      "auto.triggerWakeupBtn": "Probar amanecer",
+      "auto.cancelWakeupBtn": "Detener",
       "dialog.addTitle": "Agregar Luminaria por IP",
       "dialog.addSubtitle": "Conecta directamente un foco WiZ en tu red local cuando el escaneo automático no lo encuentra.",
       "dialog.addIpLabel": "Dirección IP de la Luminaria",
@@ -776,7 +814,13 @@
       "status.musicBeatBoostOff": "Pulso de brillo al ritmo desactivado.",
       "status.musicCustomPaletteChanged": "Paleta musical personalizada actualizada.",
       "status.musicBandChanged": "Asignación de banda de frecuencia actualizada.",
-      "status.languageChanged": "Idioma de la interfaz cambiado a Español."
+      "status.languageChanged": "Idioma de la interfaz cambiado a Español.",
+      "status.circadianEnabled": "Curva circadiana de iluminación activada.",
+      "status.circadianDisabled": "Curva circadiana pausada.",
+      "status.wakeupSaved": "Rampa de amanecer programada.",
+      "status.wakeupDisabled": "Rampa de amanecer desactivada.",
+      "status.wakeupTriggered": "Rampa de amanecer iniciada.",
+      "status.wakeupCancelled": "Rampa de amanecer detenida."
     }
   };
 

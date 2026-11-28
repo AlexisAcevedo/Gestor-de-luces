@@ -51,7 +51,7 @@ The core principle behind this project is **strict isolation of business invaria
 ### Layer Separation
 
 1. **Domain Layer (`wiz_console.domain`)**:
-   - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), endpoint validation (`validate_local_endpoint`), and global UI preference invariants in `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`), and `DEFAULT_THEME` (`"architectural-stone"`)).
+   - Contains pure entity models (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), Value Objects (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), pure automation curves (`CircadianConfig`, `WakeupRampConfig`, `evaluate_circadian_target`, `evaluate_wakeup_progress`), endpoint validation (`validate_local_endpoint`), and global UI preference invariants in `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`), and `DEFAULT_THEME` (`"architectural-stone"`)).
    - Completely devoid of dependencies on external packages, operating system APIs, network libraries, or serialization frameworks.
    - Enforces business validation rules (e.g., RGB integers between 0 and 255, Kelvin bounds between 2,200K and 6,500K, local unicast IPv4 endpoint checks rejecting unspecified/broadcast/multicast addresses, and supported language/theme tokens).
 

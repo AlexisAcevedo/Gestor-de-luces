@@ -248,6 +248,9 @@ class BridgeLifecycle:
             "monitors": monitors,
             "music_sync": music_sync,
             "audio_devices": audio_devices,
+            "circadian": self._service.get_circadian_config(),
+            "wakeup_ramp": self._service.get_wakeup_ramp_config(),
+            "wakeup_ramp_status": self._service.get_wakeup_ramp_status(),
             "error": error,
         }
 

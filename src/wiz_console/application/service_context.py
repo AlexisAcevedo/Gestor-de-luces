@@ -21,6 +21,7 @@ from wiz_console.application.ambilight_stream import AmbilightStreamManager
 from wiz_console.application.music_stream import MusicSyncStreamManager
 from wiz_console.application.rate_limiter import StreamRateLimiter
 from wiz_console.application.sleep_timer import SleepTimerManager
+from wiz_console.domain.automation import CircadianConfig, WakeupRampConfig
 from wiz_console.domain.models import Bulb, LightState, Zone
 from wiz_console.domain.scenes import CustomScene
 from wiz_console.domain.value_objects import (
@@ -138,6 +139,8 @@ class ServiceContext:
             "custom_palette": {"bass": "#ff2a55", "mid": "#22e58b", "treble": "#389bff"},
         }
         self.global_hotkeys: dict[str, Any] = default_global_hotkeys()
+        self.circadian_config: dict[str, Any] = CircadianConfig().to_dict()
+        self.wakeup_ramp_config: dict[str, Any] = WakeupRampConfig().to_dict()
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -186,6 +189,20 @@ class ServiceContext:
                     )
                 except ValueError:
                     self.global_hotkeys = default_global_hotkeys()
+            if "circadian" in loaded_settings:
+                try:
+                    self.circadian_config = CircadianConfig.from_dict(
+                        loaded_settings["circadian"]
+                    ).to_dict()
+                except ValueError:
+                    self.circadian_config = CircadianConfig().to_dict()
+            if "wakeup_ramp" in loaded_settings:
+                try:
+                    self.wakeup_ramp_config = WakeupRampConfig.from_dict(
+                        loaded_settings["wakeup_ramp"]
+                    ).to_dict()
+                except ValueError:
+                    self.wakeup_ramp_config = WakeupRampConfig().to_dict()
             raw_selected = loaded_settings.get("selected_ips")
             if isinstance(raw_selected, list) and self.bulbs:
                 restored = [ip for ip in raw_selected if isinstance(ip, str) and ip in self.bulbs]
@@ -285,6 +302,8 @@ class ServiceContext:
                     "enabled": bool(self.global_hotkeys.get("enabled", False)),
                     "bindings": dict(self.global_hotkeys.get("bindings", {})),
                 },
+                "circadian": dict(self.circadian_config),
+                "wakeup_ramp": dict(self.wakeup_ramp_config),
             }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True

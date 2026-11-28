@@ -51,7 +51,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
 ### Separación de Responsabilidades por Capa
 
 1. **Capa de Dominio (`wiz_console.domain`)**:
-   - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), validación de endpoints (`validate_local_endpoint`) y las invariantes de preferencias globales de interfaz en `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`) y `DEFAULT_THEME` (`"architectural-stone"`)).
+   - Aloja las entidades centrales (`Bulb`, `LightState`, `CustomScene`, `BuiltInScene`), los Objetos de Valor (`Color`, `Brightness`, `ColorTemperature`, `LightMode`, `SceneSpeed`), las curvas puras de automatización (`CircadianConfig`, `WakeupRampConfig`, `evaluate_circadian_target`, `evaluate_wakeup_progress`), validación de endpoints (`validate_local_endpoint`) y las invariantes de preferencias globales de interfaz en `value_objects.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `SUPPORTED_THEMES` (`"architectural-stone"`, `"atmospheric-dark"`) y `DEFAULT_THEME` (`"architectural-stone"`)).
    - Libre de dependencias externas: no importa librerías de red, APIs de Windows ni frameworks de interfaz de usuario.
    - Aplica invariantes de negocio (enteros RGB entre 0 y 255, rangos de temperatura Kelvin entre 2.200 K y 6.500 K, validación de endpoints IPv4 locales unicast rechazando direcciones sin especificar, broadcast o multicast, y códigos de idioma y tema permitidos).
 

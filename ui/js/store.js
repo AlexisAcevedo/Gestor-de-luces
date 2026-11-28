@@ -158,6 +158,9 @@ export const appState = {
   customScenes: [],
   ambilightPrefs: null,
   musicPrefs: null,
+  circadian: { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 },
+  wakeupRamp: { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] },
+  wakeupRampStatus: { active: false, progress: 0.0 },
   globalHotkeys: {
     enabled: false,
     supported: false,

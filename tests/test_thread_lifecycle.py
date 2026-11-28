@@ -241,6 +241,15 @@ class _FakeLightControlService:
     def get_global_hotkeys(self) -> dict[str, Any]:
         return {"enabled": False, "bindings": {}}
 
+    def get_circadian_config(self) -> dict[str, Any]:
+        return {"enabled": False}
+
+    def get_wakeup_ramp_config(self) -> dict[str, Any]:
+        return {"enabled": False}
+
+    def get_wakeup_ramp_status(self) -> dict[str, Any]:
+        return {"active": False, "progress": 0.0}
+
     def get_language(self) -> str:
         return "en"
 

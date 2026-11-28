@@ -6,6 +6,7 @@
  */
 
 import { bindAmbilightEvents, renderAmbilightPanel, syncAmbilightPolling } from "./ambilight.js";
+import { bindAutomationEvents, renderAutomationPanel } from "./automation.js";
 import {
   getBackendApi, invokeApi, resolveBackendApi, setBackendUpgradeHandler, setEnvelopeHandler
 } from "./bridge-client.js";
@@ -128,6 +129,7 @@ function renderAllPanels() {
   renderFixtureList();
   renderStageHeaderAndControls();
   renderSleepTimer();
+  renderAutomationPanel();
   renderScenesGrid();
   renderCustomScenesGrid();
   renderAmbilightPanel();
@@ -187,6 +189,11 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
   if (hasAmbiPrefs) appState.ambilightPrefs = envelope.ambilight_prefs;
   if (hasMusicPrefs) appState.musicPrefs = envelope.music_prefs;
+  if (envelope.circadian && typeof envelope.circadian === "object") appState.circadian = envelope.circadian;
+  if (envelope.wakeup_ramp && typeof envelope.wakeup_ramp === "object") appState.wakeupRamp = envelope.wakeup_ramp;
+  if (envelope.wakeup_ramp_status && typeof envelope.wakeup_ramp_status === "object") {
+    appState.wakeupRampStatus = envelope.wakeup_ramp_status;
+  }
   if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
     const prev = appState.globalHotkeys || {};
     appState.globalHotkeys = {
@@ -287,6 +294,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
       renderMusicPanel();
     }
     if (hasMusic) syncMusicPolling();
+  }
+  if (envelope.circadian || envelope.wakeup_ramp || envelope.wakeup_ramp_status || langChanged) {
+    renderAutomationPanel();
   }
   const streamToggled =
     (hasAmbi && wasAmbiActive !== Boolean(appState.ambilight && appState.ambilight.active)) ||
@@ -446,6 +456,7 @@ export function bindEvents() {
   bindSceneEvents({ activateTab });
   bindAmbilightEvents();
   bindMusicEvents();
+  bindAutomationEvents();
   bindGlobalHotkeyEvents();
 
   document.addEventListener("visibilitychange", () => {
