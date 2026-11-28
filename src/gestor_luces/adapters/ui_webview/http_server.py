@@ -18,7 +18,7 @@ from typing import Any
 from webview import http as webview_http
 
 LOOPBACK_HOST = "127.0.0.1"
-HTTP_SERVER_THREAD_NAME = "GestorLucesHttpServer"
+HTTP_SERVER_THREAD_NAME = "WizConsoleHttpServer"
 MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 NO_CACHE_HEADERS: dict[str, str] = {

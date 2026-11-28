@@ -136,7 +136,7 @@ class MusicSyncStreamManager:
 
         self._task = loop.create_task(
             self._run_loop(on_frame=on_frame, run_id=run_id),
-            name="GestorLucesMusicSyncStream",
+            name="WizConsoleMusicSyncStream",
         )
         return self.get_status()
 

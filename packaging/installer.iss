@@ -1,27 +1,27 @@
 ; Inno Setup script. Build with:  iscc /DAppVersion=<version> packaging\installer.iss
 ; (scripts\build.ps1 passes the version taken from pyproject.toml).
-; Expects the PyInstaller one-folder output in dist\GestorDeLuces (see scripts\build.ps1).
+; Expects the PyInstaller one-folder output in dist\WizConsole (see scripts\build.ps1).
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
 
 ; One product name across the whole shell: the exe metadata
-; (packaging/gestor_luces.spec), the About dialog (app_menu.APP_DISPLAY_NAME), the
+; (packaging/wiz_console.spec), the About dialog (app_menu.APP_DISPLAY_NAME), the
 ; Apps & features entry and the Start Menu group all read the same string.
 #define AppName "WiZ Architectural Lighting Console"
-#define AppExe "GestorDeLuces.exe"
+#define AppExe "WizConsole.exe"
 
 [Setup]
 AppId={{6B1E2C0A-3F1B-4D7E-9A55-5C0B7D1E8F42}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=Gestor de Luces
-DefaultDirName={autopf}\GestorDeLuces
+AppPublisher=AlexisAcevedo
+DefaultDirName={autopf}\WizConsole
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=GestorDeLuces-Setup-{#AppVersion}
+OutputBaseFilename=WizConsole-Setup-{#AppVersion}
 SetupIconFile=..\assets\icon\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2
@@ -29,7 +29,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; The app stores user data in %LOCALAPPDATA%\GestorDeLuces, never under Program Files.
+; The app stores user data in %LOCALAPPDATA%\WizConsole, never under Program Files.
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
@@ -50,7 +50,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "{cm:AutostartTask}"; GroupDescription: "{cm:StartupGroup}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\GestorDeLuces\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\WizConsole\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
@@ -59,9 +59,11 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Registry]
 ; Same key and value name as the in-app "Start with Windows" toggle (WindowsRegistryAutostart).
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GestorDeLuces"; ValueData: """{app}\{#AppExe}"" --minimized"; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "WizConsole"; ValueData: """{app}\{#AppExe}"" --minimized"; Flags: uninsdeletevalue; Tasks: autostart
 ; Ensure uninstall removes the autostart entry even if the user enabled it from inside the app.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "GestorDeLuces"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "WizConsole"; Flags: uninsdeletevalue
+; Clean up legacy GestorDeLuces autostart entry on upgrade and uninstall.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "GestorDeLuces"; Flags: deletevalue uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser

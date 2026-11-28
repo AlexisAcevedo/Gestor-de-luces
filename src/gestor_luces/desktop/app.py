@@ -63,9 +63,9 @@ from gestor_luces.resources import resolve_app_version
 _LOGGER = logging.getLogger(__name__)
 
 WINDOW_TITLE = "WiZ Architectural Lighting Console"
-MENU_SYNC_THREAD_NAME = "GestorLucesMenuSync"
-HIDE_ON_CLOSE_THREAD_NAME = "GestorLucesHideOnClose"
-HIDE_ON_MINIMIZE_THREAD_NAME = "GestorLucesHideOnMinimize"
+MENU_SYNC_THREAD_NAME = "WizConsoleMenuSync"
+HIDE_ON_CLOSE_THREAD_NAME = "WizConsoleHideOnClose"
+HIDE_ON_MINIMIZE_THREAD_NAME = "WizConsoleHideOnMinimize"
 
 
 def _build_initial_ui_url(

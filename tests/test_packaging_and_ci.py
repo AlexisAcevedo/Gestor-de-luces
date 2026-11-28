@@ -14,7 +14,7 @@ def test_build_ps1_signs_exe_before_zip_and_installer_with_https_timestamp() -> 
     assert "https://timestamp.digicert.com" in build_ps1
     assert "http://timestamp" not in build_ps1
 
-    sign_exe_idx = build_ps1.index("dist\\GestorDeLuces\\GestorDeLuces.exe")
+    sign_exe_idx = build_ps1.index("dist\\WizConsole\\WizConsole.exe")
     zip_idx = build_ps1.index("Compress-Archive")
     iscc_idx = build_ps1.index("packaging\\installer.iss")
     assert sign_exe_idx < zip_idx < iscc_idx
@@ -23,8 +23,10 @@ def test_build_ps1_signs_exe_before_zip_and_installer_with_https_timestamp() -> 
 def test_installer_iss_hardening_and_localization() -> None:
     iss = (ROOT / "packaging" / "installer.iss").read_text(encoding="utf-8")
 
+    assert "AppId={{6B1E2C0A-3F1B-4D7E-9A55-5C0B7D1E8F42}" in iss
     assert "runasoriginaluser" in iss
-    assert 'ValueType: none; ValueName: "GestorDeLuces"; Flags: uninsdeletevalue' in iss
+    assert 'ValueType: none; ValueName: "WizConsole"; Flags: uninsdeletevalue' in iss
+    assert 'ValueType: none; ValueName: "GestorDeLuces"; Flags: deletevalue uninsdeletevalue' in iss
     assert "[CustomMessages]" in iss
     assert "english.AutostartTask=" in iss
     assert "spanish.AutostartTask=" in iss
@@ -34,7 +36,7 @@ def test_installer_iss_hardening_and_localization() -> None:
 
 
 def test_pyinstaller_spec_excludes_python_helper_scripts_from_assets() -> None:
-    spec = (ROOT / "packaging" / "gestor_luces.spec").read_text(encoding="utf-8")
+    spec = (ROOT / "packaging" / "wiz_console.spec").read_text(encoding="utf-8")
 
     assert 'path.suffix != ".py"' in spec
     assert '(str(ROOT / "assets"), "assets")' not in spec

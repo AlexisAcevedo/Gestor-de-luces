@@ -83,7 +83,7 @@ LOG_BACKUP_COUNT = 3
 def _configure_logging() -> None:
     """Configura el logger raiz con salida a archivo rotativo y a stderr.
 
-    Escribe en `<data_dir>/gestor_luces.log` (resuelto con `resolve_default_data_dir`) y
+    Escribe en `<data_dir>/wiz_console.log` (resuelto con `resolve_default_data_dir`) y
     refleja todo en stderr, para que los mensajes de arranque y de error queden
     disponibles tanto en una consola como en el log persistente de la aplicacion.
     """
@@ -91,7 +91,7 @@ def _configure_logging() -> None:
     if root.handlers:
         return
     data_dir = resolve_default_data_dir()
-    log_path = data_dir / "gestor_luces.log"
+    log_path = data_dir / "wiz_console.log"
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
@@ -180,7 +180,7 @@ def build_application(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Procesa los argumentos de linea de comandos para ejecucion normal o smoke test."""
     parser = argparse.ArgumentParser(
-        prog="gestor-luces",
+        prog="wiz-console",
         description="WiZ Architectural Lighting Console desktop application.",
     )
     parser.add_argument(

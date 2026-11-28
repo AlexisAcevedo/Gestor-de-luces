@@ -188,8 +188,8 @@ def test_desktop_application_show_about_localizes_title_and_body(
 
 
 def test_build_autostart_command_always_minimized() -> None:
-    frozen = build_autostart_command(frozen=True, executable=r"C:\Apps\GestorDeLuces.exe")
-    assert frozen == r'"C:\Apps\GestorDeLuces.exe" --minimized'
+    frozen = build_autostart_command(frozen=True, executable=r"C:\Apps\WizConsole.exe")
+    assert frozen == r'"C:\Apps\WizConsole.exe" --minimized'
     dev = build_autostart_command(frozen=False, executable=r"C:\Nope\python.exe")
     assert dev.endswith("-m gestor_luces.main --minimized")
 

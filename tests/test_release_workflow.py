@@ -132,7 +132,7 @@ def test_s1_a_tag_builds_on_a_windows_runner_without_a_manual_version() -> None:
 def test_s2_verification_precedes_publication() -> None:
     assert "needs: [guard, verify]" in WORKFLOW
     assert "sha256sum -c SHA256SUMS.txt" in WORKFLOW
-    assert "./GestorDeLuces/GestorDeLuces.exe --smoke-test" in WORKFLOW
+    assert "./WizConsole/WizConsole.exe --smoke-test" in WORKFLOW
     verified_at = WORKFLOW.index("sha256sum -c SHA256SUMS.txt")
     assert verified_at < WORKFLOW.index('gh release create "$TAG"')
 
@@ -140,15 +140,15 @@ def test_s2_verification_precedes_publication() -> None:
 @needs_bash
 def test_s3_the_artifact_set_is_exactly_three_files(tmp_path: Path) -> None:
     version = "9.9.9"
-    names = [f"GestorDeLuces-Setup-{version}.exe", f"GestorDeLuces-portable-{version}.zip"]
+    names = [f"WizConsole-Setup-{version}.exe", f"WizConsole-portable-{version}.zip"]
     names.append("SHA256SUMS.txt")
 
     def build(layout: str) -> subprocess.CompletedProcess:
         dist = tmp_path / "dist"
         shutil.rmtree(dist, ignore_errors=True)
         dist.mkdir()
-        (dist / "GestorDeLuces").mkdir()
-        (dist / "GestorDeLuces" / "GestorDeLuces.exe").write_bytes(b"MZ")
+        (dist / "WizConsole").mkdir()
+        (dist / "WizConsole" / "WizConsole.exe").write_bytes(b"MZ")
         for name in names:
             (dist / name).write_bytes(b"artifact")
         if layout == "extra":
@@ -156,7 +156,7 @@ def test_s3_the_artifact_set_is_exactly_three_files(tmp_path: Path) -> None:
         if layout == "missing":
             (dist / names[1]).unlink()
         if layout == "nested-extra":
-            (dist / "GestorDeLuces" / "extra.dll").write_bytes(b"?")
+            (dist / "WizConsole" / "extra.dll").write_bytes(b"?")
         return _run_step(tmp_path, "name: Check the artifact set", {"VERSION": version})[0]
 
     assert build("honest").returncode == 0, build("honest").stdout

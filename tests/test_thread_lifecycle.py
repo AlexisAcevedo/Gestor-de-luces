@@ -3,10 +3,10 @@
 Inventario de nombres verificado contra `threading.Thread(` del codigo y documentado en
 `docs/architecture.md` §2:
 
-- `GestorLucesTray`, `GestorLucesTrayRefresh`, `GestorLucesTrayAction` (bandeja).
-- `GestorLucesAsyncLoop` (bucle de eventos del puente IPC).
-- `GestorLucesMenuSync`, `GestorLucesHideOnClose`, `GestorLucesHideOnMinimize` (escritorio).
-- `GestorLucesSingleInstance` (guarda de instancia unica).
+- `WizConsoleTray`, `WizConsoleTrayRefresh`, `WizConsoleTrayAction` (bandeja).
+- `WizConsoleAsyncLoop` (bucle de eventos del puente IPC).
+- `WizConsoleMenuSync`, `WizConsoleHideOnClose`, `WizConsoleHideOnMinimize` (escritorio).
+- `WizConsoleSingleInstance` (guarda de instancia unica).
 
 Cada espera es acotada y sobre una condicion observable (`threading.enumerate()`, un efecto
 del hilo): no hay `sleep` de duracion fija, y el mensaje de fallo nombra la condicion que no
@@ -44,9 +44,9 @@ from gestor_luces.desktop.app import (
 
 #: Nombre literal del ejecutor de acciones de la bandeja (`tray_icon._default_executor`):
 #: no se exporta como constante porque solo el ejecutor por defecto lo usa.
-TRAY_ACTION_THREAD_NAME = "GestorLucesTrayAction"
+TRAY_ACTION_THREAD_NAME = "WizConsoleTrayAction"
 #: Nombre literal del hilo que escucha un segundo lanzamiento (`single_instance.listen`).
-SINGLE_INSTANCE_THREAD_NAME = "GestorLucesSingleInstance"
+SINGLE_INSTANCE_THREAD_NAME = "WizConsoleSingleInstance"
 
 TRAY_THREAD_NAMES = frozenset({ICON_THREAD_NAME, REFRESH_THREAD_NAME, TRAY_ACTION_THREAD_NAME})
 #: Todos los nombres de hilo que declara la aplicacion (ver docs/architecture.md §2).
@@ -428,7 +428,7 @@ def test_closing_the_desktop_application_leaves_no_app_threads(
     assert {thread.name for thread in tray_named} == {ICON_THREAD_NAME, REFRESH_THREAD_NAME}
     assert all(thread.daemon for thread in tray_named)
 
-    # `GestorLucesMenuSync` se aparca en `_menu_sync_requested`: `cleanup()` lo marca como
+    # `WizConsoleMenuSync` se aparca en `_menu_sync_requested`: `cleanup()` lo marca como
     # cierre y lo despierta, y el bucle comprueba `is_quitting` antes de reaplicar el menu.
     assert started[MENU_SYNC_THREAD_NAME].daemon is True
 
@@ -444,8 +444,8 @@ def test_releasing_the_single_instance_guard_stops_its_listener_thread() -> None
     """`release()` detiene el hilo que espera un segundo lanzamiento (sondeo de 500 ms)."""
     suffix = uuid.uuid4().hex
     guard = SingleInstanceGuard(
-        mutex_name=f"Local\\GestorDeLuces.Test.{suffix}",
-        event_name=f"Local\\GestorDeLuces.Test.Show.{suffix}",
+        mutex_name=f"Local\\WizConsole.Test.{suffix}",
+        event_name=f"Local\\WizConsole.Test.Show.{suffix}",
     )
     assert guard.acquire() is True
     try:

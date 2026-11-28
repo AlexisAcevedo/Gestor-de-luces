@@ -143,9 +143,9 @@ jobs:
         run: |
           set -euo pipefail
           version="$VERSION"
-          expected=("GestorDeLuces-Setup-$version.exe" "GestorDeLuces-portable-$version.zip" "SHA256SUMS.txt")
+          expected=("WizConsole-Setup-$version.exe" "WizConsole-portable-$version.zip" "SHA256SUMS.txt")
 
-          [ -d GestorDeLuces ] || { echo "::error::the one-folder app directory is missing"; ls -la; exit 1; }
+          [ -d WizConsole ] || { echo "::error::the one-folder app directory is missing"; ls -la; exit 1; }
           for name in "${expected[@]}"; do
             [ -f "$name" ] || { echo "::error::missing artifact $name"; ls -la; exit 1; }
           done
@@ -177,7 +177,7 @@ jobs:
         shell: bash
         working-directory: dist
         timeout-minutes: 3
-        run: ./GestorDeLuces/GestorDeLuces.exe --smoke-test
+        run: ./WizConsole/WizConsole.exe --smoke-test
 
   # A draft release is the only thing this job can create until its last step, so a failure at any
   # point leaves nothing public. Under dry_run every step here still runs except the one that makes
@@ -236,8 +236,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$TAG" \
-            "dist/GestorDeLuces-Setup-$VERSION.exe" \
-            "dist/GestorDeLuces-portable-$VERSION.zip" \
+            "dist/WizConsole-Setup-$VERSION.exe" \
+            "dist/WizConsole-portable-$VERSION.zip" \
             "dist/SHA256SUMS.txt" \
             --clobber
 
@@ -257,7 +257,7 @@ jobs:
             exit 1
           fi
 
-          for name in "GestorDeLuces-Setup-$VERSION.exe" "GestorDeLuces-portable-$VERSION.zip" "SHA256SUMS.txt"; do
+          for name in "WizConsole-Setup-$VERSION.exe" "WizConsole-portable-$VERSION.zip" "SHA256SUMS.txt"; do
             remote=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .digest' "$RUNNER_TEMP/assets.json")
             local_digest="sha256:$(sha256sum "dist/$name" | cut -d' ' -f1)"
             if [ "$remote" != "$local_digest" ]; then

@@ -120,7 +120,7 @@ class SleepTimerManager:
                 on_step_brightness=on_step_brightness,
                 on_expire_power_off=on_expire_power_off,
             ),
-            name="GestorLucesSleepTimer",
+            name="WizConsoleSleepTimer",
         )
         return self.get_status()
 
