@@ -1,4 +1,4 @@
-"""Async circadian lighting and sunrise wake-up ramp coordination."""
+"""Async circadian lighting, sunrise wake-up ramps, and session triggers."""
 
 from __future__ import annotations
 
@@ -12,16 +12,19 @@ from wiz_console.application.bulb_control_service import BulbControlService
 from wiz_console.application.service_context import ServiceContext
 from wiz_console.domain.automation import (
     CircadianConfig,
+    SessionTriggersConfig,
     WakeupRampConfig,
     evaluate_circadian_target,
     evaluate_wakeup_progress,
 )
+from wiz_console.domain.models import LightState
+from wiz_console.domain.value_objects import LightMode
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class AutomationService:
-    """Runs circadian progression and sunrise wake-up ramps on the existing asyncio loop."""
+    """Runs circadian progression, wake-up ramps, and session triggers on the asyncio loop."""
 
     def __init__(
         self,
@@ -40,6 +43,7 @@ class AutomationService:
         self._wakeup_active = False
         self._wakeup_progress = 0.0
         self._last_scheduled_day: tuple[int, int, int] | None = None
+        self._pre_lock_states: dict[str, LightState] = {}
 
     def get_circadian_config(self) -> dict[str, Any]:
         """Return normalized circadian configuration dictionary."""
@@ -115,6 +119,75 @@ class AutomationService:
         self._scheduler_task = None
         self._wakeup_active = False
         self._wakeup_progress = 0.0
+
+    def get_session_triggers(self) -> dict[str, Any]:
+        """Return normalized Windows lock/sleep session trigger settings."""
+        return dict(self._ctx.session_triggers)
+
+    def set_session_triggers(self, config: Mapping[str, Any]) -> dict[str, Any]:
+        """Validate and persist Windows session trigger preferences."""
+        parsed = SessionTriggersConfig.from_dict(config)
+        self._ctx.session_triggers = parsed.to_dict()
+        self._ctx.persist_settings()
+        return self.get_session_triggers()
+
+    def _snapshot_active_states(self) -> dict[str, LightState]:
+        """Capture currently lit bulbs so unlock/resume can restore their prior look."""
+        snapshot: dict[str, LightState] = {}
+        for bulb in self._ctx.list_bulbs():
+            if bulb.state.is_on:
+                snapshot[bulb.ip] = bulb.state
+        return snapshot
+
+    async def handle_session_event(self, event: str) -> dict[str, Any]:
+        """Apply opt-in lighting actions when Windows reports lock/unlock or suspend/resume."""
+        cfg = SessionTriggersConfig.from_dict(self._ctx.session_triggers)
+        bulbs = self._ctx.list_bulbs()
+        all_ips = [bulb.ip for bulb in bulbs]
+        if event == "lock":
+            if not cfg.off_on_lock or not all_ips:
+                return {"handled": False, "event": event, "affected": 0}
+            self._pre_lock_states = self._snapshot_active_states()
+            await self._bulb_control.set_power(False, ips=all_ips)
+            return {"handled": True, "event": event, "affected": len(all_ips)}
+        if event == "suspend":
+            if not cfg.off_on_sleep or not all_ips:
+                return {"handled": False, "event": event, "affected": 0}
+            if cfg.restore_on_unlock and not self._pre_lock_states:
+                self._pre_lock_states = self._snapshot_active_states()
+            await self._bulb_control.set_power(False, ips=all_ips)
+            return {"handled": True, "event": event, "affected": len(all_ips)}
+        if event in ("unlock", "resume"):
+            if not cfg.restore_on_unlock or not self._pre_lock_states:
+                return {"handled": False, "event": event, "affected": 0}
+            saved = dict(self._pre_lock_states)
+            self._pre_lock_states.clear()
+            restored = 0
+            for ip, state in saved.items():
+                if state.mode == LightMode.RGB and state.color is not None:
+                    await self._bulb_control.set_color(
+                        state.color.r,
+                        state.color.g,
+                        state.color.b,
+                        brightness=state.brightness,
+                        ips=[ip],
+                    )
+                elif state.mode == LightMode.SCENE and state.scene_id is not None:
+                    await self._bulb_control.set_builtin_scene(
+                        state.scene_id,
+                        brightness=state.brightness,
+                        speed=state.speed,
+                        ips=[ip],
+                    )
+                elif state.temperature is not None:
+                    await self._bulb_control.set_temperature(
+                        state.temperature, brightness=state.brightness, ips=[ip]
+                    )
+                else:
+                    await self._bulb_control.set_power(True, ips=[ip])
+                restored += 1
+            return {"handled": True, "event": event, "affected": restored}
+        raise ValueError(f"Unsupported session event: {event!r}.")
 
     def _streams_busy(self) -> bool:
         return bool(

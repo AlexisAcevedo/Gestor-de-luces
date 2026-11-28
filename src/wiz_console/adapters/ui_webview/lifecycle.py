@@ -251,6 +251,7 @@ class BridgeLifecycle:
             "circadian": self._service.get_circadian_config(),
             "wakeup_ramp": self._service.get_wakeup_ramp_config(),
             "wakeup_ramp_status": self._service.get_wakeup_ramp_status(),
+            "session_triggers": self._service.get_session_triggers(),
             "error": error,
         }
 

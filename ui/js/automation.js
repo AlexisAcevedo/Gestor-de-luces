@@ -31,10 +31,18 @@ export function renderAutomationPanel() {
   const circ = appState.circadian || {};
   const wake = appState.wakeupRamp || {};
   const wakeStatus = appState.wakeupRampStatus || {};
+  const session = appState.sessionTriggers || {};
 
   const badge = document.getElementById("automation-badge");
   if (badge) {
-    const anyActive = Boolean(circ.enabled || wake.enabled || wakeStatus.active);
+    const anyActive = Boolean(
+      circ.enabled ||
+        wake.enabled ||
+        wakeStatus.active ||
+        session.off_on_lock ||
+        session.restore_on_unlock ||
+        session.off_on_sleep
+    );
     badge.setAttribute("data-active", String(anyActive));
     badge.textContent = anyActive ? t("auto.badgeActive") : t("auto.badgeIdle");
   }
@@ -68,6 +76,13 @@ export function renderAutomationPanel() {
   if (cancelWakeBtn) {
     cancelWakeBtn.disabled = !Boolean(wakeStatus.active);
   }
+
+  const offOnLock = document.getElementById("session-off-on-lock");
+  if (offOnLock) offOnLock.checked = Boolean(session.off_on_lock);
+  const restoreUnlock = document.getElementById("session-restore-on-unlock");
+  if (restoreUnlock) restoreUnlock.checked = Boolean(session.restore_on_unlock);
+  const offOnSleep = document.getElementById("session-off-on-sleep");
+  if (offOnSleep) offOnSleep.checked = Boolean(session.off_on_sleep);
 }
 
 export function bindAutomationEvents() {
@@ -135,5 +150,21 @@ export function bindAutomationEvents() {
     cancelWakeBtn.addEventListener("click", () =>
       invokeApi(() => getBackendApi().cancel_wakeup_ramp(), () => t("status.wakeupCancelled"))
     );
+  }
+
+  const saveSessionTriggers = () => {
+    const nextCfg = {
+      off_on_lock: Boolean(document.getElementById("session-off-on-lock")?.checked),
+      restore_on_unlock: Boolean(document.getElementById("session-restore-on-unlock")?.checked),
+      off_on_sleep: Boolean(document.getElementById("session-off-on-sleep")?.checked)
+    };
+    return invokeApi(
+      () => getBackendApi().set_session_triggers(nextCfg),
+      () => t("status.sessionTriggersSaved")
+    );
+  };
+  for (const id of ["session-off-on-lock", "session-restore-on-unlock", "session-off-on-sleep"]) {
+    const inp = document.getElementById(id);
+    if (inp) inp.addEventListener("change", saveSessionTriggers);
   }
 }

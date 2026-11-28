@@ -524,6 +524,16 @@ class BridgeHandlers:
         """Cancel any active sunrise wake-up ramp."""
         return self._call(lambda: self._service.cancel_wakeup_ramp())
 
+    def set_session_triggers(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist Windows session lock/sleep trigger preferences."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_session_triggers(dict(config))
+
+        return self._call(_update)
+
     def _poll_section(self, key: str, reader: Any) -> dict[str, Any]:
         """Read a single live-stream status section on the bridge loop for delta polling."""
         import threading

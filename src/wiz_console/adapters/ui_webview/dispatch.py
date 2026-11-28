@@ -42,6 +42,7 @@ JS_API_EXCLUDED: frozenset[str] = frozenset(
         "toggle_ambilight",
         "toggle_music_sync",
         "trigger_global_hotkey",
+        "trigger_session_event",
     }
 )
 
@@ -81,6 +82,7 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
     "set_global_hotkeys": BridgeHandlers.set_global_hotkeys,
     "set_language": BridgeLifecycle.set_language,
     "set_power": BridgeHandlers.set_power,
+    "set_session_triggers": BridgeHandlers.set_session_triggers,
     "set_temperature": BridgeHandlers.set_temperature,
     "set_theme": BridgeLifecycle.set_theme,
     "set_wakeup_ramp_config": BridgeHandlers.set_wakeup_ramp_config,

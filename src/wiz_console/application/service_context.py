@@ -21,7 +21,11 @@ from wiz_console.application.ambilight_stream import AmbilightStreamManager
 from wiz_console.application.music_stream import MusicSyncStreamManager
 from wiz_console.application.rate_limiter import StreamRateLimiter
 from wiz_console.application.sleep_timer import SleepTimerManager
-from wiz_console.domain.automation import CircadianConfig, WakeupRampConfig
+from wiz_console.domain.automation import (
+    CircadianConfig,
+    SessionTriggersConfig,
+    WakeupRampConfig,
+)
 from wiz_console.domain.models import Bulb, LightState, Zone
 from wiz_console.domain.scenes import CustomScene
 from wiz_console.domain.value_objects import (
@@ -141,6 +145,7 @@ class ServiceContext:
         self.global_hotkeys: dict[str, Any] = default_global_hotkeys()
         self.circadian_config: dict[str, Any] = CircadianConfig().to_dict()
         self.wakeup_ramp_config: dict[str, Any] = WakeupRampConfig().to_dict()
+        self.session_triggers: dict[str, Any] = SessionTriggersConfig().to_dict()
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -203,6 +208,10 @@ class ServiceContext:
                     ).to_dict()
                 except ValueError:
                     self.wakeup_ramp_config = WakeupRampConfig().to_dict()
+            if "session_triggers" in loaded_settings:
+                self.session_triggers = SessionTriggersConfig.from_dict(
+                    loaded_settings["session_triggers"]
+                ).to_dict()
             raw_selected = loaded_settings.get("selected_ips")
             if isinstance(raw_selected, list) and self.bulbs:
                 restored = [ip for ip in raw_selected if isinstance(ip, str) and ip in self.bulbs]
@@ -304,6 +313,7 @@ class ServiceContext:
                 },
                 "circadian": dict(self.circadian_config),
                 "wakeup_ramp": dict(self.wakeup_ramp_config),
+                "session_triggers": dict(self.session_triggers),
             }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True

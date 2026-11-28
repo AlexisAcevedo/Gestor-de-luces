@@ -33,7 +33,10 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         "wakeup-duration": { tag: "input", type: "number", value: "20" },
         "save-wakeup-btn": { tag: "button" },
         "trigger-wakeup-btn": { tag: "button" },
-        "cancel-wakeup-btn": { tag: "button", disabled: true }
+        "cancel-wakeup-btn": { tag: "button", disabled: true },
+        "session-off-on-lock": { tag: "input", type: "checkbox", checked: false },
+        "session-restore-on-unlock": { tag: "input", type: "checkbox", checked: false },
+        "session-off-on-sleep": { tag: "input", type: "checkbox", checked: false }
       }
     });
     dom.install();
@@ -61,6 +64,7 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
       target_ips: []
     };
     appState.wakeupRampStatus = { active: false, progress: 0.0 };
+    appState.sessionTriggers = { off_on_lock: true, restore_on_unlock: false, off_on_sleep: false };
   });
 
   afterEach(() => {
@@ -86,6 +90,10 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
         cancel_wakeup_ramp: async () => {
           calls.push(["cancel_wakeup_ramp"]);
           return { ok: true, wakeup_ramp_status: { active: false, progress: 0.0 }, error: null };
+        },
+        set_session_triggers: async (cfg) => {
+          calls.push(["set_session_triggers", cfg]);
+          return { ok: true, session_triggers: cfg, error: null };
         }
       }
     };
@@ -115,5 +123,13 @@ describe("Automation UI: Circadian & Wake-Up Ramp (PR 2B.1)", () => {
     await new Promise((r) => setTimeout(r, 0));
     assert.equal(calls[2][0], "cancel_wakeup_ramp");
     assert.equal(dom.getById("cancel-wakeup-btn").disabled, true);
+
+    assert.equal(dom.getById("session-off-on-lock").checked, true);
+    dom.getById("session-restore-on-unlock").checked = true;
+    dom.getById("session-restore-on-unlock").dispatchEvent("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls[3][0], "set_session_triggers");
+    assert.equal(calls[3][1].off_on_lock, true);
+    assert.equal(calls[3][1].restore_on_unlock, true);
   });
 });

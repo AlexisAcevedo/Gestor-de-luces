@@ -54,6 +54,8 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
    - Configurable countdown timer (1 to 240 minutes) with progressive brightness dimming down to zero before powering off.
 7. Circadian Curve & Wake-Up Sunrise Ramp:
    - Opt-in time-of-day Kelvin and brightness curve (`CircadianConfig`) plus local-only scheduled sunrise ramp (`WakeupRampConfig`) targeting selected bulbs or zones.
+8. Windows Session Lock & Sleep Triggers:
+   - Opt-in Win32 session/power monitor (`WindowsSessionMonitor`) to turn lights off when locking or sleeping and restore prior color/Kelvin/scene state on unlock or resume.
 
 7. Bilingual & Multi-Theme Desktop Console:
    - Native bilingual interface in English (`en`) and Spanish (`es`) with dynamic instant switching across UI, localized native window title, System Tray, and window menu bar, plus zero-flash startup for both theme and language (`#theme=<theme>&lang=<lang>`).

@@ -482,6 +482,18 @@ class LightControlService:
         """Return live status of the sunrise wake-up ramp."""
         return self._automation.get_wakeup_ramp_status()
 
+    def get_session_triggers(self) -> dict[str, Any]:
+        """Return normalized Windows lock/sleep session trigger settings."""
+        return self._automation.get_session_triggers()
+
+    def set_session_triggers(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist Windows session trigger preferences."""
+        return self._automation.set_session_triggers(config)
+
+    async def handle_session_event(self, event: str) -> dict[str, Any]:
+        """Apply opt-in lighting behavior for a normalized Windows session event."""
+        return await self._automation.handle_session_event(event)
+
     def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
         """Start a sunrise wake-up ramp immediately."""
         return self._automation.trigger_wakeup_ramp(ips=ips)

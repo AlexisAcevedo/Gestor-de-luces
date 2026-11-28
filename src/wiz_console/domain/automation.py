@@ -212,3 +212,36 @@ def evaluate_wakeup_progress(progress_0_to_1: float, config: WakeupRampConfig) -
         max(2200, min(6500, int(kelvin))),
         max(10, min(100, int(brightness))),
     )
+
+
+@dataclass
+class SessionTriggersConfig:
+    """Opt-in Windows lock/unlock and sleep/resume lighting trigger preferences."""
+
+    off_on_lock: bool = False
+    restore_on_unlock: bool = False
+    off_on_sleep: bool = False
+
+    def __post_init__(self) -> None:
+        self.off_on_lock = bool(self.off_on_lock)
+        self.restore_on_unlock = bool(self.restore_on_unlock)
+        self.off_on_sleep = bool(self.off_on_sleep)
+
+    def to_dict(self) -> dict[str, bool]:
+        """Serialize session trigger preferences for JSON persistence and IPC."""
+        return {
+            "off_on_lock": self.off_on_lock,
+            "restore_on_unlock": self.restore_on_unlock,
+            "off_on_sleep": self.off_on_sleep,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> SessionTriggersConfig:
+        """Reconstruct `SessionTriggersConfig` from persisted or IPC mapping."""
+        if not isinstance(data, Mapping):
+            return cls()
+        return cls(
+            off_on_lock=bool(data.get("off_on_lock", False)),
+            restore_on_unlock=bool(data.get("restore_on_unlock", False)),
+            off_on_sleep=bool(data.get("off_on_sleep", False)),
+        )

@@ -44,6 +44,7 @@ from wiz_console.adapters.storage.json_repositories import (
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 from wiz_console.adapters.system.windows_autostart import WindowsRegistryAutostart
 from wiz_console.adapters.system.windows_hotkeys import WindowsGlobalHotkeyManager
+from wiz_console.adapters.system.windows_session import WindowsSessionMonitor
 from wiz_console.adapters.tray import TrayController
 from wiz_console.adapters.ui_webview.bridge import WebviewBridge
 from wiz_console.adapters.wiz.udp_controller import WizUdpController
@@ -51,6 +52,7 @@ from wiz_console.application.service import LightControlService
 from wiz_console.desktop import DesktopApplication
 from wiz_console.ports.autostart import AutostartManager
 from wiz_console.ports.hotkeys import GlobalHotkeyManager
+from wiz_console.ports.session_monitor import SessionMonitor
 from wiz_console.resources import resolve_asset_path, resolve_resource_root
 
 # Reexportes de la capa de plataforma Windows: las pruebas y los consumidores historicos
@@ -160,6 +162,13 @@ def _default_hotkeys() -> GlobalHotkeyManager | None:
     if sys.platform != "win32":
         return None
     return WindowsGlobalHotkeyManager()
+
+
+def _default_session_monitor() -> SessionMonitor | None:
+    """Win32 session lock/power monitor on Windows; None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    return WindowsSessionMonitor()
 
 
 def build_application(
@@ -312,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             guard=guard,
             autostart=autostart,
             hotkeys=_default_hotkeys(),
+            session_monitor=_default_session_monitor(),
         )
         apply_app_user_model_id()
         app.create_window()

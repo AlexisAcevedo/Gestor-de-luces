@@ -44,6 +44,7 @@ export function createBrowserMockApi() {
   let mockCircadian = { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 };
   let mockWakeupRamp = { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] };
   let mockWakeupStatus = { active: false, progress: 0.0 };
+  let mockSessionTriggers = { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -109,6 +110,7 @@ export function createBrowserMockApi() {
       circadian: Object.assign({}, mockCircadian),
       wakeup_ramp: Object.assign({}, mockWakeupRamp),
       wakeup_ramp_status: Object.assign({}, mockWakeupStatus),
+      session_triggers: Object.assign({}, mockSessionTriggers),
       error: null
     });
   }
@@ -441,6 +443,10 @@ export function createBrowserMockApi() {
     },
     cancel_wakeup_ramp: () => {
       mockWakeupStatus = { active: false, progress: 0.0 };
+      return buildMockEnvelope();
+    },
+    set_session_triggers: (config) => {
+      mockSessionTriggers = Object.assign({}, mockSessionTriggers, config || {});
       return buildMockEnvelope();
     }
   };

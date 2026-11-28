@@ -261,6 +261,9 @@
       "auto.saveWakeupBtn": "Save",
       "auto.triggerWakeupBtn": "Test Sunrise",
       "auto.cancelWakeupBtn": "Stop",
+      "auto.sessionOffLock": "Turn lights off when locking Windows",
+      "auto.sessionRestoreUnlock": "Restore previous lighting on unlock or wake",
+      "auto.sessionOffSleep": "Turn lights off before system sleep",
 
       /* Dialogos modales */
       "dialog.cancel": "Cancel",
@@ -414,7 +417,8 @@
       "status.wakeupSaved": "Wake-up sunrise ramp scheduled.",
       "status.wakeupDisabled": "Wake-up sunrise ramp disabled.",
       "status.wakeupTriggered": "Sunrise wake-up ramp started.",
-      "status.wakeupCancelled": "Sunrise wake-up ramp stopped."
+      "status.wakeupCancelled": "Sunrise wake-up ramp stopped.",
+      "status.sessionTriggersSaved": "Windows session trigger settings saved."
     },
 
     es: {
@@ -670,6 +674,9 @@
       "auto.saveWakeupBtn": "Guardar",
       "auto.triggerWakeupBtn": "Probar amanecer",
       "auto.cancelWakeupBtn": "Detener",
+      "auto.sessionOffLock": "Apagar luces al bloquear Windows",
+      "auto.sessionRestoreUnlock": "Restaurar iluminación previa al desbloquear o reactivar",
+      "auto.sessionOffSleep": "Apagar luces antes de suspender el equipo",
       "dialog.addTitle": "Agregar Luminaria por IP",
       "dialog.addSubtitle": "Conecta directamente un foco WiZ en tu red local cuando el escaneo automático no lo encuentra.",
       "dialog.addIpLabel": "Dirección IP de la Luminaria",
@@ -820,7 +827,8 @@
       "status.wakeupSaved": "Rampa de amanecer programada.",
       "status.wakeupDisabled": "Rampa de amanecer desactivada.",
       "status.wakeupTriggered": "Rampa de amanecer iniciada.",
-      "status.wakeupCancelled": "Rampa de amanecer detenida."
+      "status.wakeupCancelled": "Rampa de amanecer detenida.",
+      "status.sessionTriggersSaved": "Configuración de disparadores de sesión guardada."
     }
   };
 

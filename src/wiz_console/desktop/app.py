@@ -59,6 +59,7 @@ from wiz_console.domain.value_objects import DEFAULT_THEME, normalize_language, 
 from wiz_console.ports.autostart import AutostartManager
 from wiz_console.ports.hotkeys import GlobalHotkeyManager
 from wiz_console.ports.light_control import LightControlServicePort
+from wiz_console.ports.session_monitor import SessionMonitor
 from wiz_console.resources import resolve_app_version
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,6 +121,7 @@ class DesktopApplication:
         guard: SingleInstanceGuard | None = None,
         autostart: AutostartManager | None = None,
         hotkeys: GlobalHotkeyManager | None = None,
+        session_monitor: SessionMonitor | None = None,
         webview_module: Any = None,
     ) -> None:
         self._service = service
@@ -133,6 +135,7 @@ class DesktopApplication:
         self._guard = guard
         self._autostart = autostart
         self._hotkeys = hotkeys
+        self._session_monitor = session_monitor
         self._webview_module = webview_module
 
         self._webview: Any = None
@@ -278,6 +281,8 @@ class DesktopApplication:
         if self._hotkeys is not None:
             self._hotkeys.start(self.on_global_hotkey)
             self._sync_hotkeys(force=True)
+        if self._session_monitor is not None:
+            self._session_monitor.start(self.on_session_event)
         if self._tray is not None:
             self._tray.start()
         try:
@@ -327,6 +332,8 @@ class DesktopApplication:
             self._run_cleanup_step("single-instance guard", self._guard.release)
         if self._hotkeys is not None:
             self._run_cleanup_step("global hotkeys", self._hotkeys.stop)
+        if self._session_monitor is not None:
+            self._run_cleanup_step("session monitor", self._session_monitor.stop)
         if self._tray is not None:
             self._run_cleanup_step("system tray", self._tray.stop)
         self._run_cleanup_step("webview bridge", self._bridge.shutdown)
@@ -693,6 +700,18 @@ class DesktopApplication:
         result = self._bridge.trigger_global_hotkey(action_id)
         if not result.get("ok") and result.get("error"):
             _LOGGER.warning("Global hotkey '%s' failed: %s", action_id, result.get("error"))
+        self.notify_ui()
+        if self._tray is not None:
+            self._tray.request_refresh()
+
+    def on_session_event(self, event: str) -> None:
+        """Dispatch an OS lock/unlock or sleep/resume trigger cleanly on the host."""
+        with self._state_lock:
+            if self._is_quitting:
+                return
+        result = self._bridge.trigger_session_event(event)
+        if not result.get("ok") and result.get("error"):
+            _LOGGER.warning("Session event '%s' failed: %s", event, result.get("error"))
         self.notify_ui()
         if self._tray is not None:
             self._tray.request_refresh()

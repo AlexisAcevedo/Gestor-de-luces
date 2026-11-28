@@ -194,6 +194,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   if (envelope.wakeup_ramp_status && typeof envelope.wakeup_ramp_status === "object") {
     appState.wakeupRampStatus = envelope.wakeup_ramp_status;
   }
+  if (envelope.session_triggers && typeof envelope.session_triggers === "object") {
+    appState.sessionTriggers = envelope.session_triggers;
+  }
   if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
     const prev = appState.globalHotkeys || {};
     appState.globalHotkeys = {
@@ -295,7 +298,13 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     }
     if (hasMusic) syncMusicPolling();
   }
-  if (envelope.circadian || envelope.wakeup_ramp || envelope.wakeup_ramp_status || langChanged) {
+  if (
+    envelope.circadian ||
+    envelope.wakeup_ramp ||
+    envelope.wakeup_ramp_status ||
+    envelope.session_triggers ||
+    langChanged
+  ) {
     renderAutomationPanel();
   }
   const streamToggled =

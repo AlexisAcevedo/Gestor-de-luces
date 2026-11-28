@@ -115,6 +115,7 @@ _JS_API_SURFACE = frozenset(
         "set_global_hotkeys",
         "set_language",
         "set_power",
+        "set_session_triggers",
         "set_temperature",
         "set_theme",
         "set_wakeup_ramp_config",
