@@ -57,6 +57,7 @@ from wiz_console.adapters.ui_webview.bridge import (
 from wiz_console.adapters.ui_webview.http_server import NoCacheBottleServer
 from wiz_console.domain.value_objects import DEFAULT_THEME, normalize_language, normalize_theme
 from wiz_console.ports.autostart import AutostartManager
+from wiz_console.ports.hotkeys import GlobalHotkeyManager
 from wiz_console.ports.light_control import LightControlServicePort
 from wiz_console.resources import resolve_app_version
 
@@ -118,6 +119,7 @@ class DesktopApplication:
         multi_instance: bool = False,
         guard: SingleInstanceGuard | None = None,
         autostart: AutostartManager | None = None,
+        hotkeys: GlobalHotkeyManager | None = None,
         webview_module: Any = None,
     ) -> None:
         self._service = service
@@ -130,6 +132,7 @@ class DesktopApplication:
         self._multi_instance = multi_instance
         self._guard = guard
         self._autostart = autostart
+        self._hotkeys = hotkeys
         self._webview_module = webview_module
 
         self._webview: Any = None
@@ -145,6 +148,7 @@ class DesktopApplication:
         self._visibility_generation = 0
         self._last_titlebar_theme: str | None = None
         self._last_menu_language = str(service.get_language() or "en")
+        self._last_hotkey_config: tuple[bool, tuple[tuple[str, str], ...]] | None = None
         tray_hint_getter = getattr(service, "get_tray_hint_seen", None)
         self._tray_hint_shown = bool(tray_hint_getter()) if callable(tray_hint_getter) else False
 
@@ -213,6 +217,11 @@ class DesktopApplication:
         self._window_size = (win_width, win_height)
 
         self._bridge.set_fit_window_callback(self.fit_window)
+        if self._hotkeys is not None:
+            self._bridge.set_global_hotkey_runtime(
+                supported=self._hotkeys.is_supported(),
+                errors={},
+            )
 
         initial_theme = normalize_theme(self._service.get_theme())
         initial_language = normalize_language(self._service.get_language())
@@ -266,6 +275,9 @@ class DesktopApplication:
         self._menu_sync_thread.start()
         if self._guard is not None:
             self._guard.listen(self.show_window)
+        if self._hotkeys is not None:
+            self._hotkeys.start(self.on_global_hotkey)
+            self._sync_hotkeys(force=True)
         if self._tray is not None:
             self._tray.start()
         try:
@@ -304,6 +316,8 @@ class DesktopApplication:
         self._release_window_icons()
         if self._guard is not None:
             self._guard.release()
+        if self._hotkeys is not None:
+            self._hotkeys.stop()
         if self._tray is not None:
             self._tray.stop()
         self._bridge.shutdown()
@@ -639,8 +653,44 @@ class DesktopApplication:
         if action_id != ACTION_EXIT:
             self.request_menu_sync()
 
+    def _sync_hotkeys(self, *, force: bool = False) -> None:
+        """Apply updated global hotkey bindings only when settings change or forced."""
+        if self._hotkeys is None:
+            return
+        getter = getattr(self._service, "get_global_hotkeys", None)
+        if not callable(getter):
+            return
+        cfg = getter()
+        enabled = bool(cfg.get("enabled", False))
+        bindings = {str(k): str(v) for k, v in (cfg.get("bindings") or {}).items()}
+        config_key = (enabled, tuple(sorted(bindings.items())))
+        with self._state_lock:
+            if not force and config_key == self._last_hotkey_config:
+                return
+            self._last_hotkey_config = config_key
+        errors = self._hotkeys.apply_config(enabled=enabled, bindings=bindings)
+        setter = getattr(self._bridge, "set_global_hotkey_runtime", None)
+        if callable(setter):
+            setter(supported=self._hotkeys.is_supported(), errors=errors)
+
+    def on_global_hotkey(self, action_id: str) -> None:
+        """Dispatch an OS-level global hotkey callback cleanly on the host."""
+        with self._state_lock:
+            if self._is_quitting:
+                return
+        if action_id == "toggle_window":
+            self.toggle_window()
+            return
+        result = self._bridge.trigger_global_hotkey(action_id)
+        if not result.get("ok") and result.get("error"):
+            _LOGGER.warning("Global hotkey '%s' failed: %s", action_id, result.get("error"))
+        self.notify_ui()
+        if self._tray is not None:
+            self._tray.request_refresh()
+
     def on_state_changed(self) -> None:
         """Reacciona a una mutacion hecha desde la UI: titulo, bandeja y menu si cambio idioma."""
+        self._sync_hotkeys()
         self.sync_theme_titlebar()
         if self._tray is not None:
             self._tray.request_refresh()

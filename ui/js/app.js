@@ -15,8 +15,8 @@ import {
 import { bindMusicEvents, renderMusicPanel, syncMusicPolling } from "./music.js";
 import { bindSceneEvents, renderCustomScenesGrid, renderScenesGrid } from "./scenes.js";
 import {
-  requestFit, setupDialogLightDismissFallbacks, setupGlobalShortcuts,
-  setupResizeThrottle, setupWindowFit
+  bindGlobalHotkeyEvents, renderGlobalHotkeys, requestFit, setupDialogLightDismissFallbacks,
+  setupGlobalShortcuts, setupResizeThrottle, setupWindowFit
 } from "./shortcuts.js";
 import {
   bindStageControlEvents, drawColorWheel, positionReticleFromRgb, renderStageHeaderAndControls
@@ -149,6 +149,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   const hasFavScenes = Array.isArray(envelope.favorite_builtin_scenes);
   const hasAmbiPrefs = Boolean(envelope.ambilight_prefs && typeof envelope.ambilight_prefs === "object");
   const hasMusicPrefs = Boolean(envelope.music_prefs && typeof envelope.music_prefs === "object");
+  const hasGlobalHotkeys = Boolean(envelope.global_hotkeys && typeof envelope.global_hotkeys === "object");
 
   const langChanged = typeof envelope.language === "string" ? syncLanguageUi(envelope.language) : false;
   if (typeof envelope.theme === "string") syncThemeUi(envelope.theme);
@@ -183,6 +184,22 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
   if (hasAmbiPrefs) appState.ambilightPrefs = envelope.ambilight_prefs;
   if (hasMusicPrefs) appState.musicPrefs = envelope.music_prefs;
+  if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
+    const prev = appState.globalHotkeys || {};
+    appState.globalHotkeys = {
+      enabled: hasGlobalHotkeys ? Boolean(envelope.global_hotkeys.enabled) : Boolean(prev.enabled),
+      supported: typeof envelope.global_hotkeys_supported === "boolean"
+        ? envelope.global_hotkeys_supported
+        : Boolean(prev.supported),
+      bindings: hasGlobalHotkeys && envelope.global_hotkeys.bindings
+        ? Object.assign({}, envelope.global_hotkeys.bindings)
+        : Object.assign({}, prev.bindings || {}),
+      errors: envelope.global_hotkey_errors && typeof envelope.global_hotkey_errors === "object"
+        ? Object.assign({}, envelope.global_hotkey_errors)
+        : Object.assign({}, prev.errors || {})
+    };
+    renderGlobalHotkeys();
+  }
   if (hasBulbs) appState.bulbs = envelope.bulbs;
   if (hasSelected) appState.selectedIps = envelope.selected_ips;
   if (hasScenes) appState.scenes = envelope.scenes;
@@ -418,6 +435,7 @@ export function bindEvents() {
   bindSceneEvents({ activateTab });
   bindAmbilightEvents();
   bindMusicEvents();
+  bindGlobalHotkeyEvents();
 
   document.addEventListener("visibilitychange", () => {
     const api = getBackendApi();

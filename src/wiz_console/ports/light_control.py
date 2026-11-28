@@ -64,6 +64,18 @@ class LightControlServicePort(Protocol):
         """Return persisted Music Sync configuration defaults."""
         ...
 
+    def get_global_hotkeys(self) -> dict[str, Any]:
+        """Return the opt-in global Windows hotkeys configuration."""
+        ...
+
+    def set_global_hotkeys(
+        self,
+        enabled: bool,
+        bindings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate and persist opt-in global Windows hotkeys configuration."""
+        ...
+
     # --- Inventario de focos ---
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""

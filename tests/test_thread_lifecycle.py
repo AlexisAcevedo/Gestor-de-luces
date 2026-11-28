@@ -7,6 +7,7 @@ Inventario de nombres verificado contra `threading.Thread(` del codigo y documen
 - `WizConsoleAsyncLoop` (bucle de eventos del puente IPC).
 - `WizConsoleMenuSync`, `WizConsoleHideOnClose`, `WizConsoleHideOnMinimize` (escritorio).
 - `WizConsoleSingleInstance` (guarda de instancia unica).
+- `WizConsoleHotkeys` (atajos globales Win32 `RegisterHotKey`).
 
 Cada espera es acotada y sobre una condicion observable (`threading.enumerate()`, un efecto
 del hilo): no hay `sleep` de duracion fija, y el mensaje de fallo nombra la condicion que no
@@ -26,6 +27,10 @@ from typing import Any
 import pytest
 
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
+from wiz_console.adapters.system.windows_hotkeys import (
+    HOTKEY_THREAD_NAME,
+    WindowsGlobalHotkeyManager,
+)
 from wiz_console.adapters.tray.menu_model import ACTION_TURN_OFF
 from wiz_console.adapters.tray.tray_icon import (
     ICON_THREAD_NAME,
@@ -60,10 +65,11 @@ APP_THREAD_NAMES = frozenset(
         HIDE_ON_CLOSE_THREAD_NAME,
         HIDE_ON_MINIMIZE_THREAD_NAME,
         SINGLE_INSTANCE_THREAD_NAME,
+        HOTKEY_THREAD_NAME,
     }
 )
 #: Hilos que arranca la aplicacion de escritorio y que no deben sobrevivir al cierre.
-DESKTOP_THREAD_NAMES = APP_THREAD_NAMES - {SINGLE_INSTANCE_THREAD_NAME}
+DESKTOP_THREAD_NAMES = APP_THREAD_NAMES - {SINGLE_INSTANCE_THREAD_NAME, HOTKEY_THREAD_NAME}
 
 DEADLINE_SECONDS = 10.0
 POLL_SECONDS = 0.01
@@ -228,6 +234,9 @@ class _FakeLightControlService:
 
     def get_music_sync_status(self) -> dict[str, Any]:
         return {"active": False}
+
+    def get_global_hotkeys(self) -> dict[str, Any]:
+        return {"enabled": False, "bindings": {}}
 
     def get_language(self) -> str:
         return "en"
@@ -469,3 +478,27 @@ def test_releasing_the_single_instance_guard_stops_its_listener_thread() -> None
         lambda: SINGLE_INSTANCE_THREAD_NAME not in _live_thread_names(),
         "release() left the single-instance listener thread alive",
     )
+
+
+def test_stopping_global_hotkey_manager_leaves_no_hotkey_thread() -> None:
+    """`stop()` posts WM_QUIT and joins the `WizConsoleHotkeys` thread cleanly."""
+    from tests.test_global_hotkeys import _FakeKernel32, _FakeUser32
+
+    kernel32 = _FakeKernel32()
+    user32 = _FakeUser32(kernel32)
+    manager = WindowsGlobalHotkeyManager(user32=user32, kernel32=kernel32, platform="win32")
+    manager.start(lambda _action: None)
+    _wait_until(
+        lambda: HOTKEY_THREAD_NAME in _live_thread_names(),
+        "the global hotkey pump thread never started",
+    )
+    hk_thread = _thread_named(HOTKEY_THREAD_NAME)
+    assert hk_thread.daemon is True
+
+    manager.stop()
+
+    _wait_until(
+        lambda: HOTKEY_THREAD_NAME not in _live_thread_names(),
+        "stop() left the global hotkey pump thread alive",
+    )
+    assert hk_thread.is_alive() is False

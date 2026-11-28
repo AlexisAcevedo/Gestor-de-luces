@@ -65,7 +65,19 @@ class WebviewBridge(BridgeHandlers, BridgeLifecycle, WindowFitHandlers):
         self._on_state_changed = on_state_changed
         self._monitors_cache: list[dict[str, Any]] | None = None
         self._audio_devices_cache: list[dict[str, Any]] | None = None
+        self._hotkey_supported = False
+        self._hotkey_errors: dict[str, str] = {}
         self._start_async_loop()
+
+    def set_global_hotkey_runtime(
+        self,
+        *,
+        supported: bool,
+        errors: dict[str, str] | None = None,
+    ) -> None:
+        """Record platform support and per-action registration errors for snapshots."""
+        self._hotkey_supported = bool(supported)
+        self._hotkey_errors = dict(errors) if errors else {}
 
     def get_tray_snapshot(self) -> dict[str, Any]:
         """Devuelve una vista resumida y serializable del estado para la bandeja del sistema.
@@ -131,3 +143,31 @@ class WebviewBridge(BridgeHandlers, BridgeLifecycle, WindowFitHandlers):
                 self._service.start_music_sync(**prefs)
 
         return self._call(_toggle)
+
+    def trigger_global_hotkey(self, action_id: str) -> dict[str, Any]:
+        """Execute a host-dispatched global hotkey action against selected fixtures."""
+        if action_id == "toggle_power":
+            return self.toggle_power()
+        if action_id == "toggle_ambilight":
+            return self.toggle_ambilight()
+        if action_id == "toggle_music_sync":
+            return self.toggle_music_sync()
+        if action_id in {"brightness_up", "brightness_down"}:
+            delta = 10 if action_id == "brightness_up" else -10
+
+            async def _nudge() -> None:
+                targets = [
+                    bulb
+                    for ip in self._service.get_target_ips()
+                    if (bulb := self._service.get_bulb(ip)) is not None
+                ]
+                lit = [bulb for bulb in targets if bulb.is_online and bulb.state.is_on]
+                reference = lit[0] if lit else (targets[0] if targets else None)
+                current = reference.state.brightness if reference is not None else 100
+                next_brightness = max(10, min(100, current + delta))
+                await self._service.set_brightness(next_brightness)
+
+            return self._call(_nudge)
+        return self._build_response(
+            ok=False, error=f"Unsupported global hotkey action: {action_id}."
+        )

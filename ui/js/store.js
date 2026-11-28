@@ -157,6 +157,19 @@ export const appState = {
   customScenes: [],
   ambilightPrefs: null,
   musicPrefs: null,
+  globalHotkeys: {
+    enabled: false,
+    supported: false,
+    bindings: {
+      toggle_power: "Ctrl+Alt+P",
+      brightness_up: "Ctrl+Alt+Up",
+      brightness_down: "Ctrl+Alt+Down",
+      toggle_ambilight: "Ctrl+Alt+A",
+      toggle_music_sync: "Ctrl+Alt+M",
+      toggle_window: "Ctrl+Alt+W"
+    },
+    errors: {}
+  },
   sleepTimer: {
     active: false,
     remaining_seconds: 0,

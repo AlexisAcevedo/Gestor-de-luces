@@ -278,6 +278,27 @@ class BridgeHandlers:
 
         return self._call(_update)
 
+    def set_global_hotkeys(
+        self,
+        enabled: bool,
+        bindings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate and persist opt-in global Windows hotkeys configuration."""
+
+        def _update() -> None:
+            checked_enabled = _req_bool(enabled, field="enabled")
+            checked_bindings: dict[str, str] | None = None
+            if bindings is not None:
+                if not isinstance(bindings, dict):
+                    raise ValueError("bindings must be a mapping of action names to shortcuts.")
+                checked_bindings = {
+                    _req_str(k, field="action").strip(): _req_str(v, field="combo").strip()
+                    for k, v in bindings.items()
+                }
+            self._service.set_global_hotkeys(checked_enabled, bindings=checked_bindings)
+
+        return self._call(_update)
+
     # --- Presets personalizados -----------------------------------------------------
 
     def save_custom_scene(self, name: str, source_ip: str | None = None) -> dict[str, Any]:

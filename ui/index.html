@@ -1144,6 +1144,80 @@
           <div><dt><kbd>1</kbd>&ndash;<kbd>6</kbd></dt><dd data-i18n="shortcuts.tabs">Switch emission mode tab</dd></div>
           <div><dt><kbd>?</kbd></dt><dd data-i18n="shortcuts.help">Show this help</dd></div>
         </dl>
+
+        <fieldset class="hotkey-settings-fieldset" id="global-hotkeys-fieldset">
+          <legend data-i18n="hotkeys.sectionTitle">Global Windows Hotkeys</legend>
+          <p class="well-description" id="global-hotkeys-hint" data-i18n="hotkeys.hint">Works while minimized to the tray on Windows. Focus a field and press a modifier + key combination, or leave blank to unbind.</p>
+          <p class="field-hint" id="global-hotkeys-unsupported" data-i18n="hotkeys.unsupported" hidden>Global hotkeys are available only when running the Windows desktop host.</p>
+
+          <label class="checkbox-control" for="global-hotkeys-enabled">
+            <input type="checkbox" id="global-hotkeys-enabled" name="global_hotkeys_enabled">
+            <span data-i18n="hotkeys.enableLabel">Enable system-wide shortcuts (opt-in)</span>
+          </label>
+
+          <div class="hotkey-grid">
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_power" data-i18n="hotkeys.action.toggle_power">Toggle power</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_power" name="hotkey_toggle_power" class="hotkey-input" data-hotkey-action="toggle_power" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_power">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_power" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_power" aria-label="Clear Toggle power shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_power" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-brightness_up" data-i18n="hotkeys.action.brightness_up">Brightness +10%</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-brightness_up" name="hotkey_brightness_up" class="hotkey-input" data-hotkey-action="brightness_up" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-brightness_up">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="brightness_up" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.brightness_up" aria-label="Clear Brightness +10% shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-brightness_up" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-brightness_down" data-i18n="hotkeys.action.brightness_down">Brightness -10%</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-brightness_down" name="hotkey_brightness_down" class="hotkey-input" data-hotkey-action="brightness_down" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-brightness_down">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="brightness_down" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.brightness_down" aria-label="Clear Brightness -10% shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-brightness_down" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_ambilight" data-i18n="hotkeys.action.toggle_ambilight">Toggle Ambilight</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_ambilight" name="hotkey_toggle_ambilight" class="hotkey-input" data-hotkey-action="toggle_ambilight" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_ambilight">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_ambilight" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_ambilight" aria-label="Clear Toggle Ambilight shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_ambilight" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_music_sync" data-i18n="hotkeys.action.toggle_music_sync">Toggle Music Sync</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_music_sync" name="hotkey_toggle_music_sync" class="hotkey-input" data-hotkey-action="toggle_music_sync" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_music_sync">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_music_sync" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_music_sync" aria-label="Clear Toggle Music Sync shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_music_sync" role="alert" hidden></span>
+            </div>
+
+            <div class="hotkey-row">
+              <label for="hotkey-input-toggle_window" data-i18n="hotkeys.action.toggle_window">Show / hide window</label>
+              <div class="hotkey-input-group">
+                <input type="text" id="hotkey-input-toggle_window" name="hotkey_toggle_window" class="hotkey-input" data-hotkey-action="toggle_window" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hotkey-error-toggle_window">
+                <button type="button" class="btn btn-ghost hotkey-clear-btn" data-hotkey-clear="toggle_window" data-i18n="hotkeys.clearBtn" data-i18n-aria-label="hotkeys.clearAria.toggle_window" aria-label="Clear Show / hide window shortcut">Clear</button>
+              </div>
+              <span class="field-error hotkey-row-error" id="hotkey-error-toggle_window" role="alert" hidden></span>
+            </div>
+          </div>
+
+          <p class="field-error" id="global-hotkeys-error" role="alert" hidden></p>
+
+          <div class="hotkey-actions-row">
+            <button type="button" class="btn btn-ghost" id="reset-global-hotkeys-btn" data-i18n="hotkeys.resetBtn">Reset Defaults</button>
+            <button type="button" class="btn btn-primary" id="save-global-hotkeys-btn" data-i18n="hotkeys.saveBtn">Save Global Hotkeys</button>
+          </div>
+        </fieldset>
       </div>
       <footer class="dialog-footer">
         <button type="submit" class="btn btn-primary" data-i18n="shortcuts.close">Close</button>
