@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from wiz_console.domain.models import Bulb, LightState
+from wiz_console.domain.models import Bulb, LightState, Zone
 from wiz_console.domain.scenes import CustomScene
 from wiz_console.domain.value_objects import Color
 
@@ -158,4 +158,17 @@ class AudioSampler(Protocol):
 
     def close(self) -> None:
         """Cierra de forma segura el flujo de captura de audio activo."""
+        ...
+
+
+@runtime_checkable
+class ZoneRepository(Protocol):
+    """Port for persisting user-defined zones (named groups of bulbs)."""
+
+    def load_zones(self) -> list[Zone]:
+        """Load persisted zones from storage."""
+        ...
+
+    def save_zones(self, zones: list[Zone]) -> None:
+        """Atomically persist the zone list."""
         ...

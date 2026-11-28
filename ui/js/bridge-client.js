@@ -14,6 +14,7 @@ export function createBrowserMockApi() {
     state: { is_on: true, brightness: 85, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
   }];
   let mockSelected = ["192.168.0.34"];
+  let mockZones = [];
   let mockCustomScenes = [
     { id: "preset01", name: "Editorial Warmth", mode: "temperature", brightness: 70, color: null, temperature: 2700, built_in_scene_id: null, speed: 100, is_favorite: true },
     { id: "preset02", name: "Cyan Backlight", mode: "rgb", brightness: 85, color: { r: 0, g: 180, b: 255, hex: "#00b4ff" }, temperature: null, built_in_scene_id: null, speed: 100, is_favorite: false }
@@ -40,6 +41,18 @@ export function createBrowserMockApi() {
       toggle_window: "Ctrl+Alt+W"
     }
   };
+  let mockCircadian = { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 };
+  let mockTransitionSeconds = 0;
+  let mockWakeupRamp = { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] };
+  let mockWakeupStatus = { active: false, progress: 0.0 };
+  let mockSessionTriggers = { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false };
+  let mockContextAutomation = {
+    enabled: false,
+    poll_seconds: 5,
+    on_air: { enabled: false, watch_mic: true, watch_camera: true, color_hex: "#ff2a55", brightness: 90, target_ips: [] },
+    rules: []
+  };
+  let mockLocalApi = { enabled: false, port: 18899, token: "" };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
     min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
@@ -95,12 +108,21 @@ export function createBrowserMockApi() {
       global_hotkey_errors: {},
       bulbs: JSON.parse(JSON.stringify(mockBulbs)), selected_ips: mockSelected.slice(),
       scenes: SCENE_CATALOG.slice(), custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
+      zones: JSON.parse(JSON.stringify(mockZones)),
       sleep_timer: {
         active: mockSleepTimer.active, remaining_seconds: mockSleepTimer.remaining_seconds,
         total_seconds: mockSleepTimer.total_seconds, target_ips: mockSleepTimer.target_ips.slice()
       },
       ambilight: JSON.parse(JSON.stringify(mockAmbilight)), monitors: mockMonitors.slice(),
       music_sync: JSON.parse(JSON.stringify(mockMusicSync)), audio_devices: mockAudioDevices.slice(),
+      circadian: Object.assign({}, mockCircadian),
+      wakeup_ramp: Object.assign({}, mockWakeupRamp),
+      wakeup_ramp_status: Object.assign({}, mockWakeupStatus),
+      session_triggers: Object.assign({}, mockSessionTriggers),
+      context_automation: JSON.parse(JSON.stringify(mockContextAutomation)),
+      context_status: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
+      transition_seconds: mockTransitionSeconds,
+      local_api: Object.assign({}, mockLocalApi),
       error: null
     });
   }
@@ -164,18 +186,20 @@ export function createBrowserMockApi() {
       };
       return buildMockEnvelope();
     },
-    add_manual_bulb: (ip, name) => {
+    add_manual_bulb: (ip, name, protocol = "wiz") => {
       const cleaned = String(ip || "").trim();
       if (!cleaned) {
         return Promise.resolve({ ok: false, bulbs: mockBulbs, selected_ips: mockSelected, scenes: SCENE_CATALOG.slice(), error: "IP cannot be empty." });
       }
-      const label = String(name || "").trim() || `WiZ Bulb (${cleaned})`;
+      const proto = String(protocol || "wiz").trim().toLowerCase() === "govee" ? "govee" : "wiz";
+      const label = String(name || "").trim() || `${proto === "govee" ? "Govee Bulb" : "WiZ Bulb"} (${cleaned})`;
       const existing = mockBulbs.find((b) => b.ip === cleaned);
       if (existing) {
         existing.name = label;
+        existing.protocol = proto;
       } else {
         mockBulbs.push({
-          ip: cleaned, mac: "a8bb50001122", name: label, module_name: "ESP01_SHRGB1C_31", is_online: true,
+          ip: cleaned, mac: "a8bb50001122", name: label, module_name: proto === "govee" ? "GOVEE_LAN_RGB" : "ESP01_SHRGB1C_31", protocol: proto, is_online: true,
           state: { is_on: true, brightness: 100, mode: "temperature", color: null, temperature: 4200, scene_id: null, scene_name: null, speed: 100 }
         });
         if (!mockSelected.includes(cleaned)) mockSelected.push(cleaned);
@@ -231,17 +255,38 @@ export function createBrowserMockApi() {
       });
       return buildMockEnvelope();
     },
-    save_custom_scene: (name) => {
-      const refBulb = mockBulbs.find((b) => mockSelected.includes(b.ip)) || mockBulbs[0];
+    save_custom_scene: (name, sourceIp, captureAllTargets = false) => {
+      const refBulb = mockBulbs.find((b) => (sourceIp ? b.ip === sourceIp : mockSelected.includes(b.ip))) || mockBulbs[0];
       const st = refBulb ? refBulb.state : { mode: "temperature", brightness: 100, color: null, temperature: 4200, scene_id: null, speed: 100 };
-      mockCustomScenes.push({
+      const targets = resolveTargets(null);
+      let bulbStates = null;
+      if (captureAllTargets && targets.length >= 2) {
+        bulbStates = {};
+        targets.forEach((ip) => {
+          const b = mockBulbs.find((entry) => entry.ip === ip);
+          if (b) {
+            bulbStates[ip] = {
+              is_on: Boolean(b.state.is_on),
+              mode: b.state.mode,
+              brightness: b.state.brightness,
+              color: b.state.color ? Object.assign({}, b.state.color) : null,
+              temperature: b.state.temperature,
+              built_in_scene_id: b.state.scene_id,
+              speed: b.state.speed || 100
+            };
+          }
+        });
+      }
+      const created = {
         id: Math.random().toString(16).slice(2, 10), name: String(name || "Preset").trim(),
         mode: st.mode, brightness: st.brightness, color: st.color ? Object.assign({}, st.color) : null,
         temperature: st.temperature, built_in_scene_id: st.scene_id, speed: st.speed || 100
-      });
+      };
+      if (bulbStates && Object.keys(bulbStates).length >= 2) created.bulb_states = bulbStates;
+      mockCustomScenes.push(created);
       return buildMockEnvelope();
     },
-    update_custom_scene: (sceneId, name, captureCurrent) => {
+    update_custom_scene: (sceneId, name, captureCurrent, captureAllTargets = false) => {
       const target = mockCustomScenes.find((s) => s.id === sceneId);
       if (target) {
         target.name = String(name || target.name).trim();
@@ -255,8 +300,40 @@ export function createBrowserMockApi() {
               speed: refBulb.state.speed || 100
             });
           }
+          const targets = resolveTargets(null);
+          if (captureAllTargets && targets.length >= 2) {
+            target.bulb_states = {};
+            targets.forEach((ip) => {
+              const b = mockBulbs.find((entry) => entry.ip === ip);
+              if (b) target.bulb_states[ip] = Object.assign({}, b.state);
+            });
+          } else {
+            delete target.bulb_states;
+          }
         }
       }
+      return buildMockEnvelope();
+    },
+    save_zone: (name, bulbIps, zoneId, icon) => {
+      const id = zoneId || Math.random().toString(16).slice(2, 10);
+      const next = {
+        id,
+        name: String(name || "Zone").trim(),
+        bulb_ips: Array.isArray(bulbIps) ? bulbIps.slice() : [],
+        icon: String(icon || "room")
+      };
+      const idx = mockZones.findIndex((z) => z.id === id);
+      if (idx >= 0) mockZones[idx] = next;
+      else mockZones.push(next);
+      return buildMockEnvelope();
+    },
+    delete_zone: (zoneId) => {
+      mockZones = mockZones.filter((z) => z.id !== zoneId);
+      return buildMockEnvelope();
+    },
+    select_zone: (zoneId) => {
+      const z = mockZones.find((entry) => entry.id === zoneId);
+      if (z) mockSelected = z.bulb_ips.slice();
       return buildMockEnvelope();
     },
     delete_custom_scene: (sceneId) => {
@@ -292,22 +369,26 @@ export function createBrowserMockApi() {
       return buildMockEnvelope();
     },
     get_sleep_timer_status: () => buildMockEnvelope(),
-    start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips, minBrightness) => {
+    start_ambilight: (monitorIndex, colorMode, autoBrightness, brightness, smoothingAlpha, ips, minBrightness, regionMap, letterboxCrop) => {
       const targets = resolveTargets(ips);
       const sampled = { r: 56, g: 189, b: 248, hex: "#38bdf8" };
       mockMusicSync.active = false;
       mockMusicSync.target_ips = [];
       const minBri = clampInt(minBrightness != null ? minBrightness : 10, 10, 20);
+      const cleanedRegions = (regionMap && typeof regionMap === "object") ? Object.assign({}, regionMap) : {};
+      const crop = letterboxCrop == null ? true : Boolean(letterboxCrop);
       mockAmbilightPrefs = {
         monitor_index: Number(monitorIndex || 1), color_mode: String(colorMode || "vibrant"),
         auto_brightness: Boolean(autoBrightness), min_brightness: minBri,
-        brightness: Number(brightness || 85), smoothing_alpha: Number(smoothingAlpha || 0.38)
+        brightness: Number(brightness || 85), smoothing_alpha: Number(smoothingAlpha || 0.38),
+        region_map: cleanedRegions, letterbox_crop: crop
       };
       mockAmbilight = {
         active: true, monitor_index: mockAmbilightPrefs.monitor_index, color_mode: mockAmbilightPrefs.color_mode,
         auto_brightness: mockAmbilightPrefs.auto_brightness, min_brightness: minBri,
         brightness: mockAmbilightPrefs.brightness, fixed_brightness: mockAmbilightPrefs.brightness,
         smoothing_alpha: mockAmbilightPrefs.smoothing_alpha, last_color: sampled,
+        region_map: cleanedRegions, letterbox_crop: crop, last_region_colors: { full: sampled },
         target_ips: targets, frames_sent: mockAmbilight.frames_sent + 1
       };
       mutateTargetBulbs(ips, (st) => {
@@ -324,23 +405,29 @@ export function createBrowserMockApi() {
       if (mockAmbilight.active) mockAmbilight.frames_sent += 4;
       return Promise.resolve({ ok: true, ambilight: JSON.parse(JSON.stringify(mockAmbilight)), error: null });
     },
-    start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips) => {
+    start_music_sync: (paletteMode, sensitivity, smoothingAlpha, audioBrightness, brightness, deviceIndex, ips, bandMap, beatBoost, customPalette) => {
       const targets = resolveTargets(ips);
       const sampled = { r: 240, g: 52, b: 112, hex: "#f03470" };
       mockAmbilight.active = false;
       mockAmbilight.target_ips = [];
+      const cleanedBands = (bandMap && typeof bandMap === "object") ? Object.assign({}, bandMap) : {};
+      const boost = beatBoost == null ? true : Boolean(beatBoost);
+      const custom = (customPalette && typeof customPalette === "object")
+        ? Object.assign({ bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" }, customPalette)
+        : { bass: "#ff2a55", mid: "#22e58b", treble: "#389bff" };
       mockMusicPrefs = {
         device_index: deviceIndex != null ? Number(deviceIndex) : -1,
         palette_mode: String(paletteMode || "spectrum"), sensitivity: Number(sensitivity || 1.0),
         smoothing_alpha: Number(smoothingAlpha || 0.50), audio_brightness: Boolean(audioBrightness),
-        brightness: Number(brightness || 85)
+        brightness: Number(brightness || 85), band_map: cleanedBands, beat_boost: boost, custom_palette: custom
       };
       mockMusicSync = {
         active: true, device_index: mockMusicPrefs.device_index,
         palette_mode: mockMusicPrefs.palette_mode, sensitivity: mockMusicPrefs.sensitivity,
         smoothing_alpha: mockMusicPrefs.smoothing_alpha, audio_brightness: mockMusicPrefs.audio_brightness,
         brightness: mockMusicPrefs.brightness, fixed_brightness: mockMusicPrefs.brightness,
-        rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, last_color: sampled,
+        rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, beat: true, beat_intensity: 0.82,
+        band_map: cleanedBands, beat_boost: boost, custom_palette: custom, last_color: sampled,
         target_ips: targets, frames_sent: mockMusicSync.frames_sent + 1
       };
       mutateTargetBulbs(ips, (st) => {
@@ -355,6 +442,43 @@ export function createBrowserMockApi() {
     get_music_sync_status: () => {
       if (mockMusicSync.active) mockMusicSync.frames_sent += 3;
       return Promise.resolve({ ok: true, music_sync: JSON.parse(JSON.stringify(mockMusicSync)), error: null });
+    },
+    set_circadian_config: (config) => {
+      mockCircadian = Object.assign({}, mockCircadian, config || {});
+      return buildMockEnvelope();
+    },
+    set_wakeup_ramp_config: (config) => {
+      mockWakeupRamp = Object.assign({}, mockWakeupRamp, config || {});
+      return buildMockEnvelope();
+    },
+    trigger_wakeup_ramp: () => {
+      mockWakeupStatus = { active: true, progress: 0.0 };
+      return buildMockEnvelope();
+    },
+    cancel_wakeup_ramp: () => {
+      mockWakeupStatus = { active: false, progress: 0.0 };
+      return buildMockEnvelope();
+    },
+    set_session_triggers: (config) => {
+      mockSessionTriggers = Object.assign({}, mockSessionTriggers, config || {});
+      return buildMockEnvelope();
+    },
+    set_context_automation: (config) => {
+      mockContextAutomation = Object.assign({}, mockContextAutomation, config || {});
+      return buildMockEnvelope();
+    },
+    set_transition_seconds: (seconds) => {
+      mockTransitionSeconds = Math.max(0, Math.min(5, Number(seconds) || 0));
+      return buildMockEnvelope();
+    },
+    set_local_api_config: (config) => {
+      mockLocalApi = Object.assign({}, mockLocalApi, config || {});
+      if (mockLocalApi.enabled && !mockLocalApi.token) mockLocalApi.token = "mock-bearer-token";
+      return buildMockEnvelope();
+    },
+    rotate_local_api_token: () => {
+      mockLocalApi.token = `mock-token-${Date.now()}`;
+      return buildMockEnvelope();
     }
   };
 }

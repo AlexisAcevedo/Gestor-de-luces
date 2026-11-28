@@ -6,14 +6,18 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from wiz_console.application.music_stream import VALID_MUSIC_PALETTES
+from wiz_console.application.music_stream import (
+    VALID_BAND_ASSIGNMENTS,
+    VALID_MUSIC_PALETTES,
+    normalize_custom_palette,
+)
 from wiz_console.application.service_context import ServiceContext
 from wiz_console.application.sleep_timer import (
     AwaitableStatusDict,
     require_finite_float,
     require_int_value,
 )
-from wiz_console.domain.value_objects import Brightness, Color
+from wiz_console.domain.value_objects import Brightness, Color, validate_local_endpoint
 
 
 class MusicService:
@@ -53,6 +57,9 @@ class MusicService:
         brightness: int = 85,
         device_index: int | None = None,
         ips: list[str] | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion acustica WASAPI Loopback hacia los focos objetivo."""
         normalized_palette = str(palette_mode).strip().lower()
@@ -68,6 +75,24 @@ class MusicService:
         validated_brightness = Brightness(require_int_value(brightness, "brightness")).percent
         parsed_device = (
             require_int_value(device_index, "device_index") if device_index is not None else None
+        )
+        cleaned_bands: dict[str, str] = {}
+        if band_map is not None:
+            if not isinstance(band_map, dict):
+                raise ValueError("band_map must be a mapping of bulb IP to frequency band.")
+            for raw_ip, raw_band in band_map.items():
+                valid_ip = validate_local_endpoint(str(raw_ip))
+                band = str(raw_band).strip().lower()
+                if band not in VALID_BAND_ASSIGNMENTS:
+                    raise ValueError(
+                        f"Invalid music band '{raw_band}'. "
+                        f"Expected one of {VALID_BAND_ASSIGNMENTS}."
+                    )
+                cleaned_bands[valid_ip] = band
+        normalized_custom = normalize_custom_palette(
+            custom_palette
+            if custom_palette is not None
+            else self._ctx.music_prefs.get("custom_palette")
         )
         target_ips = self._ctx.get_target_ips(ips)
         asyncio.get_running_loop()
@@ -87,6 +112,9 @@ class MusicService:
                 ips=frame_ips,
             )
 
+        async def _on_bulb_frames(frames: dict[str, tuple[Color, int]]) -> bool:
+            return await self._ctx.stream_bulb_frames(frames)
+
         self._ctx.music_prefs = {
             "palette_mode": normalized_palette,
             "sensitivity": parsed_sensitivity,
@@ -94,6 +122,9 @@ class MusicService:
             "audio_brightness": bool(audio_brightness),
             "brightness": validated_brightness,
             "device_index": parsed_device,
+            "band_map": dict(cleaned_bands),
+            "beat_boost": bool(beat_boost),
+            "custom_palette": dict(normalized_custom),
         }
         self._ctx.persist_settings()
 
@@ -101,12 +132,16 @@ class MusicService:
             sampler=sampler,
             target_ips=target_ips,
             on_frame=_on_frame,
+            on_bulb_frames=_on_bulb_frames,
             palette_mode=normalized_palette,
             sensitivity=parsed_sensitivity,
             smoothing_alpha=parsed_alpha,
             audio_brightness=bool(audio_brightness),
             brightness=validated_brightness,
             device_index=parsed_device,
+            band_map=cleaned_bands,
+            beat_boost=bool(beat_boost),
+            custom_palette=normalized_custom,
         )
 
     def stop_music_sync(self, close_sampler: bool = False) -> AwaitableStatusDict:

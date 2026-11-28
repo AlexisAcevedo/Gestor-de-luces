@@ -410,3 +410,62 @@ async def test_webview_bridge_session_prefs_and_tray_stream_toggles(tmp_path) ->
         assert not hasattr(js_api, "toggle_music_sync")
     finally:
         bridge.shutdown()
+
+
+async def test_webview_bridge_zones_and_multibulb_custom_scene(tmp_path) -> None:
+    """WebviewBridge exposes save_zone/select_zone/delete_zone and capture_all_targets."""
+    from wiz_console.adapters.storage.json_repositories import (
+        JsonBulbRepository,
+        JsonSceneRepository,
+        JsonZoneRepository,
+    )
+
+    async with (
+        FakeWizBulbServer(mac="aa1122334401") as bulb_a,
+        FakeWizBulbServer(mac="aa1122334402") as bulb_b,
+    ):
+        controller = WizUdpController(probe_candidates=[bulb_a.endpoint, bulb_b.endpoint])
+        service = LightControlService(
+            controller=controller,
+            bulb_repository=JsonBulbRepository(data_dir=tmp_path),
+            scene_repository=JsonSceneRepository(data_dir=tmp_path),
+            zone_repository=JsonZoneRepository(data_dir=tmp_path),
+        )
+        bridge = WebviewBridge(service=service)
+        try:
+            discovered = await asyncio.to_thread(bridge.discover_bulbs)
+            assert discovered["ok"] is True
+
+            saved_zone = await asyncio.to_thread(
+                bridge.save_zone,
+                "Studio Pair",
+                [bulb_a.endpoint, bulb_b.endpoint],
+                None,
+                "room",
+            )
+            assert saved_zone["ok"] is True
+            assert len(saved_zone["zones"]) == 1
+            zone_id = saved_zone["zones"][0]["id"]
+
+            selected = await asyncio.to_thread(bridge.select_zone, zone_id)
+            assert selected["ok"] is True
+            assert selected["selected_ips"] == [bulb_a.endpoint, bulb_b.endpoint]
+
+            await asyncio.to_thread(bridge.set_color, 10, 200, 255, 80, [bulb_a.endpoint])
+            await asyncio.to_thread(bridge.set_temperature, 2800, 45, [bulb_b.endpoint])
+
+            saved_preset = await asyncio.to_thread(
+                bridge.save_custom_scene,
+                "Bridge Multi",
+                bulb_a.endpoint,
+                True,
+            )
+            assert saved_preset["ok"] is True
+            multi = next(s for s in saved_preset["custom_scenes"] if s["name"] == "Bridge Multi")
+            assert set(multi["bulb_states"]) == {bulb_a.endpoint, bulb_b.endpoint}
+
+            deleted = await asyncio.to_thread(bridge.delete_zone, zone_id)
+            assert deleted["ok"] is True
+            assert deleted["zones"] == []
+        finally:
+            bridge.shutdown()

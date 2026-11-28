@@ -106,9 +106,64 @@ class LightState:
         )
 
 
+@dataclass(frozen=True)
+class BulbCapabilities:
+    """Inferred optical and dimming capabilities for a luminaire hardware module."""
+
+    supports_rgb: bool = True
+    supports_tunable_white: bool = True
+    supports_dimming: bool = True
+    min_kelvin: int = 2200
+    max_kelvin: int = 6500
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize hardware capabilities for the UI bridge."""
+        return {
+            "supports_rgb": self.supports_rgb,
+            "supports_tunable_white": self.supports_tunable_white,
+            "supports_dimming": self.supports_dimming,
+            "min_kelvin": self.min_kelvin,
+            "max_kelvin": self.max_kelvin,
+        }
+
+
+def infer_bulb_capabilities(module_name: str | None) -> BulbCapabilities:
+    """Infer color/CCT/dimming support from a WiZ hardware module identifier."""
+    token = (module_name or "").strip().upper()
+    if "RGB" in token or not token:
+        return BulbCapabilities(
+            supports_rgb=True,
+            supports_tunable_white=True,
+            supports_dimming=True,
+            min_kelvin=2200,
+            max_kelvin=6500,
+        )
+    if "TW" in token or "SHDW" in token:
+        return BulbCapabilities(
+            supports_rgb=False,
+            supports_tunable_white=True,
+            supports_dimming=True,
+            min_kelvin=2700,
+            max_kelvin=6500,
+        )
+    if "DIM" in token or "FIL" in token:
+        return BulbCapabilities(
+            supports_rgb=False,
+            supports_tunable_white=False,
+            supports_dimming=True,
+            min_kelvin=2700,
+            max_kelvin=2700,
+        )
+    return BulbCapabilities()
+
+
+SUPPORTED_PROTOCOLS: frozenset[str] = frozenset({"wiz", "govee"})
+DEFAULT_PROTOCOL = "wiz"
+
+
 @dataclass
 class Bulb:
-    """Entidad que representa un foco inteligente WiZ identificado por su IP y MAC."""
+    """Entidad que representa un foco inteligente identificado por su IP y MAC."""
 
     ip: str
     mac: str = "unknown"
@@ -116,6 +171,9 @@ class Bulb:
     module_name: str = "ESP01_SHRGB1C_31"
     is_online: bool = True
     state: LightState = field(default_factory=LightState)
+    rssi: int | None = None
+    fw_version: str | None = None
+    protocol: str = DEFAULT_PROTOCOL
 
     def __post_init__(self) -> None:
         if not isinstance(self.ip, str):
@@ -124,8 +182,25 @@ class Bulb:
         if not self.ip:
             raise ValueError("Bulb IP address cannot be empty.")
         self.ip = validate_local_endpoint(self.ip)
+        cleaned_proto = str(self.protocol or DEFAULT_PROTOCOL).strip().lower()
+        if cleaned_proto not in SUPPORTED_PROTOCOLS:
+            raise ValueError(f"Unsupported lighting protocol: {self.protocol!r}.")
+        self.protocol = cleaned_proto
         if not self.name or not self.name.strip():
-            self.name = f"WiZ Bulb ({self.ip})"
+            prefix = "Govee Bulb" if self.protocol == "govee" else "WiZ Bulb"
+            self.name = f"{prefix} ({self.ip})"
+        if self.rssi is not None and (
+            isinstance(self.rssi, bool) or not isinstance(self.rssi, int)
+        ):
+            self.rssi = None
+        if self.fw_version is not None:
+            cleaned_fw = str(self.fw_version).strip()
+            self.fw_version = cleaned_fw[:64] if cleaned_fw else None
+
+    @property
+    def capabilities(self) -> BulbCapabilities:
+        """Return inferred RGB/CCT/dimming capabilities from `module_name`."""
+        return infer_bulb_capabilities(self.module_name)
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa la entidad completa (metadatos + estado) para la UI o persistencia."""
@@ -134,7 +209,11 @@ class Bulb:
             "mac": self.mac,
             "name": self.name,
             "module_name": self.module_name,
+            "protocol": self.protocol,
             "is_online": self.is_online,
+            "rssi": self.rssi,
+            "fw_version": self.fw_version,
+            "capabilities": self.capabilities.to_dict(),
             "state": self.state.to_dict(),
         }
 
@@ -147,15 +226,21 @@ class Bulb:
         raw_mac = data.get("mac", "unknown")
         raw_name = data.get("name", "")
         raw_module = data.get("module_name", "ESP01_SHRGB1C_31")
+        raw_protocol = data.get("protocol", DEFAULT_PROTOCOL)
         for field_name, field_val in (
             ("mac", raw_mac),
             ("name", raw_name),
             ("module_name", raw_module),
+            ("protocol", raw_protocol),
         ):
             if field_val is not None and not isinstance(field_val, str):
                 raise ValueError(f"Bulb {field_name} must be a string.")
         raw_state = data.get("state")
         state = LightState.from_dict(raw_state) if isinstance(raw_state, dict) else LightState()
+        raw_rssi = data.get("rssi")
+        rssi = raw_rssi if isinstance(raw_rssi, int) and not isinstance(raw_rssi, bool) else None
+        raw_fw = data.get("fw_version")
+        fw_version = raw_fw if isinstance(raw_fw, str) and raw_fw.strip() else None
         return cls(
             ip=raw_ip,
             mac=raw_mac if raw_mac is not None else "unknown",
@@ -163,4 +248,71 @@ class Bulb:
             module_name=raw_module if raw_module is not None else "ESP01_SHRGB1C_31",
             is_online=bool(data.get("is_online", True)),
             state=state,
+            rssi=rssi,
+            fw_version=fw_version,
+            protocol=raw_protocol if raw_protocol is not None else DEFAULT_PROTOCOL,
+        )
+
+
+MAX_ZONE_NAME_LEN = 80
+MAX_ZONE_ICON_LEN = 32
+
+
+@dataclass
+class Zone:
+    """Named room or group of registered bulbs sharing quick target selection."""
+
+    id: str
+    name: str
+    bulb_ips: list[str] = field(default_factory=list)
+    icon: str = "room"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or not self.id.strip():
+            raise ValueError("Zone id cannot be empty.")
+        self.id = self.id.strip()
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("Zone name cannot be empty.")
+        cleaned_name = self.name.strip()
+        if len(cleaned_name) > MAX_ZONE_NAME_LEN:
+            raise ValueError(f"Zone name cannot exceed {MAX_ZONE_NAME_LEN} characters.")
+        self.name = cleaned_name
+
+        if not isinstance(self.bulb_ips, list):
+            raise ValueError("Zone bulb_ips must be a list.")
+        deduped_ips: list[str] = []
+        for raw_ip in self.bulb_ips:
+            normalized_ip = validate_local_endpoint(raw_ip)
+            if normalized_ip not in deduped_ips:
+                deduped_ips.append(normalized_ip)
+        self.bulb_ips = deduped_ips
+
+        if not isinstance(self.icon, str) or not self.icon.strip():
+            self.icon = "room"
+        else:
+            self.icon = self.icon.strip()[:MAX_ZONE_ICON_LEN]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the zone into a JSON-compatible dictionary."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "bulb_ips": list(self.bulb_ips),
+            "icon": self.icon,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Zone:
+        """Reconstruct a validated Zone entity from a JSON object."""
+        raw_id = data["id"]
+        raw_name = data["name"]
+        raw_ips = data.get("bulb_ips", [])
+        raw_icon = data.get("icon", "room")
+        if not isinstance(raw_ips, list):
+            raise ValueError("Zone bulb_ips must be a list.")
+        return cls(
+            id=raw_id,
+            name=raw_name,
+            bulb_ips=list(raw_ips),
+            icon=raw_icon if isinstance(raw_icon, str) else "room",
         )

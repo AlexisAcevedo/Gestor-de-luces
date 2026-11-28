@@ -219,6 +219,7 @@ class BridgeLifecycle:
         selected_ips = self._service.get_target_ips()
         scenes = [scene.to_dict() for scene in list_builtin_scenes()]
         custom_scenes = [scene.to_dict() for scene in self._service.list_custom_scenes()]
+        zones = [zone.to_dict() for zone in self._service.list_zones()]
         sleep_timer = self._service.get_sleep_timer_status()
         ambilight = self._service.get_ambilight_status()
         monitors = list(self._monitors_cache)
@@ -241,11 +242,20 @@ class BridgeLifecycle:
             "selected_ips": selected_ips,
             "scenes": scenes,
             "custom_scenes": custom_scenes,
+            "zones": zones,
             "sleep_timer": sleep_timer,
             "ambilight": ambilight,
             "monitors": monitors,
             "music_sync": music_sync,
             "audio_devices": audio_devices,
+            "circadian": self._service.get_circadian_config(),
+            "wakeup_ramp": self._service.get_wakeup_ramp_config(),
+            "wakeup_ramp_status": self._service.get_wakeup_ramp_status(),
+            "session_triggers": self._service.get_session_triggers(),
+            "context_automation": self._service.get_context_automation(),
+            "context_status": self._service.get_context_automation_status(),
+            "transition_seconds": self._service.get_transition_seconds(),
+            "local_api": self._service.get_local_api_config(),
             "error": error,
         }
 

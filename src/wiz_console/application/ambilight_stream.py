@@ -28,6 +28,7 @@ from wiz_console.ports.repositories import ScreenSampler
 _LOGGER = logging.getLogger(__name__)
 
 VALID_AMBILIGHT_MODES = ("vibrant", "average")
+VALID_AMBILIGHT_REGIONS = ("full", "left", "right", "top", "bottom", "center")
 
 
 class AmbilightStreamManager:
@@ -61,6 +62,9 @@ class AmbilightStreamManager:
         self._last_color: Color | None = None
         self._last_brightness: int = 85
         self._target_ips: list[str] = []
+        self._region_map: dict[str, str] = {}
+        self._letterbox_crop: bool = True
+        self._last_region_colors: dict[str, Color] = {}
         self._frames_sent: int = 0
 
     def set_sampler(self, sampler: ScreenSampler | None) -> None:
@@ -89,6 +93,9 @@ class AmbilightStreamManager:
         brightness: int = 85,
         smoothing_alpha: float = 0.38,
         min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
+        on_bulb_frames: Callable[[dict[str, tuple[Color, int]]], Awaitable[bool]] | None = None,
     ) -> AwaitableStatusDict:
         """Inicia o reinicia el bucle continuo de muestreo de pantalla hacia los focos objetivo."""
         normalized_mode = str(color_mode).strip().lower()
@@ -108,6 +115,11 @@ class AmbilightStreamManager:
         parsed_monitor = require_int_value(monitor_index, "monitor_index")
         if parsed_monitor < 0:
             raise ValueError("Monitor index must be zero or positive.")
+        normalized_regions = {
+            str(ip): str(region).strip().lower()
+            for ip, region in (region_map or {}).items()
+            if str(region).strip().lower() in VALID_AMBILIGHT_REGIONS
+        }
         loop = asyncio.get_running_loop()
 
         self.stop()
@@ -124,11 +136,14 @@ class AmbilightStreamManager:
         self._last_brightness = validated_brightness
         self._smoothing_alpha = parsed_alpha
         self._target_ips = list(target_ips)
+        self._region_map = normalized_regions
+        self._letterbox_crop = bool(letterbox_crop)
+        self._last_region_colors = {}
         self._frames_sent = 0
         self._active = True
 
         self._task = loop.create_task(
-            self._run_loop(on_frame=on_frame, run_id=run_id),
+            self._run_loop(on_frame=on_frame, on_bulb_frames=on_bulb_frames, run_id=run_id),
             name="WizConsoleAmbilightStream",
         )
         return self.get_status()
@@ -176,10 +191,47 @@ class AmbilightStreamManager:
                 "last_color": (
                     self._last_color.to_dict() if self._last_color is not None else None
                 ),
+                "region_map": dict(self._region_map),
+                "letterbox_crop": self._letterbox_crop,
+                "last_region_colors": {
+                    region: color.to_dict() for region, color in self._last_region_colors.items()
+                },
                 "target_ips": list(self._target_ips) if is_running else [],
                 "frames_sent": self._frames_sent,
             }
         )
+
+    def _effective_brightness(self, suggested: int) -> int:
+        if not self._auto_brightness:
+            return self._fixed_brightness
+        return max(10, max(self._min_brightness, suggested))
+
+    def _sample_regions_once(
+        self,
+        sampler: ScreenSampler | None,
+        monitor_index: int,
+        color_mode: str,
+        regions: tuple[str, ...],
+        letterbox_crop: bool,
+        run_id: int,
+    ) -> dict[str, tuple[Color, int]]:
+        """Capture one frame synchronously and extract per-region `(Color, brightness)`."""
+        with self._sample_lock:
+            if self._generation != run_id or sampler is None or self._sampler is not sampler:
+                return {"full": (Color(0, 0, 0), self._fixed_brightness)}
+            sample_regions_fn = getattr(sampler, "sample_regions", None)
+            if callable(sample_regions_fn):
+                raw_map = sample_regions_fn(
+                    monitor_index=monitor_index,
+                    mode=color_mode,
+                    regions=regions,
+                    letterbox_crop=letterbox_crop,
+                )
+                return {
+                    region: (col, sanitize_brightness(bri, self._fixed_brightness))
+                    for region, (col, bri) in raw_map.items()
+                }
+        return {"full": self._sample_once(sampler, monitor_index, color_mode, run_id)}
 
     def _sample_once(
         self,
@@ -215,6 +267,7 @@ class AmbilightStreamManager:
     async def _run_loop(
         self,
         on_frame: Callable[[Color, int, list[str]], Awaitable[bool]],
+        on_bulb_frames: Callable[[dict[str, tuple[Color, int]]], Awaitable[bool]] | None,
         run_id: int,
     ) -> None:
         """Bucle asincrono que muestrea el monitor y transmite fotogramas suavizados."""
@@ -226,31 +279,56 @@ class AmbilightStreamManager:
                     sampler = self._sampler
                     monitor_index = self._monitor_index
                     color_mode = self._color_mode
-                    sampled_color, suggested_brightness = await asyncio.to_thread(
-                        self._sample_once,
+                    target_ips = list(self._target_ips)
+                    needed_regions = tuple(
+                        dict.fromkeys(
+                            ["full", *(self._region_map.get(ip, "full") for ip in target_ips)]
+                        )
+                    )
+                    region_results = await asyncio.to_thread(
+                        self._sample_regions_once,
                         sampler,
                         monitor_index,
                         color_mode,
+                        needed_regions,
+                        self._letterbox_crop,
                         run_id,
                     )
                     if self._generation != run_id or not self._active:
                         break
-                    # En escenas oscuras de cine, respetamos el piso elegido por el usuario
-                    # y aseguramos el minimo fisico de 10% exigido por el protocolo UDP WiZ.
-                    effective_brightness = (
-                        max(10, max(self._min_brightness, suggested_brightness))
-                        if self._auto_brightness
-                        else self._fixed_brightness
+                    primary_color, primary_raw_bri = region_results.get(
+                        "full", next(iter(region_results.values()))
                     )
-                    self._last_color = sampled_color
+                    effective_brightness = self._effective_brightness(primary_raw_bri)
+                    self._last_color = primary_color
                     self._last_brightness = effective_brightness
+                    self._last_region_colors = {
+                        region: pair[0] for region, pair in region_results.items()
+                    }
 
-                    if self._target_ips:
-                        sent = await on_frame(
-                            sampled_color,
-                            effective_brightness,
-                            list(self._target_ips),
+                    if target_ips:
+                        has_multizone = any(
+                            self._region_map.get(ip, "full") != "full" for ip in target_ips
                         )
+                        if has_multizone and on_bulb_frames is not None:
+                            per_bulb = {
+                                ip: (
+                                    region_results.get(
+                                        self._region_map.get(ip, "full"),
+                                        (primary_color, primary_raw_bri),
+                                    )[0],
+                                    self._effective_brightness(
+                                        region_results.get(
+                                            self._region_map.get(ip, "full"),
+                                            (primary_color, primary_raw_bri),
+                                        )[1]
+                                    ),
+                                )
+                                for ip in target_ips
+                            }
+                            sent = await on_bulb_frames(per_bulb)
+                        else:
+                            sent = await on_frame(primary_color, effective_brightness, target_ips)
                         if sent and self._generation == run_id:
                             self._frames_sent += 1
                     consecutive_errors = 0

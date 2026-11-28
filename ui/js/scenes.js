@@ -266,6 +266,14 @@ export function renderCustomScenesGrid() {
       createEl("span", "custom-scene-title", preset.name),
       createEl("span", "custom-scene-summary", summaryText)
     );
+    const multiCount = preset.bulb_states && typeof preset.bulb_states === "object"
+      ? Object.keys(preset.bulb_states).length
+      : 0;
+    if (multiCount >= 2) {
+      meta.appendChild(
+        createEl("span", "custom-scene-multibulb-badge", t("custom.multibulbBadge", { count: multiCount }))
+      );
+    }
     topArea.append(swatch, meta);
 
     const triggerApply = () => {
@@ -361,8 +369,18 @@ export function openCustomSceneDialog(existingPreset) {
   const nameInput = document.getElementById("custom-scene-name-input");
   const overwriteRow = document.getElementById("custom-scene-overwrite-row");
   const overwriteCheckbox = document.getElementById("custom-scene-overwrite-checkbox");
+  const multibulbRow = document.getElementById("custom-scene-multibulb-row");
+  const multibulbCheckbox = document.getElementById("custom-scene-multibulb-input");
   const submitBtn = document.getElementById("custom-scene-submit-btn");
   if (!dialog || !idInput || !nameInput) return;
+
+  const activeTargets = appState.selectedIps.length > 0
+    ? appState.selectedIps
+    : appState.bulbs.map((b) => b.ip);
+  const canMultibulb = activeTargets.length >= 2;
+  const hasExistingMulti = Boolean(
+    existingPreset && existingPreset.bulb_states && Object.keys(existingPreset.bulb_states).length >= 2
+  );
 
   if (existingPreset) {
     idInput.value = existingPreset.id;
@@ -371,6 +389,8 @@ export function openCustomSceneDialog(existingPreset) {
     if (subtitleEl) subtitleEl.textContent = t("dialog.presetEditSubtitle");
     if (overwriteRow) overwriteRow.hidden = false;
     if (overwriteCheckbox) overwriteCheckbox.checked = false;
+    if (multibulbRow) multibulbRow.hidden = !(canMultibulb || hasExistingMulti);
+    if (multibulbCheckbox) multibulbCheckbox.checked = hasExistingMulti;
     if (submitBtn) submitBtn.textContent = t("dialog.presetUpdateSubmit");
   } else {
     idInput.value = "";
@@ -379,6 +399,8 @@ export function openCustomSceneDialog(existingPreset) {
     if (subtitleEl) subtitleEl.textContent = t("dialog.presetSaveSubtitle");
     if (overwriteRow) overwriteRow.hidden = true;
     if (overwriteCheckbox) overwriteCheckbox.checked = false;
+    if (multibulbRow) multibulbRow.hidden = !canMultibulb;
+    if (multibulbCheckbox) multibulbCheckbox.checked = false;
     if (submitBtn) submitBtn.textContent = t("dialog.presetSaveSubmit");
   }
 
@@ -442,22 +464,33 @@ export function bindSceneEvents({ activateTab }) {
       const idInput = document.getElementById("custom-scene-id-input");
       const nameInput = document.getElementById("custom-scene-name-input");
       const overwriteCheckbox = document.getElementById("custom-scene-overwrite-checkbox");
+      const multibulbCheckbox = document.getElementById("custom-scene-multibulb-input");
       const sceneId = idInput ? idInput.value.trim() : "";
       const name = nameInput ? nameInput.value.trim() : "";
       const captureCurrent = Boolean(overwriteCheckbox && overwriteCheckbox.checked);
+      const captureAllTargets = Boolean(multibulbCheckbox && multibulbCheckbox.checked);
       if (!name) return;
 
       setFieldError(nameInput, customSceneError, "");
       const ok = await withButtonBusy(customSceneSubmitBtn, () => {
         if (sceneId) {
           return invokeApi(
-            () => getBackendApi().update_custom_scene(sceneId, name, captureCurrent),
+            () => (
+              captureAllTargets
+                ? getBackendApi().update_custom_scene(sceneId, name, captureCurrent, true)
+                : getBackendApi().update_custom_scene(sceneId, name, captureCurrent)
+            ),
             () => t("status.presetUpdated", { name })
           );
         }
         const primary = getPrimaryBulb();
+        const ip = primary ? primary.ip : null;
         return invokeApi(
-          () => getBackendApi().save_custom_scene(name, primary ? primary.ip : null),
+          () => (
+            captureAllTargets
+              ? getBackendApi().save_custom_scene(name, ip, true)
+              : getBackendApi().save_custom_scene(name, ip)
+          ),
           () => t("status.presetSaved", { name })
         );
       });

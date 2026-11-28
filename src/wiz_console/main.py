@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from wiz_console.adapters.ambilight.mss_sampler import MssScreenSampler
+from wiz_console.adapters.api.local_http_api import LocalHttpApiServer
 from wiz_console.adapters.audio.wasapi_sampler import WasapiLoopbackSampler
+from wiz_console.adapters.govee.lan_controller import GoveeLanController
 from wiz_console.adapters.platform.windows import (
     DARK_TITLEBAR_ENABLED,
     THEME_WINDOW_CHROME,
@@ -34,22 +36,28 @@ from wiz_console.adapters.platform.windows import (
     apply_app_user_model_id,
     show_message_box,
 )
+from wiz_console.adapters.registry import CompositeLightController
 from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
     JsonSettingsRepository,
+    JsonZoneRepository,
     resolve_default_data_dir,
 )
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
 from wiz_console.adapters.system.windows_autostart import WindowsRegistryAutostart
+from wiz_console.adapters.system.windows_context import WindowsContextMonitor
 from wiz_console.adapters.system.windows_hotkeys import WindowsGlobalHotkeyManager
+from wiz_console.adapters.system.windows_session import WindowsSessionMonitor
 from wiz_console.adapters.tray import TrayController
 from wiz_console.adapters.ui_webview.bridge import WebviewBridge
 from wiz_console.adapters.wiz.udp_controller import WizUdpController
 from wiz_console.application.service import LightControlService
 from wiz_console.desktop import DesktopApplication
 from wiz_console.ports.autostart import AutostartManager
+from wiz_console.ports.context_monitor import ContextMonitor
 from wiz_console.ports.hotkeys import GlobalHotkeyManager
+from wiz_console.ports.session_monitor import SessionMonitor
 from wiz_console.resources import resolve_asset_path, resolve_resource_root
 
 # Reexportes de la capa de plataforma Windows: las pruebas y los consumidores historicos
@@ -161,6 +169,20 @@ def _default_hotkeys() -> GlobalHotkeyManager | None:
     return WindowsGlobalHotkeyManager()
 
 
+def _default_session_monitor() -> SessionMonitor | None:
+    """Win32 session lock/power monitor on Windows; None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    return WindowsSessionMonitor()
+
+
+def _default_context_monitor() -> ContextMonitor | None:
+    """Win32 foreground process & ConsentStore monitor on Windows; None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    return WindowsContextMonitor()
+
+
 def build_application(
     data_dir: Path | None = None,
     autostart: AutostartManager | None = None,
@@ -170,14 +192,22 @@ def build_application(
     bulb_repo = JsonBulbRepository(data_dir=storage_dir)
     scene_repo = JsonSceneRepository(data_dir=storage_dir)
     settings_repo = JsonSettingsRepository(data_dir=storage_dir)
-    controller = WizUdpController()
+    zone_repo = JsonZoneRepository(data_dir=storage_dir)
+    controller = CompositeLightController(
+        {
+            "wiz": WizUdpController(),
+            "govee": GoveeLanController(),
+        }
+    )
     service = LightControlService(
         controller=controller,
         bulb_repository=bulb_repo,
         scene_repository=scene_repo,
         settings_repository=settings_repo,
+        zone_repository=zone_repo,
         screen_sampler_factory=MssScreenSampler,
         audio_sampler_factory=WasapiLoopbackSampler,
+        context_monitor=_default_context_monitor(),
     )
     bridge = WebviewBridge(
         service=service,
@@ -227,6 +257,7 @@ def _ui_asset_paths(ui_dir: Path) -> dict[str, Path]:
         "i18n": ui_dir / "i18n.js",
         "theme_boot": ui_dir / "js" / "theme-boot.js",
         "script": ui_dir / "js" / "app.js",
+        "automation": ui_dir / "js" / "automation.js",
         "scenes": ui_dir / "scenes.json",
     }
 
@@ -308,6 +339,8 @@ def main(argv: list[str] | None = None) -> int:
             guard=guard,
             autostart=autostart,
             hotkeys=_default_hotkeys(),
+            session_monitor=_default_session_monitor(),
+            local_api=LocalHttpApiServer(bridge),
         )
         apply_app_user_model_id()
         app.create_window()
