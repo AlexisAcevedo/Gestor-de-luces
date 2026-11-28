@@ -305,6 +305,15 @@ class DesktopApplication:
         if callable(release_fn):
             release_fn(self._window)
 
+    def _run_cleanup_step(self, label: str, fn: Callable[[], Any]) -> None:
+        """Execute a shutdown step cleanly so one teardown error never aborts subsequent steps."""
+        try:
+            fn()
+        # FRONTERA: teardown runs after the native GUI loop exits; a disposed WinForms
+        # handle or subsystem error must not skip releasing the mutex, hotkeys, tray, or bridge.
+        except Exception:
+            _LOGGER.exception("Desktop cleanup step '%s' failed.", label)
+
     def cleanup(self) -> None:
         """Libera la instancia unica, la bandeja y el bucle asincrono del puente."""
         # El hilo que reaplica el menu nativo queda aparcado en su Condition: marcarlo como
@@ -313,14 +322,14 @@ class DesktopApplication:
         with self._menu_sync_cond:
             self._is_quitting = True
             self._menu_sync_cond.notify_all()
-        self._release_window_icons()
+        self._run_cleanup_step("window icons", self._release_window_icons)
         if self._guard is not None:
-            self._guard.release()
+            self._run_cleanup_step("single-instance guard", self._guard.release)
         if self._hotkeys is not None:
-            self._hotkeys.stop()
+            self._run_cleanup_step("global hotkeys", self._hotkeys.stop)
         if self._tray is not None:
-            self._tray.stop()
-        self._bridge.shutdown()
+            self._run_cleanup_step("system tray", self._tray.stop)
+        self._run_cleanup_step("webview bridge", self._bridge.shutdown)
         menu_thread = self._menu_sync_thread
         if (
             menu_thread is not None
