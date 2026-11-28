@@ -253,7 +253,8 @@ On the first launch after upgrading from `GestorDeLuces`, `resolve_default_data_
 
 Files managed:
 - `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases (re-validated via `validate_local_endpoint()` on load; `discover_bulbs()` reconciles DHCP IP changes by MAC and `remove_bulb()` deletes retired entries).
-- `custom_scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed, favorite flag).
+- `custom_scenes.json`: User-created custom lighting scenes (uniform fallback parameters plus optional per-bulb `bulb_states` snapshots for heterogeneous multi-bulb scenes, and favorite flag).
+- `zones.json`: User-defined room/zone groups (`id`, `name`, `bulb_ips`, `icon`) reconciled automatically on bulb removal or MAC DHCP IP changes.
 - `settings.json`: Global user preferences and session state (`language`, `theme`, optional `tray_hint_seen`, `selected_ips`, `auto_sync`, `favorite_builtin_scenes`, `ambilight_prefs`, `music_prefs`, and opt-in `global_hotkeys`), consumed by the web UI, system tray toggles (`toggle_ambilight` / `toggle_music_sync`), and `WindowsGlobalHotkeyManager`.
 
 ### Atomic File Write & Read Hardening

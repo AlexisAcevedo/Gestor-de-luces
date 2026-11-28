@@ -21,7 +21,7 @@ from wiz_console.application.ambilight_stream import AmbilightStreamManager
 from wiz_console.application.music_stream import MusicSyncStreamManager
 from wiz_console.application.rate_limiter import StreamRateLimiter
 from wiz_console.application.sleep_timer import SleepTimerManager
-from wiz_console.domain.models import Bulb, LightState
+from wiz_console.domain.models import Bulb, LightState, Zone
 from wiz_console.domain.scenes import CustomScene
 from wiz_console.domain.value_objects import (
     DEFAULT_LANGUAGE,
@@ -41,6 +41,7 @@ from wiz_console.ports.repositories import (
     SceneRepository,
     ScreenSampler,
     SettingsRepository,
+    ZoneRepository,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ class ServiceContext:
         audio_sampler: AudioSampler | None = None,
         music_manager: MusicSyncStreamManager | None = None,
         settings_repository: SettingsRepository | None = None,
+        zone_repository: ZoneRepository | None = None,
         screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
         audio_sampler_factory: Callable[[], AudioSampler] | None = None,
     ) -> None:
@@ -96,6 +98,7 @@ class ServiceContext:
         self.bulb_repo = bulb_repository
         self.scene_repo = scene_repository
         self.settings_repo = settings_repository
+        self.zone_repo = zone_repository
         self.rate_limiter = rate_limiter or StreamRateLimiter()
         self.sleep_timer = sleep_timer or SleepTimerManager()
         self.screen_sampler = screen_sampler
@@ -107,6 +110,7 @@ class ServiceContext:
         self.bulbs: dict[str, Bulb] = {}
         self.selected_ips: list[str] = []
         self.custom_scenes: dict[str, CustomScene] = {}
+        self.zones: dict[str, Zone] = {}
         self.language: str = DEFAULT_LANGUAGE
         self.theme: str = DEFAULT_THEME
         self.tray_hint_seen: bool = False
@@ -146,6 +150,10 @@ class ServiceContext:
         if self.scene_repo is not None:
             for saved_scene in self.scene_repo.load_scenes():
                 self.custom_scenes[saved_scene.id] = saved_scene
+
+        if self.zone_repo is not None:
+            for saved_zone in self.zone_repo.load_zones():
+                self.zones[saved_zone.id] = saved_zone
 
         if self.settings_repo is not None:
             loaded_settings = self.settings_repo.load_settings()
@@ -247,6 +255,15 @@ class ServiceContext:
     def list_custom_scenes(self) -> list[CustomScene]:
         """Devuelve la coleccion de escenas personalizadas creadas por el usuario."""
         return list(self.custom_scenes.values())
+
+    def persist_zones(self) -> None:
+        """Delegate atomic zone persistence when a zone repository is configured."""
+        if self.zone_repo is not None:
+            self.zone_repo.save_zones(self.list_zones())
+
+    def list_zones(self) -> list[Zone]:
+        """Return all persisted zones in insertion order."""
+        return list(self.zones.values())
 
     def persist_settings(self) -> None:
         """Delega el guardado de preferencias globales si hay un repositorio configurado."""

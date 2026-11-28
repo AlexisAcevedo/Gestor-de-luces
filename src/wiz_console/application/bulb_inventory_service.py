@@ -47,6 +47,36 @@ class BulbInventoryService:
                 return ip
         return None
 
+    def _reconcile_bulb_references(self, old_ip: str, new_ip: str | None) -> None:
+        """Propagate bulb removal (new_ip=None) or DHCP IP change into zones and scenes."""
+        zones_changed = False
+        for zone in self._ctx.zones.values():
+            if old_ip not in zone.bulb_ips:
+                continue
+            updated: list[str] = []
+            for ip in zone.bulb_ips:
+                if ip == old_ip:
+                    if new_ip is not None and new_ip not in updated:
+                        updated.append(new_ip)
+                elif ip not in updated:
+                    updated.append(ip)
+            zone.bulb_ips = updated
+            zones_changed = True
+        if zones_changed:
+            self._ctx.persist_zones()
+
+        scenes_changed = False
+        for scene in self._ctx.custom_scenes.values():
+            if not scene.bulb_states or old_ip not in scene.bulb_states:
+                continue
+            captured = scene.bulb_states.pop(old_ip)
+            if new_ip is not None and new_ip not in scene.bulb_states:
+                scene.bulb_states[new_ip] = captured
+            scene.bulb_states = scene.bulb_states or None
+            scenes_changed = True
+        if scenes_changed:
+            self._ctx.persist_scenes()
+
     async def discover_bulbs(self, wait_time: float = 2.5) -> list[Bulb]:
         """Discover bulbs on the LAN, reconcile DHCP IP changes by MAC, and sync live states."""
         discovered = await self._ctx.controller.discover(wait_time=wait_time)
@@ -66,6 +96,7 @@ class BulbInventoryService:
                                 updated_targets.append(replacement)
                         self._ctx.selected_ips = updated_targets
                         targets_changed = True
+                    self._reconcile_bulb_references(old_ip, bulb.ip)
                     _LOGGER.info(
                         "Reconciled bulb MAC %s after DHCP IP change: %s -> %s",
                         norm_mac,
@@ -135,6 +166,7 @@ class BulbInventoryService:
             self._ctx.ambilight.update_targets(resolved)
             self._ctx.music_sync.update_targets(resolved)
             self._ctx.persist_settings()
+        self._reconcile_bulb_references(cleaned_ip, None)
         self._ctx.persist_bulbs()
         return bulb
 

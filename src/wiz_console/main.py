@@ -38,6 +38,7 @@ from wiz_console.adapters.storage.json_repositories import (
     JsonBulbRepository,
     JsonSceneRepository,
     JsonSettingsRepository,
+    JsonZoneRepository,
     resolve_default_data_dir,
 )
 from wiz_console.adapters.system.single_instance import SingleInstanceGuard
@@ -170,12 +171,14 @@ def build_application(
     bulb_repo = JsonBulbRepository(data_dir=storage_dir)
     scene_repo = JsonSceneRepository(data_dir=storage_dir)
     settings_repo = JsonSettingsRepository(data_dir=storage_dir)
+    zone_repo = JsonZoneRepository(data_dir=storage_dir)
     controller = WizUdpController()
     service = LightControlService(
         controller=controller,
         bulb_repository=bulb_repo,
         scene_repository=scene_repo,
         settings_repository=settings_repo,
+        zone_repository=zone_repo,
         screen_sampler_factory=MssScreenSampler,
         audio_sampler_factory=WasapiLoopbackSampler,
     )

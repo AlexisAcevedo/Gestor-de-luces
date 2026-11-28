@@ -37,8 +37,9 @@ from wiz_console.application.service_context import (
 from wiz_console.application.settings_service import SettingsService
 from wiz_console.application.sleep_timer import AwaitableStatusDict, SleepTimerManager
 from wiz_console.application.timer_service import TimerService
-from wiz_console.domain.models import Bulb
-from wiz_console.domain.scenes import CustomScene
+from wiz_console.application.zone_service import ZoneService
+from wiz_console.domain.models import Bulb, Zone
+from wiz_console.domain.scenes import BulbSceneState, CustomScene
 from wiz_console.domain.value_objects import Color, LightMode
 from wiz_console.ports.repositories import (
     AudioSampler,
@@ -47,6 +48,7 @@ from wiz_console.ports.repositories import (
     SceneRepository,
     ScreenSampler,
     SettingsRepository,
+    ZoneRepository,
 )
 
 __all__ = [
@@ -72,6 +74,7 @@ class LightControlService:
         audio_sampler: AudioSampler | None = None,
         music_manager: MusicSyncStreamManager | None = None,
         settings_repository: SettingsRepository | None = None,
+        zone_repository: ZoneRepository | None = None,
         screen_sampler_factory: Callable[[], ScreenSampler] | None = None,
         audio_sampler_factory: Callable[[], AudioSampler] | None = None,
     ) -> None:
@@ -86,6 +89,7 @@ class LightControlService:
             audio_sampler=audio_sampler,
             music_manager=music_manager,
             settings_repository=settings_repository,
+            zone_repository=zone_repository,
             screen_sampler_factory=screen_sampler_factory,
             audio_sampler_factory=audio_sampler_factory,
         )
@@ -98,6 +102,7 @@ class LightControlService:
             stop_music_sync=self.stop_music_sync,
         )
         self._scenes = SceneService(context, bulb_control=self._bulb_control)
+        self._zones = ZoneService(context)
         self._timer = TimerService(context, bulb_control=self._bulb_control)
         self._ambilight = AmbilightService(context, stop_music_sync=self.stop_music_sync)
         self._music = MusicService(context, stop_ambilight=self.stop_ambilight)
@@ -271,10 +276,14 @@ class LightControlService:
         name: str,
         source_ip: str | None = None,
         scene_id: str | None = None,
+        capture_all_targets: bool = False,
     ) -> CustomScene:
         """Captura la fotografia luminica actual del foco de referencia y la guarda como preset."""
         return self._scenes.save_custom_scene_from_current(
-            name, source_ip=source_ip, scene_id=scene_id
+            name,
+            source_ip=source_ip,
+            scene_id=scene_id,
+            capture_all_targets=capture_all_targets,
         )
 
     def create_or_update_custom_scene(
@@ -287,6 +296,7 @@ class LightControlService:
         built_in_scene_id: int | None = None,
         speed: int = 100,
         scene_id: str | None = None,
+        bulb_states: dict[str, BulbSceneState] | None = None,
     ) -> CustomScene:
         """Crea un nuevo preset personalizado o actualiza uno existente validando el dominio."""
         return self._scenes.create_or_update_custom_scene(
@@ -298,7 +308,40 @@ class LightControlService:
             built_in_scene_id=built_in_scene_id,
             speed=speed,
             scene_id=scene_id,
+            bulb_states=bulb_states,
         )
+
+    def list_zones(self) -> list[Zone]:
+        """Return all persisted bulb zones."""
+        return self._zones.list_zones()
+
+    def get_zone(self, zone_id: str) -> Zone | None:
+        """Look up a saved zone by ID."""
+        return self._zones.get_zone(zone_id)
+
+    def create_or_update_zone(
+        self,
+        name: str,
+        bulb_ips: list[str],
+        *,
+        zone_id: str | None = None,
+        icon: str = "room",
+    ) -> Zone:
+        """Create or update a bulb zone and persist changes."""
+        return self._zones.create_or_update_zone(
+            name=name,
+            bulb_ips=bulb_ips,
+            zone_id=zone_id,
+            icon=icon,
+        )
+
+    def delete_zone(self, zone_id: str) -> None:
+        """Delete an existing zone by ID."""
+        self._zones.delete_zone(zone_id)
+
+    def select_zone(self, zone_id: str) -> list[str]:
+        """Select registered bulbs belonging to a zone as targets."""
+        return self._zones.select_zone(zone_id)
 
     def set_custom_scene_favorite(self, scene_id: str, is_favorite: bool) -> CustomScene:
         """Marca o desmarca un preset como favorito de la bandeja y persiste el cambio."""

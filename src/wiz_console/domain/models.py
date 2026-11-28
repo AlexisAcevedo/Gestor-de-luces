@@ -164,3 +164,67 @@ class Bulb:
             is_online=bool(data.get("is_online", True)),
             state=state,
         )
+
+
+MAX_ZONE_NAME_LEN = 80
+MAX_ZONE_ICON_LEN = 32
+
+
+@dataclass
+class Zone:
+    """Named room or group of registered bulbs sharing quick target selection."""
+
+    id: str
+    name: str
+    bulb_ips: list[str] = field(default_factory=list)
+    icon: str = "room"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or not self.id.strip():
+            raise ValueError("Zone id cannot be empty.")
+        self.id = self.id.strip()
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("Zone name cannot be empty.")
+        cleaned_name = self.name.strip()
+        if len(cleaned_name) > MAX_ZONE_NAME_LEN:
+            raise ValueError(f"Zone name cannot exceed {MAX_ZONE_NAME_LEN} characters.")
+        self.name = cleaned_name
+
+        if not isinstance(self.bulb_ips, list):
+            raise ValueError("Zone bulb_ips must be a list.")
+        deduped_ips: list[str] = []
+        for raw_ip in self.bulb_ips:
+            normalized_ip = validate_local_endpoint(raw_ip)
+            if normalized_ip not in deduped_ips:
+                deduped_ips.append(normalized_ip)
+        self.bulb_ips = deduped_ips
+
+        if not isinstance(self.icon, str) or not self.icon.strip():
+            self.icon = "room"
+        else:
+            self.icon = self.icon.strip()[:MAX_ZONE_ICON_LEN]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the zone into a JSON-compatible dictionary."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "bulb_ips": list(self.bulb_ips),
+            "icon": self.icon,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Zone:
+        """Reconstruct a validated Zone entity from a JSON object."""
+        raw_id = data["id"]
+        raw_name = data["name"]
+        raw_ips = data.get("bulb_ips", [])
+        raw_icon = data.get("icon", "room")
+        if not isinstance(raw_ips, list):
+            raise ValueError("Zone bulb_ips must be a list.")
+        return cls(
+            id=raw_id,
+            name=raw_name,
+            bulb_ips=list(raw_ips),
+            icon=raw_icon if isinstance(raw_icon, str) else "room",
+        )

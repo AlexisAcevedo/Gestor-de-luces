@@ -171,6 +171,7 @@ class LightControlServicePort(Protocol):
         name: str,
         source_ip: str | None = None,
         scene_id: str | None = None,
+        capture_all_targets: bool = False,
     ) -> CustomScene:
         """Captura la fotografia luminica actual del foco de referencia y la guarda como preset."""
         ...

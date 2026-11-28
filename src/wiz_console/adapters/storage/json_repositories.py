@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from wiz_console.domain.models import Bulb
+from wiz_console.domain.models import Bulb, Zone
 from wiz_console.domain.scenes import CustomScene
 from wiz_console.domain.value_objects import (
     DEFAULT_LANGUAGE,
@@ -37,6 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 MAX_JSON_FILE_BYTES = 1 * 1024 * 1024
 MAX_BULB_RECORDS = 256
 MAX_SCENE_RECORDS = 512
+MAX_ZONE_RECORDS = 128
 _REPLACE_RETRY_ATTEMPTS = 5
 _REPLACE_RETRY_BASE_DELAY = 0.02
 _MISSING = object()
@@ -271,6 +272,44 @@ class JsonSceneRepository:
     def save_scenes(self, scenes: list[CustomScene]) -> None:
         """Persiste atomicamente la lista de escenas personalizadas."""
         payload = [scene.to_dict() for scene in scenes]
+        _atomic_write_json(self._file_path, payload)
+
+
+class JsonZoneRepository:
+    """Persists user-defined bulb zones/rooms atomically in ``zones.json``."""
+
+    def __init__(self, data_dir: Path | None = None, filename: str = "zones.json") -> None:
+        self._data_dir = data_dir if data_dir is not None else resolve_default_data_dir()
+        self._file_path = self._data_dir / filename
+
+    @property
+    def file_path(self) -> Path:
+        """Expose underlying JSON file path for diagnostics and tests."""
+        return self._file_path
+
+    def load_zones(self) -> list[Zone]:
+        """Load stored zones while discarding malformed records safely."""
+        records = _safe_read_json_list(self._file_path)
+        if len(records) > MAX_ZONE_RECORDS:
+            _LOGGER.warning(
+                "Zone repository %s has %d records; truncating to %d.",
+                self._file_path,
+                len(records),
+                MAX_ZONE_RECORDS,
+            )
+            records = records[:MAX_ZONE_RECORDS]
+        zones: list[Zone] = []
+        for record in records:
+            try:
+                zones.append(Zone.from_dict(record))
+            except (KeyError, TypeError, ValueError, OverflowError):
+                _LOGGER.warning("Skipping invalid zone record in %s.", self._file_path)
+                continue
+        return zones
+
+    def save_zones(self, zones: list[Zone]) -> None:
+        """Atomically persist zones to disk."""
+        payload = [zone.to_dict() for zone in zones]
         _atomic_write_json(self._file_path, payload)
 
 
