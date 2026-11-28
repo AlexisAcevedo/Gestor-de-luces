@@ -127,6 +127,30 @@ class LightControlService:
         """Marca como mostrado y persiste el aviso inicial de bandeja."""
         return self._settings.set_tray_hint_seen(seen)
 
+    def get_auto_sync(self) -> bool:
+        """Return whether periodic background polling is enabled."""
+        return self._settings.get_auto_sync()
+
+    def set_auto_sync(self, enabled: bool) -> bool:
+        """Persist whether periodic background polling is enabled."""
+        return self._settings.set_auto_sync(enabled)
+
+    def get_favorite_builtin_scenes(self) -> list[int]:
+        """Return persisted favorite built-in WiZ scene IDs (1-36)."""
+        return self._settings.get_favorite_builtin_scenes()
+
+    def set_favorite_builtin_scenes(self, scene_ids: list[int]) -> list[int]:
+        """Validate and persist favorite built-in WiZ scene IDs."""
+        return self._settings.set_favorite_builtin_scenes(scene_ids)
+
+    def get_ambilight_prefs(self) -> dict[str, Any]:
+        """Return persisted Ambilight configuration defaults."""
+        return self._settings.get_ambilight_prefs()
+
+    def get_music_prefs(self) -> dict[str, Any]:
+        """Return persisted Music Sync configuration defaults."""
+        return self._settings.get_music_prefs()
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()

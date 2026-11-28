@@ -103,7 +103,7 @@ class AmbilightStreamManager:
 
         validated_brightness = Brightness(require_int_value(brightness, "brightness")).percent
         clamped_min_brightness = max(
-            5, min(20, require_int_value(min_brightness, "min_brightness"))
+            10, min(20, require_int_value(min_brightness, "min_brightness"))
         )
         parsed_monitor = require_int_value(monitor_index, "monitor_index")
         if parsed_monitor < 0:

@@ -35,7 +35,8 @@ export function syncMusicPolling() {
 
 /* Actualiza las barras espectrales FFT, la muestra cromatica y la configuracion de WASAPI */
 export function renderMusicPanel() {
-  const music = appState.musicSync || {
+  const prefs = appState.musicPrefs || {};
+  const rawMusic = appState.musicSync || {
     active: false,
     device_index: null,
     palette_mode: "spectrum",
@@ -50,6 +51,7 @@ export function renderMusicPanel() {
     last_color: null,
     frames_sent: 0
   };
+  const music = rawMusic.active ? rawMusic : Object.assign({}, rawMusic, prefs);
 
   const tabDot = document.getElementById("tab-music-dot");
   if (tabDot) {

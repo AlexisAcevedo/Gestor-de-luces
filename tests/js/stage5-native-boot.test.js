@@ -57,7 +57,7 @@ describe("Stage 5 zero-flash i18n bootstrap & language persistence", () => {
       const changed = syncLanguageUi("es");
       assert.equal(changed, true);
       assert.equal(dom.document.documentElement.dataset.lang, "es");
-      const savedPrefs = JSON.parse(dom.storage.getItem("gestor_luces_ui_prefs"));
+      const savedPrefs = JSON.parse(dom.storage.getItem("wiz_console_ui_prefs"));
       assert.equal(savedPrefs.language, "es");
 
       const callsBeforeRepeat = dom.storage.setCalls.length;

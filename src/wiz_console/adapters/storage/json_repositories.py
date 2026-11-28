@@ -278,6 +278,105 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": DEFAULT_THEME,
 }
 
+_MAX_SELECTED_IPS = 64
+
+
+def _sanitize_int(value: Any, low: int, high: int, default: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return default
+    return max(low, min(high, value))
+
+
+def _sanitize_float(value: Any, low: float, high: float, default: float) -> float:
+    import math
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        return default
+    return max(low, min(high, parsed))
+
+
+def _sanitize_ambilight_prefs(raw: Any) -> dict[str, Any]:
+    data = raw if isinstance(raw, dict) else {}
+    mode = str(data.get("color_mode", "vibrant")).strip().lower()
+    if mode not in ("vibrant", "average"):
+        mode = "vibrant"
+    mon = data.get("monitor_index", 1)
+    monitor_index = mon if (isinstance(mon, int) and not isinstance(mon, bool) and mon >= 0) else 1
+    return {
+        "monitor_index": monitor_index,
+        "color_mode": mode,
+        "auto_brightness": bool(data.get("auto_brightness", True)),
+        "brightness": _sanitize_int(data.get("brightness"), 10, 100, 85),
+        "smoothing_alpha": _sanitize_float(data.get("smoothing_alpha"), 0.05, 1.0, 0.38),
+        "min_brightness": _sanitize_int(data.get("min_brightness"), 10, 20, 10),
+    }
+
+
+def _sanitize_music_prefs(raw: Any) -> dict[str, Any]:
+    data = raw if isinstance(raw, dict) else {}
+    palette = str(data.get("palette_mode", "spectrum")).strip().lower()
+    if palette not in ("spectrum", "club", "chill"):
+        palette = "spectrum"
+    dev = data.get("device_index")
+    device_index = dev if (isinstance(dev, int) and not isinstance(dev, bool)) else None
+    return {
+        "palette_mode": palette,
+        "sensitivity": _sanitize_float(data.get("sensitivity"), 0.3, 3.0, 1.0),
+        "smoothing_alpha": _sanitize_float(data.get("smoothing_alpha"), 0.05, 1.0, 0.50),
+        "audio_brightness": bool(data.get("audio_brightness", True)),
+        "brightness": _sanitize_int(data.get("brightness"), 10, 100, 85),
+        "device_index": device_index,
+    }
+
+
+def _sanitize_settings(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalize known preference fields while preserving unknown/custom flags."""
+    language = normalize_language(raw.get("language", DEFAULT_LANGUAGE))
+    theme = normalize_theme(raw.get("theme", DEFAULT_THEME))
+    merged = dict(DEFAULT_SETTINGS)
+    merged.update(raw)
+    merged["language"] = language
+    merged["theme"] = theme
+    if "tray_hint_seen" in merged:
+        merged["tray_hint_seen"] = bool(merged["tray_hint_seen"])
+    if "auto_sync" in merged:
+        merged["auto_sync"] = bool(merged["auto_sync"])
+    if "selected_ips" in merged:
+        raw_ips = merged["selected_ips"]
+        if isinstance(raw_ips, list):
+            seen_ips: list[str] = []
+            for item in raw_ips:
+                if isinstance(item, str) and item.strip() and item.strip() not in seen_ips:
+                    seen_ips.append(item.strip())
+                    if len(seen_ips) >= _MAX_SELECTED_IPS:
+                        break
+            merged["selected_ips"] = seen_ips
+        else:
+            del merged["selected_ips"]
+    if "favorite_builtin_scenes" in merged:
+        raw_favs = merged["favorite_builtin_scenes"]
+        if isinstance(raw_favs, list):
+            seen_ids: list[int] = []
+            for item in raw_favs:
+                if (
+                    isinstance(item, int)
+                    and not isinstance(item, bool)
+                    and 1 <= item <= 36
+                    and item not in seen_ids
+                ):
+                    seen_ids.append(item)
+            merged["favorite_builtin_scenes"] = seen_ids
+        else:
+            del merged["favorite_builtin_scenes"]
+    if "ambilight_prefs" in merged:
+        merged["ambilight_prefs"] = _sanitize_ambilight_prefs(merged["ambilight_prefs"])
+    if "music_prefs" in merged:
+        merged["music_prefs"] = _sanitize_music_prefs(merged["music_prefs"])
+    return merged
+
 
 class JsonSettingsRepository:
     """Persiste las preferencias globales de la consola (`language` y `theme`) en
@@ -307,24 +406,9 @@ class JsonSettingsRepository:
             _quarantine_corrupt_file(self._file_path, "expected JSON object")
             return dict(DEFAULT_SETTINGS)
 
-        language = normalize_language(parsed.get("language", DEFAULT_LANGUAGE))
-        theme = normalize_theme(parsed.get("theme", DEFAULT_THEME))
-        merged = dict(DEFAULT_SETTINGS)
-        merged.update(parsed)
-        merged["language"] = language
-        merged["theme"] = theme
-        if "tray_hint_seen" in merged:
-            merged["tray_hint_seen"] = bool(merged["tray_hint_seen"])
-        return merged
+        return _sanitize_settings(parsed)
 
     def save_settings(self, settings: dict[str, Any]) -> None:
         """Valida y persiste atomicamente el diccionario de preferencias."""
-        language = normalize_language(settings.get("language", DEFAULT_LANGUAGE))
-        theme = normalize_theme(settings.get("theme", DEFAULT_THEME))
-        payload = dict(DEFAULT_SETTINGS)
-        payload.update(settings)
-        payload["language"] = language
-        payload["theme"] = theme
-        if "tray_hint_seen" in payload:
-            payload["tray_hint_seen"] = bool(payload["tray_hint_seen"])
+        payload = _sanitize_settings(settings)
         _atomic_write_json(self._file_path, payload)

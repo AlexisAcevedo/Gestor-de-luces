@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from wiz_console.application.service_context import ServiceContext
+from wiz_console.domain.scenes import get_builtin_scene
 from wiz_console.domain.value_objects import SUPPORTED_LANGUAGES, normalize_theme
 
 
@@ -47,3 +50,39 @@ class SettingsService:
         self._ctx.tray_hint_seen = bool(seen)
         self._ctx.persist_settings()
         return self._ctx.tray_hint_seen
+
+    def get_auto_sync(self) -> bool:
+        """Return whether periodic background polling is enabled."""
+        return bool(self._ctx.auto_sync)
+
+    def set_auto_sync(self, enabled: bool) -> bool:
+        """Persist whether periodic background polling is enabled."""
+        self._ctx.auto_sync = bool(enabled)
+        self._ctx.persist_settings()
+        return self._ctx.auto_sync
+
+    def get_favorite_builtin_scenes(self) -> list[int]:
+        """Return persisted favorite built-in WiZ scene IDs (1-36)."""
+        return list(self._ctx.favorite_builtin_scenes)
+
+    def set_favorite_builtin_scenes(self, scene_ids: list[int]) -> list[int]:
+        """Validate, deduplicate, and persist favorite built-in WiZ scene IDs."""
+        cleaned: list[int] = []
+        for raw_id in scene_ids:
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                raise ValueError(f"Invalid built-in scene ID: {raw_id!r}.")
+            if get_builtin_scene(raw_id) is None:
+                raise ValueError(f"Unknown built-in scene ID: {raw_id}.")
+            if raw_id not in cleaned:
+                cleaned.append(raw_id)
+        self._ctx.favorite_builtin_scenes = cleaned
+        self._ctx.persist_settings()
+        return list(self._ctx.favorite_builtin_scenes)
+
+    def get_ambilight_prefs(self) -> dict[str, Any]:
+        """Return persisted Ambilight configuration defaults."""
+        return dict(self._ctx.ambilight_prefs)
+
+    def get_music_prefs(self) -> dict[str, Any]:
+        """Return persisted Music Sync configuration defaults."""
+        return dict(self._ctx.music_prefs)

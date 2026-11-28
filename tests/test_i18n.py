@@ -116,6 +116,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         "Mostrar ventana",
         "Brillo",
         "Presets favoritos",
+        "Ambilight",
+        "Sincronización musical",
         "Salir",
     ]
     fav_submenu = next(e for e in spec_es_off if e.label == "Presets favoritos")
@@ -128,6 +130,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         presets=[TrayPreset(id="p1", name="Lectura Calida", is_favorite=True)],
         window_visible=True,
         sleep_timer_active=True,
+        ambilight_active=True,
+        music_sync_active=False,
         language="es",
     )
     labels_on = [entry.label for entry in spec_es_on if not entry.is_separator]
@@ -136,6 +140,8 @@ def test_build_tray_menu_spec_and_title_in_spanish() -> None:
         "Ocultar ventana",
         "Brillo",
         "Presets favoritos",
+        "Ambilight",
+        "Sincronización musical",
         "Cancelar temporizador",
         "Salir",
     ]

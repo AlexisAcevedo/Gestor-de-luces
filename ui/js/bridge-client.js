@@ -19,9 +19,19 @@ export function createBrowserMockApi() {
     { id: "preset02", name: "Cyan Backlight", mode: "rgb", brightness: 85, color: { r: 0, g: 180, b: 255, hex: "#00b4ff" }, temperature: null, built_in_scene_id: null, speed: 100, is_favorite: false }
   ];
   let mockSleepTimer = { active: false, remaining_seconds: 0, total_seconds: 0, target_ips: [], deadlineMs: 0 };
+  let mockAutoSync = false;
+  let mockFavoriteBuiltinScenes = [];
+  let mockAmbilightPrefs = {
+    monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
+    min_brightness: 10, brightness: 85, smoothing_alpha: 0.38
+  };
+  let mockMusicPrefs = {
+    device_index: -1, palette_mode: "spectrum", sensitivity: 1.0,
+    smoothing_alpha: 0.50, audio_brightness: true, brightness: 85
+  };
   let mockAmbilight = {
     active: false, monitor_index: 1, color_mode: "vibrant", auto_brightness: true,
-    brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
+    min_brightness: 10, brightness: 85, fixed_brightness: 85, smoothing_alpha: 0.38,
     last_color: { r: 56, g: 189, b: 248, hex: "#38bdf8" }, target_ips: [], frames_sent: 0
   };
   const mockMonitors = [
@@ -62,6 +72,10 @@ export function createBrowserMockApi() {
     syncMockTimer();
     return Promise.resolve({
       ok: true, language: mockLanguage, theme: mockTheme,
+      auto_sync: mockAutoSync,
+      favorite_builtin_scenes: mockFavoriteBuiltinScenes.slice(),
+      ambilight_prefs: Object.assign({}, mockAmbilightPrefs),
+      music_prefs: Object.assign({}, mockMusicPrefs),
       bulbs: JSON.parse(JSON.stringify(mockBulbs)), selected_ips: mockSelected.slice(),
       scenes: SCENE_CATALOG.slice(), custom_scenes: JSON.parse(JSON.stringify(mockCustomScenes)),
       sleep_timer: {
@@ -104,6 +118,24 @@ export function createBrowserMockApi() {
     refresh_states: () => buildMockEnvelope(),
     select_targets: (ips) => {
       mockSelected = Array.isArray(ips) ? ips.slice() : [];
+      return buildMockEnvelope();
+    },
+    set_auto_sync: (enabled) => {
+      mockAutoSync = Boolean(enabled);
+      return buildMockEnvelope();
+    },
+    set_favorite_builtin_scenes: (sceneIds) => {
+      const seen = new Set();
+      mockFavoriteBuiltinScenes = [];
+      if (Array.isArray(sceneIds)) {
+        sceneIds.forEach((id) => {
+          const parsed = Number.parseInt(id, 10);
+          if (Number.isInteger(parsed) && parsed > 0 && !seen.has(parsed)) {
+            seen.add(parsed);
+            mockFavoriteBuiltinScenes.push(parsed);
+          }
+        });
+      }
       return buildMockEnvelope();
     },
     add_manual_bulb: (ip, name) => {
@@ -239,11 +271,17 @@ export function createBrowserMockApi() {
       const sampled = { r: 56, g: 189, b: 248, hex: "#38bdf8" };
       mockMusicSync.active = false;
       mockMusicSync.target_ips = [];
+      const minBri = clampInt(minBrightness != null ? minBrightness : 10, 10, 20);
+      mockAmbilightPrefs = {
+        monitor_index: Number(monitorIndex || 1), color_mode: String(colorMode || "vibrant"),
+        auto_brightness: Boolean(autoBrightness), min_brightness: minBri,
+        brightness: Number(brightness || 85), smoothing_alpha: Number(smoothingAlpha || 0.38)
+      };
       mockAmbilight = {
-        active: true, monitor_index: Number(monitorIndex || 1), color_mode: String(colorMode || "vibrant"),
-        auto_brightness: Boolean(autoBrightness), min_brightness: clampInt(minBrightness != null ? minBrightness : 10, 5, 20),
-        brightness: Number(brightness || 85), fixed_brightness: Number(brightness || 85),
-        smoothing_alpha: Number(smoothingAlpha || 0.38), last_color: sampled,
+        active: true, monitor_index: mockAmbilightPrefs.monitor_index, color_mode: mockAmbilightPrefs.color_mode,
+        auto_brightness: mockAmbilightPrefs.auto_brightness, min_brightness: minBri,
+        brightness: mockAmbilightPrefs.brightness, fixed_brightness: mockAmbilightPrefs.brightness,
+        smoothing_alpha: mockAmbilightPrefs.smoothing_alpha, last_color: sampled,
         target_ips: targets, frames_sent: mockAmbilight.frames_sent + 1
       };
       mutateTargetBulbs(ips, (st) => {
@@ -265,11 +303,17 @@ export function createBrowserMockApi() {
       const sampled = { r: 240, g: 52, b: 112, hex: "#f03470" };
       mockAmbilight.active = false;
       mockAmbilight.target_ips = [];
-      mockMusicSync = {
-        active: true, device_index: deviceIndex != null ? Number(deviceIndex) : -1,
+      mockMusicPrefs = {
+        device_index: deviceIndex != null ? Number(deviceIndex) : -1,
         palette_mode: String(paletteMode || "spectrum"), sensitivity: Number(sensitivity || 1.0),
         smoothing_alpha: Number(smoothingAlpha || 0.50), audio_brightness: Boolean(audioBrightness),
-        brightness: Number(brightness || 85), fixed_brightness: Number(brightness || 85),
+        brightness: Number(brightness || 85)
+      };
+      mockMusicSync = {
+        active: true, device_index: mockMusicPrefs.device_index,
+        palette_mode: mockMusicPrefs.palette_mode, sensitivity: mockMusicPrefs.sensitivity,
+        smoothing_alpha: mockMusicPrefs.smoothing_alpha, audio_brightness: mockMusicPrefs.audio_brightness,
+        brightness: mockMusicPrefs.brightness, fixed_brightness: mockMusicPrefs.brightness,
         rms: 0.68, bass: 0.82, mid: 0.54, treble: 0.36, last_color: sampled,
         target_ips: targets, frames_sent: mockMusicSync.frames_sent + 1
       };

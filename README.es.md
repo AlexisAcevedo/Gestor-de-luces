@@ -33,7 +33,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
    - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).
-   - Múltiples algoritmos de muestreo: color promedio general, color dominante de bordes o centroide de alta luminosidad.
+   - Modos de muestreo: color `vibrant` ponderado por saturación o color `average` promedio de pantalla, con brillo automático y piso mínimo configurable entre 10% y 20%.
    - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA).
 
 4. Sincronización Musical Reactiva por WASAPI Loopback:
@@ -45,7 +45,7 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo
      WinForms `NotifyIcon` pintado con el tema activo (con respaldo `pystray` si WinForms no
      puede cargar).
-   - Menú unificado (`Mostrar ventana` / `Ocultar ventana`, `Presets favoritos`, `Salir`), alternancia de encendido general y minimización elegante a la bandeja al cerrar o minimizar la ventana, con aviso único (`tray_hint_seen` persistido en `settings.json`).
+   - Menú unificado (`Mostrar ventana` / `Ocultar ventana`, `Presets favoritos`, toggles de `Ambilight` y `Sincronización musical`, `Salir`), alternancia de encendido general y minimización elegante a la bandeja al cerrar o minimizar la ventana, con aviso único (`tray_hint_seen` persistido en `settings.json`, junto con `selected_ips`, `auto_sync`, escenas favoritas y parámetros de Ambilight/Música).
    - El item de encendido/apagado actúa sobre el estado real del foco: relee los focos objetivo antes de invertir, y la etiqueta, el tooltip y el color del icono se refrescan desde los focos en cada sondeo, así que una luz cambiada desde la llave de pared o la app del teléfono no invierte el próximo clic.
    - Ocultarse en la bandeja no deja residuo en alt+tab (la ventana del bombeo de la bandeja es una ventana de herramienta) y salir desde el menú cierra limpio.
    - Sincronización libre de bloqueos mutuos (deadlocks) entre WinForms y PyWebView.

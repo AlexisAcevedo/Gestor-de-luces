@@ -102,6 +102,32 @@ class WebviewBridge(BridgeHandlers, BridgeLifecycle, WindowFitHandlers):
                 for scene in self._service.list_custom_scenes()
             ],
             "sleep_timer_active": bool(self._service.get_sleep_timer_status().get("active")),
+            "ambilight_active": bool(self._service.get_ambilight_status().get("active")),
+            "music_sync_active": bool(self._service.get_music_sync_status().get("active")),
             "language": self._service.get_language(),
             "theme": self._service.get_theme(),
         }
+
+    def toggle_ambilight(self) -> dict[str, Any]:
+        """Toggle Ambilight screen sync from the system tray using saved defaults."""
+
+        async def _toggle() -> None:
+            if self._service.get_ambilight_status().get("active"):
+                self._service.stop_ambilight()
+            else:
+                prefs = self._service.get_ambilight_prefs()
+                self._service.start_ambilight(**prefs)
+
+        return self._call(_toggle)
+
+    def toggle_music_sync(self) -> dict[str, Any]:
+        """Toggle Music Sync from the system tray using saved defaults."""
+
+        async def _toggle() -> None:
+            if self._service.get_music_sync_status().get("active"):
+                self._service.stop_music_sync()
+            else:
+                prefs = self._service.get_music_prefs()
+                self._service.start_music_sync(**prefs)
+
+        return self._call(_toggle)

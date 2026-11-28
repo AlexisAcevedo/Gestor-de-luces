@@ -119,11 +119,16 @@ export function normalizeTheme(theme) {
 }
 
 /* Preferencias de interfaz persistentes (pestana activa y secciones plegables) */
-export const UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
+export const UI_PREFS_STORAGE_KEY = "wiz_console_ui_prefs";
+export const LEGACY_UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
 
 export function loadUiPrefs() {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(UI_PREFS_STORAGE_KEY) || "{}");
+    const raw =
+      window.localStorage.getItem(UI_PREFS_STORAGE_KEY) ||
+      window.localStorage.getItem(LEGACY_UI_PREFS_STORAGE_KEY) ||
+      "{}";
+    const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch (_err) {
     return {};
@@ -146,9 +151,12 @@ export const appState = {
   theme: DEFAULT_THEME,
   bulbs: [],
   selectedIps: [],
+  autoSync: false,
   scenes: SCENE_CATALOG.slice(),
   favoriteSceneIds: loadFavoriteSceneIds(),
   customScenes: [],
+  ambilightPrefs: null,
+  musicPrefs: null,
   sleepTimer: {
     active: false,
     remaining_seconds: 0,

@@ -38,6 +38,8 @@ JS_API_EXCLUDED: frozenset[str] = frozenset(
         "refresh_tray_states",
         # Solo la bandeja: invierte el estado real sin pasar por la vista web.
         "toggle_power",
+        "toggle_ambilight",
+        "toggle_music_sync",
     }
 )
 
@@ -62,11 +64,13 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
     "rename_bulb": BridgeHandlers.rename_bulb,
     "save_custom_scene": BridgeHandlers.save_custom_scene,
     "select_targets": BridgeHandlers.select_targets,
+    "set_auto_sync": BridgeHandlers.set_auto_sync,
     "set_autostart": BridgeHandlers.set_autostart,
     "set_brightness": BridgeHandlers.set_brightness,
     "set_builtin_scene": BridgeHandlers.set_builtin_scene,
     "set_color": BridgeHandlers.set_color,
     "set_custom_scene_favorite": BridgeHandlers.set_custom_scene_favorite,
+    "set_favorite_builtin_scenes": BridgeHandlers.set_favorite_builtin_scenes,
     "set_language": BridgeLifecycle.set_language,
     "set_power": BridgeHandlers.set_power,
     "set_temperature": BridgeHandlers.set_temperature,

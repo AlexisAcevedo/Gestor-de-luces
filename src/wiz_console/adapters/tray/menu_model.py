@@ -20,6 +20,8 @@ ACTION_TOGGLE_POWER = "toggle_power"
 ACTION_SET_BRIGHTNESS = "set_brightness"
 ACTION_APPLY_PRESET = "apply_preset"
 ACTION_CANCEL_SLEEP_TIMER = "cancel_sleep_timer"
+ACTION_TOGGLE_AMBILIGHT = "toggle_ambilight"
+ACTION_TOGGLE_MUSIC_SYNC = "toggle_music_sync"
 ACTION_QUIT = "quit"
 
 BRIGHTNESS_LEVELS: tuple[int, ...] = (10, 25, 50, 75, 100)
@@ -85,6 +87,8 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
         "brightness": "Brightness",
         "favorite_presets": "Favorite presets",
         "no_saved_presets": "No saved presets",
+        "ambilight": "Ambilight",
+        "music_sync": "Music Sync",
         "cancel_sleep_timer": "Cancel sleep timer",
         "quit": "Exit",
         "tray_hint_title": "WiZ Lighting Console",
@@ -100,6 +104,8 @@ _TRAY_STRINGS: dict[str, dict[str, str]] = {
         "brightness": "Brillo",
         "favorite_presets": "Presets favoritos",
         "no_saved_presets": "Sin presets guardados",
+        "ambilight": "Ambilight",
+        "music_sync": "Sincronización musical",
         "cancel_sleep_timer": "Cancelar temporizador",
         "quit": "Salir",
         "tray_hint_title": "Consola de Iluminación WiZ",
@@ -130,6 +136,8 @@ def build_tray_menu_spec(
     presets: Sequence[TrayPreset],
     window_visible: bool,
     sleep_timer_active: bool,
+    ambilight_active: bool = False,
+    music_sync_active: bool = False,
     language: str = "en",
 ) -> list[TrayMenuEntry]:
     """Construye la estructura completa del menu a partir del estado e idioma actuales."""
@@ -157,6 +165,16 @@ def build_tray_menu_spec(
         TrayMenuEntry(
             label=strings["favorite_presets"],
             children=_build_preset_entries(presets, no_presets_label=strings["no_saved_presets"]),
+        ),
+        TrayMenuEntry(
+            label=strings["ambilight"],
+            action_id=ACTION_TOGGLE_AMBILIGHT,
+            checked=bool(ambilight_active),
+        ),
+        TrayMenuEntry(
+            label=strings["music_sync"],
+            action_id=ACTION_TOGGLE_MUSIC_SYNC,
+            checked=bool(music_sync_active),
         ),
     ]
     if sleep_timer_active:

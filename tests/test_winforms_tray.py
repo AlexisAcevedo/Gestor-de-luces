@@ -170,6 +170,8 @@ def test_menu_items_map_the_model_with_the_dark_palette() -> None:
             "",
             "Brillo",
             "Presets favoritos",
+            "Ambilight",
+            "Sincronización musical",
             "Cancelar temporizador",
             "",
             "Salir",

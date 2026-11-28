@@ -86,6 +86,7 @@ class BulbInventoryService:
             resolved = self._ctx.get_target_ips()
             self._ctx.ambilight.update_targets(resolved)
             self._ctx.music_sync.update_targets(resolved)
+            self._ctx.persist_settings()
 
         self._ctx.persist_bulbs()
         return self._ctx.list_bulbs()
@@ -133,6 +134,7 @@ class BulbInventoryService:
             resolved = self._ctx.get_target_ips()
             self._ctx.ambilight.update_targets(resolved)
             self._ctx.music_sync.update_targets(resolved)
+            self._ctx.persist_settings()
         self._ctx.persist_bulbs()
         return bulb
 
