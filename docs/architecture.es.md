@@ -252,7 +252,7 @@ En el primer arranque tras actualizar desde `GestorDeLuces`, `resolve_default_da
 Archivos gestionados:
 - `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario, revalidados al cargar mediante `validate_local_endpoint()`; `discover_bulbs()` reconcilia cambios de IP por DHCP mediante MAC y `remove_bulb()` elimina registros retirados).
 - `custom_scenes.json`: Presets personalizados creados por el usuario (modo, RGB, CCT, brillo, velocidad, favorito).
-- `settings.json`: Preferencias globales de usuario (`language`: `"en"` o `"es"`, `theme`: `"architectural-stone"` o `"atmospheric-dark"`, y opcional `tray_hint_seen`: `true` una vez mostrado el aviso inicial de bandeja).
+- `settings.json`: Preferencias globales y estado de sesión (`language`, `theme`, `tray_hint_seen` opcional, `selected_ips`, `auto_sync`, `favorite_builtin_scenes`, `ambilight_prefs` y `music_prefs`), consumidos tanto por la interfaz web como por los toggles de la bandeja (`toggle_ambilight` / `toggle_music_sync`).
 
 ### Patrón de Escritura Atómica y Endurecimiento de Lectura
 

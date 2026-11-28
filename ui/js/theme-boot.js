@@ -15,7 +15,8 @@
     es: true
   };
   var DEFAULT_LANG = "en";
-  var UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
+  var UI_PREFS_STORAGE_KEY = "wiz_console_ui_prefs";
+  var LEGACY_UI_PREFS_STORAGE_KEY = "gestor_luces_ui_prefs";
 
   function normalize(value) {
     if (typeof value !== "string") return null;
@@ -43,7 +44,9 @@
   function readPrefsFromStorage() {
     try {
       if (!window.localStorage) return null;
-      var raw = window.localStorage.getItem(UI_PREFS_STORAGE_KEY);
+      var raw =
+        window.localStorage.getItem(UI_PREFS_STORAGE_KEY) ||
+        window.localStorage.getItem(LEGACY_UI_PREFS_STORAGE_KEY);
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       return parsed && typeof parsed === "object" ? parsed : null;

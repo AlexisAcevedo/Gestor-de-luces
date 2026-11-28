@@ -40,6 +40,30 @@ class LightControlServicePort(Protocol):
         """Normaliza, actualiza y persiste el tema visual activo de la consola."""
         ...
 
+    def get_auto_sync(self) -> bool:
+        """Return whether periodic background polling is enabled."""
+        ...
+
+    def set_auto_sync(self, enabled: bool) -> bool:
+        """Persist whether periodic background polling is enabled."""
+        ...
+
+    def get_favorite_builtin_scenes(self) -> list[int]:
+        """Return persisted favorite built-in WiZ scene IDs (1-36)."""
+        ...
+
+    def set_favorite_builtin_scenes(self, scene_ids: list[int]) -> list[int]:
+        """Validate and persist favorite built-in WiZ scene IDs."""
+        ...
+
+    def get_ambilight_prefs(self) -> dict[str, Any]:
+        """Return persisted Ambilight configuration defaults."""
+        ...
+
+    def get_music_prefs(self) -> dict[str, Any]:
+        """Return persisted Music Sync configuration defaults."""
+        ...
+
     # --- Inventario de focos ---
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""

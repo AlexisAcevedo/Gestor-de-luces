@@ -10,7 +10,7 @@ import {
   getBackendApi, invokeApi, resolveBackendApi, setBackendUpgradeHandler, setEnvelopeHandler
 } from "./bridge-client.js";
 import {
-  bindFixtureEvents, renderFixtureList, renderSleepTimer, syncSleepTimerPolling
+  bindFixtureEvents, renderFixtureList, renderSleepTimer, syncAutoSyncPolling, syncSleepTimerPolling
 } from "./fixtures.js";
 import { bindMusicEvents, renderMusicPanel, syncMusicPolling } from "./music.js";
 import { bindSceneEvents, renderCustomScenesGrid, renderScenesGrid } from "./scenes.js";
@@ -22,18 +22,22 @@ import {
   bindStageControlEvents, drawColorWheel, positionReticleFromRgb, renderStageHeaderAndControls
 } from "./stage-controls.js";
 import {
-  ALLOWED_THEMES, DEFAULT_THEME, appState, clampInt, getPrimaryBulb, loadSceneCatalog,
-  loadUiPrefs, normalizeTheme, saveUiPref, t, updateAllSlidersFill
+  ALLOWED_THEMES, DEFAULT_THEME, FAV_SCENES_STORAGE_KEY, appState, clampInt, getPrimaryBulb,
+  loadFavoriteSceneIds, loadSceneCatalog, loadUiPrefs, normalizeTheme, saveFavoriteSceneIds,
+  saveUiPref, t, updateAllSlidersFill
 } from "./store.js";
 import { setStatusMessage, showToast } from "./toasts.js";
 
 const lastRendered = {
   language: null, persistedLanguage: null, theme: null, persistedTheme: null,
-  bulbsKey: null, scenesKey: null, customKey: null, sleepKey: null, ambiKey: null, musicKey: null
+  bulbsKey: null, scenesKey: null, customKey: null, sleepKey: null, ambiKey: null, musicKey: null,
+  legacyFavsMigrated: false
 };
 
 export function resetUiSyncCache() {
-  Object.keys(lastRendered).forEach((k) => { lastRendered[k] = null; });
+  Object.keys(lastRendered).forEach((k) => {
+    lastRendered[k] = k === "legacyFavsMigrated" ? false : null;
+  });
 }
 
 /* Sincroniza el selector visual de idioma (EN | ES) y traduce el arbol DOM estatico */
@@ -142,9 +146,43 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   const hasMonitors = Array.isArray(envelope.monitors) && envelope.monitors.length > 0;
   const hasMusic = Boolean(envelope.music_sync && typeof envelope.music_sync === "object");
   const hasAudio = Array.isArray(envelope.audio_devices) && envelope.audio_devices.length > 0;
+  const hasFavScenes = Array.isArray(envelope.favorite_builtin_scenes);
+  const hasAmbiPrefs = Boolean(envelope.ambilight_prefs && typeof envelope.ambilight_prefs === "object");
+  const hasMusicPrefs = Boolean(envelope.music_prefs && typeof envelope.music_prefs === "object");
 
   const langChanged = typeof envelope.language === "string" ? syncLanguageUi(envelope.language) : false;
   if (typeof envelope.theme === "string") syncThemeUi(envelope.theme);
+  if (typeof envelope.auto_sync === "boolean" && appState.autoSync !== envelope.auto_sync) {
+    syncAutoSyncPolling(envelope.auto_sync);
+  }
+  if (hasFavScenes) {
+    if (envelope.favorite_builtin_scenes.length === 0 && !lastRendered.legacyFavsMigrated) {
+      lastRendered.legacyFavsMigrated = true;
+      const legacyFavs = loadFavoriteSceneIds();
+      if (legacyFavs.length > 0) {
+        appState.favoriteSceneIds = legacyFavs;
+        const api = getBackendApi();
+        if (api && typeof api.set_favorite_builtin_scenes === "function") {
+          invokeApi(() => api.set_favorite_builtin_scenes(legacyFavs), null, { silent: true });
+        }
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.removeItem(FAV_SCENES_STORAGE_KEY);
+          }
+        } catch (_err) {
+          /* Ignore storage restrictions */
+        }
+      } else {
+        appState.favoriteSceneIds = [];
+      }
+    } else {
+      lastRendered.legacyFavsMigrated = true;
+      appState.favoriteSceneIds = envelope.favorite_builtin_scenes.slice();
+      saveFavoriteSceneIds(appState.favoriteSceneIds);
+    }
+  }
+  if (hasAmbiPrefs) appState.ambilightPrefs = envelope.ambilight_prefs;
+  if (hasMusicPrefs) appState.musicPrefs = envelope.music_prefs;
   if (hasBulbs) appState.bulbs = envelope.bulbs;
   if (hasSelected) appState.selectedIps = envelope.selected_ips;
   if (hasScenes) appState.scenes = envelope.scenes;
@@ -182,10 +220,10 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
       renderStageHeaderAndControls();
     }
   }
-  if (hasScenes || bulbsChanged || langChanged) {
+  if (hasScenes || hasFavScenes || bulbsChanged || langChanged) {
     const primary = getPrimaryBulb();
     const activeSig = primary ? [primary.state?.mode, primary.state?.scene_id, primary.state?.speed] : null;
-    const nextKey = JSON.stringify([appState.scenes, activeSig]);
+    const nextKey = JSON.stringify([appState.scenes, appState.favoriteSceneIds, activeSig]);
     if (nextKey !== lastRendered.scenesKey) {
       lastRendered.scenesKey = nextKey;
       renderScenesGrid();
@@ -206,16 +244,16 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     }
     if (hasSleep) syncSleepTimerPolling();
   }
-  if (hasAmbi || hasMonitors || langChanged) {
-    const nextKey = JSON.stringify([appState.ambilight, appState.monitors]);
+  if (hasAmbi || hasAmbiPrefs || hasMonitors || langChanged) {
+    const nextKey = JSON.stringify([appState.ambilight, appState.ambilightPrefs, appState.monitors]);
     if (nextKey !== lastRendered.ambiKey) {
       lastRendered.ambiKey = nextKey;
       renderAmbilightPanel();
     }
     if (hasAmbi) syncAmbilightPolling();
   }
-  if (hasMusic || hasAudio || langChanged) {
-    const nextKey = JSON.stringify([appState.musicSync, appState.audioDevices]);
+  if (hasMusic || hasMusicPrefs || hasAudio || langChanged) {
+    const nextKey = JSON.stringify([appState.musicSync, appState.musicPrefs, appState.audioDevices]);
     if (nextKey !== lastRendered.musicKey) {
       lastRendered.musicKey = nextKey;
       renderMusicPanel();

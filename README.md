@@ -33,7 +33,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 3. Ambient Screen Sync (Ambilight):
    - Real-time display screen sampling using pure-Python Win32 GDI screen capture (`mss`).
-   - Multiple sampling algorithms: screen average color, dominant edge color, or high-luminance centroid.
+   - Sampling modes: saturation-weighted `vibrant` color or screen `average` color, with auto-brightness and a configurable 10–20% minimum brightness floor.
    - Continuous 10 Hz fire-and-forget UDP streaming with Exponential Moving Average (EMA) color smoothing.
 
 4. WASAPI Loopback Reactive Music Sync:
@@ -44,7 +44,7 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 5. System Tray & Background Residency:
    - Runs silently in the Windows Notification Area through a native WinForms `NotifyIcon`
      menu painted with the active theme (with a `pystray` fallback when WinForms cannot load).
-   - Unified menu actions (`Show window` / `Hide window`, `Favorite presets`, `Exit`), master power toggle, and graceful minimize-to-tray on window close or minimize with a one-time notice (`tray_hint_seen` persisted in `settings.json`).
+   - Unified menu actions (`Show window` / `Hide window`, `Favorite presets`, `Ambilight` & `Music Sync` stream toggles, `Exit`), master power toggle, and graceful minimize-to-tray on window close or minimize with a one-time notice (`tray_hint_seen` persisted in `settings.json`, alongside `selected_ips`, `auto_sync`, favorite built-in scenes, and last Ambilight/Music Sync defaults).
    - The on/off item acts on the bulb's real state: it re-reads the target bulbs before flipping, and the label, tooltip and icon colour are refreshed from the bulbs on every poll, so a light switched from the wall or the phone app does not invert the next click.
    - Hiding to the tray leaves nothing behind in alt+tab (the tray message-pump window is a tool window) and exiting from the menu shuts down cleanly.
    - Deadlock-free WinForms and PyWebView synchronization.

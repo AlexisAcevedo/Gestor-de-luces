@@ -185,6 +185,12 @@ export function renderScenesGrid() {
       saveFavoriteSceneIds(appState.favoriteSceneIds);
       renderScenesGrid();
       setStatusMessage(t(exists ? "status.sceneFavRemoved" : "status.sceneFavAdded", { name: displayName }));
+      const api = getBackendApi();
+      if (api && typeof api.set_favorite_builtin_scenes === "function") {
+        invokeApi(() => api.set_favorite_builtin_scenes(appState.favoriteSceneIds.slice()), null, {
+          silent: true
+        });
+      }
     });
 
     const activateScene = () => {

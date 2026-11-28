@@ -223,6 +223,12 @@ class _FakeLightControlService:
     def get_sleep_timer_status(self) -> dict[str, Any]:
         return {"active": False}
 
+    def get_ambilight_status(self) -> dict[str, Any]:
+        return {"active": False}
+
+    def get_music_sync_status(self) -> dict[str, Any]:
+        return {"active": False}
+
     def get_language(self) -> str:
         return "en"
 

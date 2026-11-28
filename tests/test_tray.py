@@ -42,6 +42,8 @@ from wiz_console.adapters.tray.menu_model import (
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
     ACTION_SHOW_WINDOW,
+    ACTION_TOGGLE_AMBILIGHT,
+    ACTION_TOGGLE_MUSIC_SYNC,
     ACTION_TOGGLE_POWER,
     ACTION_TURN_OFF,
     ACTION_TURN_ON,
@@ -299,6 +301,8 @@ class FakeTrayActions:
             "temperature": None,
             "presets": [],
             "sleep_timer_active": False,
+            "ambilight_active": False,
+            "music_sync_active": False,
             "theme": "architectural-stone",
         }
         self.power_calls: list[bool] = []
@@ -306,6 +310,8 @@ class FakeTrayActions:
         self.preset_calls: list[str] = []
         self.cancel_calls = 0
         self.toggle_calls = 0
+        self.ambilight_toggle_calls = 0
+        self.music_sync_toggle_calls = 0
         self.refresh_calls = 0
         self.events: list[str] = []
         self.fail_refresh = False
@@ -336,6 +342,20 @@ class FakeTrayActions:
 
     def cancel_sleep_timer(self) -> dict[str, Any]:
         self.cancel_calls += 1
+        return {"ok": True}
+
+    def toggle_ambilight(self) -> dict[str, Any]:
+        self.ambilight_toggle_calls += 1
+        self.snapshot["ambilight_active"] = not bool(self.snapshot.get("ambilight_active"))
+        if self.snapshot["ambilight_active"]:
+            self.snapshot["music_sync_active"] = False
+        return {"ok": True}
+
+    def toggle_music_sync(self) -> dict[str, Any]:
+        self.music_sync_toggle_calls += 1
+        self.snapshot["music_sync_active"] = not bool(self.snapshot.get("music_sync_active"))
+        if self.snapshot["music_sync_active"]:
+            self.snapshot["ambilight_active"] = False
         return {"ok": True}
 
     def get_tray_snapshot(self) -> dict[str, Any]:
@@ -810,3 +830,31 @@ async def test_periodic_poll_keeps_its_cadence_when_the_live_sync_fails() -> Non
         )
 
     assert harness.actions.refresh_calls >= 2
+
+
+def test_tray_stream_toggles_reflect_active_state_and_dispatch() -> None:
+    """Tray spec exposes checkable Ambilight and Music Sync toggles and dispatches them."""
+    spec = build_tray_menu_spec(
+        is_on=True,
+        brightness=80,
+        presets=[],
+        window_visible=True,
+        sleep_timer_active=False,
+        ambilight_active=True,
+        music_sync_active=False,
+    )
+    ambi_entry = _find_entry_by_label(spec, "Ambilight")
+    music_entry = _find_entry_by_label(spec, "Music Sync")
+    assert ambi_entry.action_id == ACTION_TOGGLE_AMBILIGHT
+    assert ambi_entry.checked is True
+    assert music_entry.action_id == ACTION_TOGGLE_MUSIC_SYNC
+    assert music_entry.checked is False
+
+    with _TrayHarness() as harness:
+        harness.tray.dispatch(ACTION_TOGGLE_AMBILIGHT)
+        harness.tray.dispatch(ACTION_TOGGLE_MUSIC_SYNC)
+
+    assert harness.actions.ambilight_toggle_calls == 1
+    assert harness.actions.music_sync_toggle_calls == 1
+    assert harness.actions.snapshot["ambilight_active"] is False
+    assert harness.actions.snapshot["music_sync_active"] is True

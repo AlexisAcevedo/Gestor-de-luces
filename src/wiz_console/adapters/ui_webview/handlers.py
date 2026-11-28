@@ -263,6 +263,21 @@ class BridgeHandlers:
             )
         )
 
+    def set_auto_sync(self, enabled: bool) -> dict[str, Any]:
+        """Persist periodic auto-sync polling preference."""
+        return self._call(lambda: self._service.set_auto_sync(_req_bool(enabled, field="enabled")))
+
+    def set_favorite_builtin_scenes(self, scene_ids: list[int]) -> dict[str, Any]:
+        """Persist the ordered list of favorite built-in WiZ scene IDs."""
+
+        def _update() -> None:
+            if not isinstance(scene_ids, list):
+                raise ValueError("scene_ids must be a list of integers.")
+            parsed = [_req_int(item, field="scene_id") for item in scene_ids]
+            self._service.set_favorite_builtin_scenes(parsed)
+
+        return self._call(_update)
+
     # --- Presets personalizados -----------------------------------------------------
 
     def save_custom_scene(self, name: str, source_ip: str | None = None) -> dict[str, Any]:

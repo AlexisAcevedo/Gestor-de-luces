@@ -253,7 +253,7 @@ On the first launch after upgrading from `GestorDeLuces`, `resolve_default_data_
 Files managed:
 - `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases (re-validated via `validate_local_endpoint()` on load; `discover_bulbs()` reconciles DHCP IP changes by MAC and `remove_bulb()` deletes retired entries).
 - `custom_scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed, favorite flag).
-- `settings.json`: Global user preferences (`language`: `"en"` or `"es"`, `theme`: `"architectural-stone"` or `"atmospheric-dark"`, and optional `tray_hint_seen`: `true` once the first hide-to-tray notice has been displayed).
+- `settings.json`: Global user preferences and session state (`language`, `theme`, optional `tray_hint_seen`, `selected_ips`, `auto_sync`, `favorite_builtin_scenes`, `ambilight_prefs`, and `music_prefs`), consumed by both the web UI and system tray toggles (`toggle_ambilight` / `toggle_music_sync`).
 
 ### Atomic File Write & Read Hardening
 

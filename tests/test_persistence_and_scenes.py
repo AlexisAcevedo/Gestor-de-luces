@@ -397,3 +397,32 @@ def test_resolve_default_data_dir_migrates_legacy_windows_and_unix_dirs(
     assert (resolved_unix / "settings.json").read_text(
         encoding="utf-8"
     ) == '{"theme": "atmospheric-dark"}'
+
+
+async def test_session_preferences_round_trip_across_restarts(tmp_path: Path) -> None:
+    """selected_ips, auto_sync, favorite_builtin_scenes, ambilight_prefs, music_prefs persist."""
+    from wiz_console.domain.models import Bulb
+
+    bulb_repo = JsonBulbRepository(data_dir=tmp_path)
+    bulb_repo.save_bulbs([Bulb(ip="192.168.1.50", mac="aabbccddeeff", name="Desk")])
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+
+    service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        bulb_repository=bulb_repo,
+        settings_repository=settings_repo,
+    )
+    service.select_targets(["192.168.1.50"])
+    service.set_auto_sync(True)
+    service.set_favorite_builtin_scenes([12, 4, 12])
+
+    restarted = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        bulb_repository=JsonBulbRepository(data_dir=tmp_path),
+        settings_repository=JsonSettingsRepository(data_dir=tmp_path),
+    )
+    assert restarted.get_target_ips() == ["192.168.1.50"]
+    assert restarted.get_auto_sync() is True
+    assert restarted.get_favorite_builtin_scenes() == [12, 4]
+    assert restarted.get_ambilight_prefs()["min_brightness"] == 10
+    assert restarted.get_music_prefs()["palette_mode"] == "spectrum"

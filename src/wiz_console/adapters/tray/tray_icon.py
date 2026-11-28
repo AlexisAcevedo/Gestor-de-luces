@@ -29,6 +29,8 @@ from wiz_console.adapters.tray.menu_model import (
     ACTION_QUIT,
     ACTION_SET_BRIGHTNESS,
     ACTION_SHOW_WINDOW,
+    ACTION_TOGGLE_AMBILIGHT,
+    ACTION_TOGGLE_MUSIC_SYNC,
     ACTION_TOGGLE_POWER,
     ACTION_TURN_OFF,
     ACTION_TURN_ON,
@@ -90,6 +92,10 @@ class TrayActions(Protocol):
     def apply_custom_scene(self, scene_id: str) -> dict[str, Any]: ...
 
     def cancel_sleep_timer(self) -> dict[str, Any]: ...
+
+    def toggle_ambilight(self) -> dict[str, Any]: ...
+
+    def toggle_music_sync(self) -> dict[str, Any]: ...
 
     def get_tray_snapshot(self) -> dict[str, Any]: ...
 
@@ -162,6 +168,12 @@ class TrayController:
             ),
             ACTION_CANCEL_SLEEP_TIMER: lambda _payload: self._call_bridge(
                 self._actions.cancel_sleep_timer
+            ),
+            ACTION_TOGGLE_AMBILIGHT: lambda _payload: self._call_bridge(
+                self._actions.toggle_ambilight
+            ),
+            ACTION_TOGGLE_MUSIC_SYNC: lambda _payload: self._call_bridge(
+                self._actions.toggle_music_sync
             ),
             ACTION_QUIT: lambda _payload: self._quit_app(),
         }
@@ -294,6 +306,8 @@ class TrayController:
             presets=presets,
             window_visible=self._safe_window_visible(),
             sleep_timer_active=bool(snapshot.get("sleep_timer_active")),
+            ambilight_active=bool(snapshot.get("ambilight_active")),
+            music_sync_active=bool(snapshot.get("music_sync_active")),
             language=lang,
         )
         with self._lock:

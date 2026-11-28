@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from wiz_console.application.ambilight_stream import AmbilightStreamManager
 from wiz_console.application.music_stream import MusicSyncStreamManager
@@ -107,6 +108,24 @@ class ServiceContext:
         self.language: str = DEFAULT_LANGUAGE
         self.theme: str = DEFAULT_THEME
         self.tray_hint_seen: bool = False
+        self.auto_sync: bool = False
+        self.favorite_builtin_scenes: list[int] = []
+        self.ambilight_prefs: dict[str, Any] = {
+            "monitor_index": 1,
+            "color_mode": "vibrant",
+            "auto_brightness": True,
+            "brightness": 85,
+            "smoothing_alpha": 0.38,
+            "min_brightness": 10,
+        }
+        self.music_prefs: dict[str, Any] = {
+            "palette_mode": "spectrum",
+            "sensitivity": 1.0,
+            "smoothing_alpha": 0.50,
+            "audio_brightness": True,
+            "brightness": 85,
+            "device_index": None,
+        }
 
         if self.bulb_repo is not None:
             for saved_bulb in self.bulb_repo.load_bulbs():
@@ -130,6 +149,25 @@ class ServiceContext:
             self.language = normalize_language(loaded_settings.get("language", DEFAULT_LANGUAGE))
             self.theme = normalize_theme(loaded_settings.get("theme", DEFAULT_THEME))
             self.tray_hint_seen = bool(loaded_settings.get("tray_hint_seen", False))
+            self.auto_sync = bool(loaded_settings.get("auto_sync", False))
+            raw_favs = loaded_settings.get("favorite_builtin_scenes")
+            if isinstance(raw_favs, list):
+                self.favorite_builtin_scenes = [
+                    sid
+                    for sid in raw_favs
+                    if isinstance(sid, int) and not isinstance(sid, bool) and 1 <= sid <= 36
+                ]
+            raw_ambi = loaded_settings.get("ambilight_prefs")
+            if isinstance(raw_ambi, dict):
+                self.ambilight_prefs.update(raw_ambi)
+            raw_music = loaded_settings.get("music_prefs")
+            if isinstance(raw_music, dict):
+                self.music_prefs.update(raw_music)
+            raw_selected = loaded_settings.get("selected_ips")
+            if isinstance(raw_selected, list) and self.bulbs:
+                restored = [ip for ip in raw_selected if isinstance(ip, str) and ip in self.bulbs]
+                if restored or len(raw_selected) == 0:
+                    self.selected_ips = restored
 
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
@@ -147,6 +185,7 @@ class ServiceContext:
         resolved_targets = self.get_target_ips()
         self.ambilight.update_targets(resolved_targets)
         self.music_sync.update_targets(resolved_targets)
+        self.persist_settings()
         return list(self.selected_ips)
 
     def get_target_ips(self, explicit_ips: list[str] | None = None) -> list[str]:
@@ -202,7 +241,15 @@ class ServiceContext:
     def persist_settings(self) -> None:
         """Delega el guardado de preferencias globales si hay un repositorio configurado."""
         if self.settings_repo is not None:
-            payload: dict[str, object] = {"language": self.language, "theme": self.theme}
+            payload: dict[str, object] = {
+                "language": self.language,
+                "theme": self.theme,
+                "selected_ips": list(self.selected_ips),
+                "auto_sync": self.auto_sync,
+                "favorite_builtin_scenes": list(self.favorite_builtin_scenes),
+                "ambilight_prefs": dict(self.ambilight_prefs),
+                "music_prefs": dict(self.music_prefs),
+            }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True
             self.settings_repo.save_settings(payload)

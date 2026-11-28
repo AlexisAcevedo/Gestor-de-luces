@@ -36,7 +36,8 @@ export function syncAmbilightPolling() {
 
 /* Sincroniza el panel de Ambilight, la lista de pantallas y la muestra de color en vivo */
 export function renderAmbilightPanel() {
-  const ambi = appState.ambilight || {
+  const prefs = appState.ambilightPrefs || {};
+  const rawAmbi = appState.ambilight || {
     active: false,
     monitor_index: 1,
     color_mode: "vibrant",
@@ -47,6 +48,7 @@ export function renderAmbilightPanel() {
     last_color: null,
     frames_sent: 0
   };
+  const ambi = rawAmbi.active ? rawAmbi : Object.assign({}, rawAmbi, prefs);
 
   const tabDot = document.getElementById("tab-ambilight-dot");
   if (tabDot) {
@@ -145,7 +147,7 @@ export function renderAmbilightPanel() {
   const minBriSlider = document.getElementById("ambilight-min-brightness-slider");
   const minBriOutput = document.getElementById("ambilight-min-brightness-output");
   const isAutoBri = Boolean(ambi.auto_brightness ?? true);
-  const floorVal = clampInt(ambi.min_brightness != null ? ambi.min_brightness : 10, 5, 20);
+  const floorVal = clampInt(ambi.min_brightness != null ? ambi.min_brightness : 10, 10, 20);
   if (minBriRow) {
     minBriRow.classList.toggle("is-disabled", !isAutoBri);
   }
@@ -173,7 +175,7 @@ export function bindAmbilightEvents() {
       colorMode: activeModeBtn ? activeModeBtn.dataset.colorMode : "vibrant",
       smoothingAlpha: Number(alphaSlider ? alphaSlider.value : 0.38),
       autoBrightness: Boolean(autoBriCheckbox ? autoBriCheckbox.checked : true),
-      minBrightness: clampInt(minBriSlider ? minBriSlider.value : 10, 5, 20),
+      minBrightness: clampInt(minBriSlider ? minBriSlider.value : 10, 10, 20),
       brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100)
     };
   };

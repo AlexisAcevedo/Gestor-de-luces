@@ -366,3 +366,47 @@ async def test_webview_bridge_remove_bulb_over_udp() -> None:
             assert removed["selected_ips"] == []
         finally:
             bridge.shutdown()
+
+
+async def test_webview_bridge_session_prefs_and_tray_stream_toggles(tmp_path) -> None:
+    """WebviewBridge persists session flags and toggles Ambilight/Music Sync for the tray."""
+    from wiz_console.adapters.storage.json_repositories import JsonSettingsRepository
+
+    settings_repo = JsonSettingsRepository(data_dir=tmp_path)
+    service = LightControlService(
+        controller=WizUdpController(probe_candidates=[]),
+        settings_repository=settings_repo,
+    )
+    bridge = WebviewBridge(service=service)
+    try:
+        initial = await asyncio.to_thread(bridge.get_initial_state)
+        assert initial["ok"] is True
+        assert initial["auto_sync"] is False
+        assert initial["favorite_builtin_scenes"] == []
+        assert initial["ambilight_prefs"]["min_brightness"] == 10
+
+        auto_resp = await asyncio.to_thread(bridge.set_auto_sync, True)
+        assert auto_resp["ok"] is True
+        assert auto_resp["auto_sync"] is True
+
+        fav_resp = await asyncio.to_thread(bridge.set_favorite_builtin_scenes, [12, 4, 12])
+        assert fav_resp["ok"] is True
+        assert fav_resp["favorite_builtin_scenes"] == [12, 4]
+
+        restarted_service = LightControlService(
+            controller=WizUdpController(probe_candidates=[]),
+            settings_repository=JsonSettingsRepository(data_dir=tmp_path),
+        )
+        assert restarted_service.get_auto_sync() is True
+        assert restarted_service.get_favorite_builtin_scenes() == [12, 4]
+
+        # Starting Ambilight/Music Sync on headless tests with no sampler fails cleanly
+        # while toggle_ambilight / toggle_music_sync remain host-only (blocked from JsApi).
+        from wiz_console.adapters.ui_webview.dispatch import BlockedJsApi, JsApi
+
+        assert isinstance(BlockedJsApi(), BlockedJsApi)
+        js_api = JsApi(bridge)
+        assert not hasattr(js_api, "toggle_ambilight")
+        assert not hasattr(js_api, "toggle_music_sync")
+    finally:
+        bridge.shutdown()

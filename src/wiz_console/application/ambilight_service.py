@@ -77,6 +77,17 @@ class AmbilightService:
                 ips=frame_ips,
             )
 
+        clamped_min = max(10, min(20, parsed_min_brightness))
+        self._ctx.ambilight_prefs = {
+            "monitor_index": parsed_monitor,
+            "color_mode": normalized_mode,
+            "auto_brightness": bool(auto_brightness),
+            "brightness": validated_brightness,
+            "smoothing_alpha": parsed_alpha,
+            "min_brightness": clamped_min,
+        }
+        self._ctx.persist_settings()
+
         return self._ctx.ambilight.start(
             sampler=sampler,
             target_ips=target_ips,
@@ -86,7 +97,7 @@ class AmbilightService:
             auto_brightness=bool(auto_brightness),
             brightness=validated_brightness,
             smoothing_alpha=parsed_alpha,
-            min_brightness=parsed_min_brightness,
+            min_brightness=clamped_min,
         )
 
     def stop_ambilight(self) -> AwaitableStatusDict:

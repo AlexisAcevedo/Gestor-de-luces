@@ -87,6 +87,16 @@ class MusicService:
                 ips=frame_ips,
             )
 
+        self._ctx.music_prefs = {
+            "palette_mode": normalized_palette,
+            "sensitivity": parsed_sensitivity,
+            "smoothing_alpha": parsed_alpha,
+            "audio_brightness": bool(audio_brightness),
+            "brightness": validated_brightness,
+            "device_index": parsed_device,
+        }
+        self._ctx.persist_settings()
+
         return self._ctx.music_sync.start(
             sampler=sampler,
             target_ips=target_ips,

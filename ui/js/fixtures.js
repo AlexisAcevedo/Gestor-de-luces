@@ -252,7 +252,28 @@ export function renderFixtureList() {
   restoreFocusKey(container, focusKey);
 }
 
-/* Activa o detiene el sondeo cada 1s mientras el temporizador de apagado este corriendo */
+export function syncAutoSyncPolling(enabled) {
+  const active = Boolean(enabled);
+  appState.autoSync = active;
+  const toggle = document.getElementById("auto-sync-toggle");
+  if (toggle && toggle.checked !== active) {
+    toggle.checked = active;
+  }
+  if (appState.autoSyncTimer) {
+    clearInterval(appState.autoSyncTimer);
+    appState.autoSyncTimer = null;
+  }
+  if (active) {
+    appState.autoSyncTimer = setInterval(() => {
+      if (document.hidden) return;
+      invokeApi(() => getBackendApi().refresh_states(), () => t("status.autoSyncStep"), {
+        silent: true,
+        poll: true,
+        dedupeKey: "poll:autosync"
+      });
+    }, 3000);
+  }
+}
 export function syncSleepTimerPolling() {
   const isActive = Boolean(appState.sleepTimer && appState.sleepTimer.active);
   if (isActive && !appState.sleepPollTimer) {
@@ -455,22 +476,11 @@ export function bindFixtureEvents() {
   const autoSyncToggle = document.getElementById("auto-sync-toggle");
   if (autoSyncToggle) {
     autoSyncToggle.addEventListener("change", () => {
-      if (appState.autoSyncTimer) {
-        clearInterval(appState.autoSyncTimer);
-        appState.autoSyncTimer = null;
-      }
-      if (autoSyncToggle.checked) {
-        appState.autoSyncTimer = setInterval(() => {
-          if (document.hidden) return;
-          invokeApi(() => getBackendApi().refresh_states(), () => t("status.autoSyncStep"), {
-            silent: true,
-            poll: true,
-            dedupeKey: "poll:autosync"
-          });
-        }, 3000);
-        setStatusMessage(t("status.autoSyncEnabled"));
-      } else {
-        setStatusMessage(t("status.autoSyncPaused"));
+      syncAutoSyncPolling(autoSyncToggle.checked);
+      setStatusMessage(t(autoSyncToggle.checked ? "status.autoSyncEnabled" : "status.autoSyncPaused"));
+      const api = getBackendApi();
+      if (api && typeof api.set_auto_sync === "function") {
+        invokeApi(() => api.set_auto_sync(autoSyncToggle.checked), null, { silent: true });
       }
     });
   }
