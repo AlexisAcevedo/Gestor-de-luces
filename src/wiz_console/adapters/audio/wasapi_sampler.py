@@ -19,7 +19,9 @@ import numpy as np
 from wiz_console.adapters.audio.wasapi_capture import (
     SILENCE_TIMEOUT_SECONDS,
     STANDBY_BRIGHTNESS_FLOOR,
+    VALID_BAND_ASSIGNMENTS,
     VALID_MUSIC_PALETTES,
+    BeatDetector,
     analyze_pcm_audio_frame,
 )
 from wiz_console.adapters.audio.wasapi_devices import enumerate_loopback_devices
@@ -30,8 +32,10 @@ from wiz_console.adapters.audio.wasapi_session import (
 from wiz_console.domain.value_objects import Color
 
 __all__ = [
+    "BeatDetector",
     "SILENCE_TIMEOUT_SECONDS",
     "STANDBY_BRIGHTNESS_FLOOR",
+    "VALID_BAND_ASSIGNMENTS",
     "VALID_MUSIC_PALETTES",
     "WasapiLoopbackSampler",
     "analyze_pcm_audio_frame",
@@ -52,6 +56,7 @@ class WasapiLoopbackSampler:
         self._silence_timeout = max(0.05, float(silence_timeout))
         self._pyaudio_factory = pyaudio_factory
         self._cached_devices: list[dict[str, Any]] | None = None
+        self._beat_detector = BeatDetector()
         self._session = WasapiLoopbackStreamSession(
             frames_per_buffer=self._frames_per_buffer,
             pyaudio_factory=pyaudio_factory,
@@ -71,25 +76,36 @@ class WasapiLoopbackSampler:
         """Abre o reconfigura el stream no bloqueante de captura WASAPI Loopback."""
         return self._session.ensure_stream(requested_device_index)
 
-    def _silence(self, palette_mode: str, sensitivity: float) -> dict[str, Any]:
+    def _silence(
+        self,
+        palette_mode: str,
+        sensitivity: float,
+        custom_palette: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Metricas de silencio absoluto para una ventana sin paquetes del sistema."""
-        return analyze_pcm_audio_frame(
+        metrics = analyze_pcm_audio_frame(
             np.empty(0, dtype=np.float32),
             sample_rate=self._session.sample_rate,
             channels=self._session.channels,
             palette_mode=palette_mode,
             sensitivity=sensitivity,
+            custom_palette=custom_palette,
         )
+        beat, intensity = self._beat_detector.update(0.0)
+        metrics["beat"] = beat
+        metrics["beat_intensity"] = intensity
+        return metrics
 
     def sample_frame(
         self,
         device_index: int | None = None,
         palette_mode: str = "spectrum",
         sensitivity: float = 1.0,
+        custom_palette: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Extrae las metricas espectrales de la ventana actual o silencio si WASAPI se detuvo."""
         if not self._ensure_stream(device_index):
-            return self._silence(palette_mode, sensitivity)
+            return self._silence(palette_mode, sensitivity, custom_palette)
 
         pcm_bytes, last_time, sample_rate, channels = self._session.read()
 
@@ -97,21 +113,32 @@ class WasapiLoopbackSampler:
         # evitamos reutilizar el ultimo buffer congelado y reportamos silencio inmediato.
         elapsed = time.monotonic() - last_time
         if not pcm_bytes or last_time <= 0.0 or elapsed > self._silence_timeout:
-            return analyze_pcm_audio_frame(
+            metrics = analyze_pcm_audio_frame(
                 np.empty(0, dtype=np.float32),
                 sample_rate=sample_rate,
                 channels=channels,
                 palette_mode=palette_mode,
                 sensitivity=sensitivity,
+                custom_palette=custom_palette,
             )
+            beat, intensity = self._beat_detector.update(0.0)
+            metrics["beat"] = beat
+            metrics["beat_intensity"] = intensity
+            return metrics
 
-        return analyze_pcm_audio_frame(
+        metrics = analyze_pcm_audio_frame(
             pcm_bytes,
             sample_rate=sample_rate,
             channels=channels,
             palette_mode=palette_mode,
             sensitivity=sensitivity,
+            custom_palette=custom_palette,
         )
+        onset_energy = 0.7 * float(metrics["bass"]) + 0.3 * float(metrics["rms"])
+        beat, intensity = self._beat_detector.update(onset_energy)
+        metrics["beat"] = beat
+        metrics["beat_intensity"] = intensity
+        return metrics
 
     def sample_audio_metrics(self) -> tuple[float, Color]:
         """Cumple el protocolo `AudioSampler` devolviendo `(rms_0_a_1, Color)`."""

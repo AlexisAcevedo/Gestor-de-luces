@@ -6,11 +6,13 @@
  */
 
 import { bindAmbilightEvents, renderAmbilightPanel, syncAmbilightPolling } from "./ambilight.js";
+import { bindAutomationEvents, renderAutomationPanel } from "./automation.js";
 import {
   getBackendApi, invokeApi, resolveBackendApi, setBackendUpgradeHandler, setEnvelopeHandler
 } from "./bridge-client.js";
 import {
-  bindFixtureEvents, renderFixtureList, renderSleepTimer, syncAutoSyncPolling, syncSleepTimerPolling
+  bindFixtureEvents, renderFixtureList, renderSleepTimer, renderZonesStrip,
+  syncAutoSyncPolling, syncSleepTimerPolling
 } from "./fixtures.js";
 import { bindMusicEvents, renderMusicPanel, syncMusicPolling } from "./music.js";
 import { bindSceneEvents, renderCustomScenesGrid, renderScenesGrid } from "./scenes.js";
@@ -30,8 +32,8 @@ import { setStatusMessage, showToast } from "./toasts.js";
 
 const lastRendered = {
   language: null, persistedLanguage: null, theme: null, persistedTheme: null,
-  bulbsKey: null, scenesKey: null, customKey: null, sleepKey: null, ambiKey: null, musicKey: null,
-  legacyFavsMigrated: false
+  bulbsKey: null, zonesKey: null, scenesKey: null, customKey: null, sleepKey: null,
+  ambiKey: null, musicKey: null, legacyFavsMigrated: false
 };
 
 export function resetUiSyncCache() {
@@ -123,9 +125,11 @@ export function syncThemeUi(theme, { persist = true } = {}) {
 }
 
 function renderAllPanels() {
+  renderZonesStrip();
   renderFixtureList();
   renderStageHeaderAndControls();
   renderSleepTimer();
+  renderAutomationPanel();
   renderScenesGrid();
   renderCustomScenesGrid();
   renderAmbilightPanel();
@@ -139,6 +143,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   const wasMusicActive = Boolean(appState.musicSync && appState.musicSync.active);
   const hasBulbs = Array.isArray(envelope.bulbs);
   const hasSelected = Array.isArray(envelope.selected_ips);
+  const hasZones = Array.isArray(envelope.zones);
   const hasScenes = Array.isArray(envelope.scenes) && envelope.scenes.length > 0;
   const hasCustom = Array.isArray(envelope.custom_scenes);
   const hasSleep = Boolean(envelope.sleep_timer && typeof envelope.sleep_timer === "object");
@@ -153,6 +158,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
 
   const langChanged = typeof envelope.language === "string" ? syncLanguageUi(envelope.language) : false;
   if (typeof envelope.theme === "string") syncThemeUi(envelope.theme);
+  if (typeof envelope.transition_seconds === "number") {
+    appState.transitionSeconds = envelope.transition_seconds;
+  }
   if (typeof envelope.auto_sync === "boolean" && appState.autoSync !== envelope.auto_sync) {
     syncAutoSyncPolling(envelope.auto_sync);
   }
@@ -184,6 +192,23 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
   if (hasAmbiPrefs) appState.ambilightPrefs = envelope.ambilight_prefs;
   if (hasMusicPrefs) appState.musicPrefs = envelope.music_prefs;
+  if (envelope.circadian && typeof envelope.circadian === "object") appState.circadian = envelope.circadian;
+  if (envelope.wakeup_ramp && typeof envelope.wakeup_ramp === "object") appState.wakeupRamp = envelope.wakeup_ramp;
+  if (envelope.wakeup_ramp_status && typeof envelope.wakeup_ramp_status === "object") {
+    appState.wakeupRampStatus = envelope.wakeup_ramp_status;
+  }
+  if (envelope.session_triggers && typeof envelope.session_triggers === "object") {
+    appState.sessionTriggers = envelope.session_triggers;
+  }
+  if (envelope.context_automation && typeof envelope.context_automation === "object") {
+    appState.contextAutomation = envelope.context_automation;
+  }
+  if (envelope.context_status && typeof envelope.context_status === "object") {
+    appState.contextStatus = envelope.context_status;
+  }
+  if (envelope.local_api && typeof envelope.local_api === "object") {
+    appState.localApi = envelope.local_api;
+  }
   if (hasGlobalHotkeys || typeof envelope.global_hotkeys_supported === "boolean") {
     const prev = appState.globalHotkeys || {};
     appState.globalHotkeys = {
@@ -202,6 +227,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
   if (hasBulbs) appState.bulbs = envelope.bulbs;
   if (hasSelected) appState.selectedIps = envelope.selected_ips;
+  if (hasZones) appState.zones = envelope.zones;
   if (hasScenes) appState.scenes = envelope.scenes;
   if (hasCustom) appState.customScenes = envelope.custom_scenes;
   if (hasSleep) appState.sleepTimer = envelope.sleep_timer;
@@ -223,7 +249,7 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   }
 
   if (langChanged) {
-    lastRendered.bulbsKey = lastRendered.scenesKey = lastRendered.customKey = null;
+    lastRendered.bulbsKey = lastRendered.zonesKey = lastRendered.scenesKey = lastRendered.customKey = null;
     lastRendered.sleepKey = lastRendered.ambiKey = lastRendered.musicKey = null;
   }
 
@@ -235,6 +261,13 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
       bulbsChanged = true;
       renderFixtureList();
       renderStageHeaderAndControls();
+    }
+  }
+  if (hasZones || bulbsChanged || langChanged) {
+    const nextKey = JSON.stringify([appState.zones, appState.selectedIps, appState.bulbs.map((b) => b.ip)]);
+    if (nextKey !== lastRendered.zonesKey) {
+      lastRendered.zonesKey = nextKey;
+      renderZonesStrip();
     }
   }
   if (hasScenes || hasFavScenes || bulbsChanged || langChanged) {
@@ -261,26 +294,41 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
     }
     if (hasSleep) syncSleepTimerPolling();
   }
-  if (hasAmbi || hasAmbiPrefs || hasMonitors || langChanged) {
-    const nextKey = JSON.stringify([appState.ambilight, appState.ambilightPrefs, appState.monitors]);
+  if (hasAmbi || hasAmbiPrefs || hasMonitors || bulbsChanged || langChanged) {
+    const nextKey = JSON.stringify([appState.ambilight, appState.ambilightPrefs, appState.monitors, appState.bulbs, appState.selectedIps]);
     if (nextKey !== lastRendered.ambiKey) {
       lastRendered.ambiKey = nextKey;
       renderAmbilightPanel();
     }
     if (hasAmbi) syncAmbilightPolling();
   }
-  if (hasMusic || hasMusicPrefs || hasAudio || langChanged) {
-    const nextKey = JSON.stringify([appState.musicSync, appState.musicPrefs, appState.audioDevices]);
+  if (hasMusic || hasMusicPrefs || hasAudio || bulbsChanged || langChanged) {
+    const nextKey = JSON.stringify([appState.musicSync, appState.musicPrefs, appState.audioDevices, appState.bulbs, appState.selectedIps]);
     if (nextKey !== lastRendered.musicKey) {
       lastRendered.musicKey = nextKey;
       renderMusicPanel();
     }
     if (hasMusic) syncMusicPolling();
   }
+  if (
+    envelope.circadian ||
+    envelope.wakeup_ramp ||
+    envelope.wakeup_ramp_status ||
+    envelope.session_triggers ||
+    envelope.context_automation ||
+    envelope.context_status ||
+    envelope.local_api ||
+    langChanged
+  ) {
+    renderAutomationPanel();
+  }
   const streamToggled =
     (hasAmbi && wasAmbiActive !== Boolean(appState.ambilight && appState.ambilight.active)) ||
     (hasMusic && wasMusicActive !== Boolean(appState.musicSync && appState.musicSync.active));
-  if (streamToggled && !bulbsChanged) {
+  if (
+    (streamToggled || typeof envelope.transition_seconds === "number") &&
+    !bulbsChanged
+  ) {
     renderStageHeaderAndControls();
   }
   if (
@@ -435,6 +483,7 @@ export function bindEvents() {
   bindSceneEvents({ activateTab });
   bindAmbilightEvents();
   bindMusicEvents();
+  bindAutomationEvents();
   bindGlobalHotkeyEvents();
 
   document.addEventListener("visibilitychange", () => {
