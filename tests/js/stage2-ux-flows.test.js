@@ -17,7 +17,13 @@ import {
 } from "../../ui/js/store.js";
 import { invokeApi, resetBridgeStateForTests, resolveBackendApi } from "../../ui/js/bridge-client.js";
 import { applyBackendEnvelope, resetUiSyncCache } from "../../ui/js/app.js";
-import { bindFixtureEvents, renderSleepTimer, resetFixtureUiStateForTests } from "../../ui/js/fixtures.js";
+import {
+  bindFixtureEvents,
+  flushPendingBulbDelete,
+  renderFixtureList,
+  renderSleepTimer,
+  resetFixtureUiStateForTests
+} from "../../ui/js/fixtures.js";
 import { bindSceneEvents, resetPendingPresetDeleteForTests } from "../../ui/js/scenes.js";
 import { renderStageHeaderAndControls } from "../../ui/js/stage-controls.js";
 import { renderAmbilightPanel } from "../../ui/js/ambilight.js";
@@ -72,7 +78,8 @@ function makeBaseDom() {
       "sleep-timer-badge": { tag: "span" },
       "cancel-sleep-timer-btn": { tag: "button" },
       "ambilight-preview-swatch": { tag: "div" },
-      "ambilight-color-readout": { tag: "p" }
+      "ambilight-color-readout": { tag: "p" },
+      "fixture-list": { tag: "div" }
     }
   });
 }
@@ -337,5 +344,65 @@ describe("Stage 2 UX flows & validation", () => {
     assert.equal(res, false);
     applyBackendEnvelope({ ok: true, ambilight: { active: false, last_color: null, frames_sent: 5 }, error: null }, null, null, true);
     assert.notEqual(dom.getById("live-state-pill").textContent, "T(stage.stateStreamingAmbi)");
+  });
+
+  test("fixture remove button sits outside label, supports 5s Undo, and commits via flush", async () => {
+    const removedCalls = [];
+    dom.window.pywebview = {
+      api: {
+        remove_bulb: async (ip) => {
+          removedCalls.push(ip);
+          return { ok: true, bulbs: [], selected_ips: [], error: null };
+        }
+      }
+    };
+    await resolveBackendApi();
+
+    const listEl = dom.getById("fixture-list");
+    renderFixtureList();
+
+    const removeBtn = listEl.querySelectorAll(".btn-icon-remove")[0];
+    assert.ok(removeBtn);
+    assert.equal(removeBtn.parentNode.className, "fixture-card-top-actions");
+
+    // Click remove -> hides bulb optimistically and shows Undo toast.
+    removeBtn.click();
+    assert.equal(listEl.querySelectorAll(".fixture-card").length, 0);
+    const undoBtn = dom.getById("toast-region").querySelectorAll(".toast-action")[0];
+    assert.ok(undoBtn);
+    assert.equal(removedCalls.length, 0);
+
+    // Undo restores card without calling backend.
+    undoBtn.click();
+    assert.equal(listEl.querySelectorAll(".fixture-card").length, 1);
+    assert.equal(removedCalls.length, 0);
+
+    // Second click + flush commits remove_bulb(ip).
+    listEl.querySelectorAll(".btn-icon-remove")[0].click();
+    flushPendingBulbDelete();
+    assert.deepEqual(removedCalls, ["192.168.0.10"]);
+  });
+
+  test("ok toast pauses dismissal on focusin and resumes on focusout", async () => {
+    let dismissed = false;
+    showToast({
+      kind: "ok",
+      message: "Saved",
+      actionLabel: "Undo",
+      durationMs: 260,
+      onAction: () => {},
+      onDismiss: () => { dismissed = true; }
+    });
+    const toast = dom.getById("toast-region").querySelectorAll(".toast")[0];
+    const actionBtn = toast.querySelectorAll(".toast-action")[0];
+    toast.dispatchEvent({ type: "focusin", target: actionBtn });
+    await new Promise((r) => setTimeout(r, 320));
+    assert.equal(dismissed, false);
+    assert.equal(dom.getById("toast-region").children.length, 1);
+
+    toast.dispatchEvent({ type: "focusout", target: actionBtn, relatedTarget: dom.getById("console-shell") });
+    await new Promise((r) => setTimeout(r, 340));
+    assert.equal(dismissed, true);
+    assert.equal(dom.getById("toast-region").children.length, 0);
   });
 });

@@ -21,10 +21,11 @@ Desktop control center for Philips WiZ smart lighting systems over local area ne
 
 ## Key Features
 
-1. Complete Photometric Control:
+1. Complete Photometric Control & Inventory Management:
    - Real-time power toggle, dimming curve adjustment (10% to 100%), and status polling.
    - Correlated Color Temperature (CCT) tuning from 2,200K (Warm Incandescent) to 6,500K (Cool Daylight).
    - RGB color selection with live palette preview and hexadecimal input.
+   - Fixture removal protected by a 5-second **Undo** toast, plus automatic MAC-based reconciliation on discovery so DHCP IP changes preserve custom fixture names and target selection.
 
 2. Firmware Scene Catalog & Custom Presets:
    - Full catalog of all 36 native WiZ firmware scenes with dynamic speed regulation (10% to 200%).

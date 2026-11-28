@@ -251,7 +251,7 @@ $$\text{Path: } \%\text{LOCALAPPDATA}\%\backslash\text{WizConsole}\backslash$$
 On the first launch after upgrading from `GestorDeLuces`, `resolve_default_data_dir()` atomically copies existing `bulbs.json`, `custom_scenes.json`, and `settings.json` from `%LOCALAPPDATA%\GestorDeLuces` (or `~/.gestor_de_luces` outside Windows) without deleting the legacy backup.
 
 Files managed:
-- `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases (re-validated via `validate_local_endpoint()` on load).
+- `bulbs.json`: Discovered and manually added bulb IPs, MAC addresses, module types, and user-assigned aliases (re-validated via `validate_local_endpoint()` on load; `discover_bulbs()` reconciles DHCP IP changes by MAC and `remove_bulb()` deletes retired entries).
 - `custom_scenes.json`: User-created custom lighting scenes (mode, RGB, CCT, brightness, speed, favorite flag).
 - `settings.json`: Global user preferences (`language`: `"en"` or `"es"`, `theme`: `"architectural-stone"` or `"atmospheric-dark"`, and optional `tray_hint_seen`: `true` once the first hide-to-tray notice has been displayed).
 

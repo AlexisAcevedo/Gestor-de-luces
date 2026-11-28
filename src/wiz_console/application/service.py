@@ -156,6 +156,10 @@ class LightControlService:
         """Cambia el nombre amigable de un foco registrado y guarda el cambio."""
         return self._inventory.rename_bulb(ip, new_name)
 
+    def remove_bulb(self, ip: str) -> Bulb:
+        """Remove a registered bulb by IP and persist the updated inventory."""
+        return self._inventory.remove_bulb(ip)
+
     async def refresh_states(self, ips: list[str] | None = None) -> list[Bulb]:
         """Consulta en paralelo el estado real (getPilot) de los focos indicados."""
         return await self._inventory.refresh_states(ips)

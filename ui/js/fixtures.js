@@ -7,12 +7,29 @@ import {
   appState, captureFocusKey, clampInt, formatCountdown, isValidIpv4,
   restoreFocusKey, setFieldError, t, withButtonBusy
 } from "./store.js";
-import { setStatusMessage } from "./toasts.js";
+import { setStatusMessage, showToast } from "./toasts.js";
 
 let sleepTimerWasActive = false;
+let pendingBulbDelete = null;
 
 export function resetFixtureUiStateForTests() {
   sleepTimerWasActive = false;
+  if (pendingBulbDelete) {
+    clearTimeout(pendingBulbDelete.timerId);
+    pendingBulbDelete = null;
+  }
+}
+
+export function flushPendingBulbDelete() {
+  if (!pendingBulbDelete) return;
+  clearTimeout(pendingBulbDelete.timerId);
+  const { commit } = pendingBulbDelete;
+  pendingBulbDelete = null;
+  commit();
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("beforeunload", flushPendingBulbDelete);
 }
 
 function createSvgIcon(pathD, strokeWidth = "1.5") {
@@ -56,20 +73,24 @@ export function renderFixtureList() {
   const selectAllCheckbox = document.getElementById("select-all-fixtures");
   if (!container) return;
 
-  const onlineCount = appState.bulbs.filter((b) => b.is_online).length;
+  const visibleBulbs = pendingBulbDelete
+    ? appState.bulbs.filter((b) => b.ip !== pendingBulbDelete.bulb.ip)
+    : appState.bulbs;
+
+  const onlineCount = visibleBulbs.filter((b) => b.is_online).length;
   if (badge) {
-    badge.textContent = t("rail.onlineCount", { online: onlineCount, total: appState.bulbs.length });
+    badge.textContent = t("rail.onlineCount", { online: onlineCount, total: visibleBulbs.length });
   }
 
   if (selectAllCheckbox) {
-    const selectedCount = appState.bulbs.filter((b) => appState.selectedIps.includes(b.ip)).length;
-    selectAllCheckbox.checked = appState.bulbs.length > 0 && selectedCount === appState.bulbs.length;
-    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < appState.bulbs.length;
+    const selectedCount = visibleBulbs.filter((b) => appState.selectedIps.includes(b.ip)).length;
+    selectAllCheckbox.checked = visibleBulbs.length > 0 && selectedCount === visibleBulbs.length;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleBulbs.length;
   }
 
   const focusKey = captureFocusKey(container);
 
-  if (appState.bulbs.length === 0) {
+  if (visibleBulbs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-fixtures-state";
     const p1 = document.createElement("p");
@@ -81,7 +102,7 @@ export function renderFixtureList() {
     return;
   }
 
-  const cards = appState.bulbs.map((bulb) => {
+  const cards = visibleBulbs.map((bulb) => {
     const isSelected = appState.selectedIps.includes(bulb.ip);
     const card = document.createElement("article");
     card.className = `fixture-card${isSelected ? " is-selected" : ""}`;
@@ -130,13 +151,64 @@ export function renderFixtureList() {
       openRenameDialog(bulb);
     });
 
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn-icon-remove";
+    removeBtn.setAttribute("data-focus-key", `fixture-remove:${bulb.ip}`);
+    const removeTooltip = t("rail.removeAria", { name: bulb.name });
+    removeBtn.title = removeTooltip;
+    removeBtn.setAttribute("aria-label", removeTooltip);
+    removeBtn.appendChild(
+      createSvgIcon("M4.5 5.5h11M8 5.5V4h4v1.5M6.5 5.5l.6 10h5.8l.6-10")
+    );
+    removeBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      flushPendingBulbDelete();
+      const commit = () =>
+        invokeApi(() => getBackendApi().remove_bulb(bulb.ip), null, { silent: true });
+      const timerId = setTimeout(() => {
+        if (!pendingBulbDelete || pendingBulbDelete.bulb.ip !== bulb.ip) return;
+        pendingBulbDelete = null;
+        commit();
+      }, 5000);
+      pendingBulbDelete = { bulb, timerId, commit };
+      renderFixtureList();
+      const removedMsg = t("status.bulbRemoved", { name: bulb.name });
+      setStatusMessage(removedMsg);
+      showToast({
+        kind: "ok",
+        message: removedMsg,
+        actionLabel: t("toast.undo"),
+        durationMs: 5000,
+        onAction: () => {
+          if (!pendingBulbDelete || pendingBulbDelete.bulb.ip !== bulb.ip) return;
+          clearTimeout(pendingBulbDelete.timerId);
+          pendingBulbDelete = null;
+          renderFixtureList();
+          setStatusMessage(t("status.bulbRestored", { name: bulb.name }));
+        },
+        onDismiss: () => {
+          if (!pendingBulbDelete || pendingBulbDelete.bulb.ip !== bulb.ip) return;
+          clearTimeout(pendingBulbDelete.timerId);
+          const fn = pendingBulbDelete.commit;
+          pendingBulbDelete = null;
+          fn();
+        }
+      });
+    });
+
+    const topActions = document.createElement("div");
+    topActions.className = "fixture-card-top-actions";
+    topActions.append(renameBtn, removeBtn);
+
     titleRow.append(nameHeading);
     const addressLine = document.createElement("p");
     addressLine.className = "fixture-address";
     addressLine.textContent = `${bulb.ip} · ${bulb.mac}`;
     metaDiv.append(titleRow, addressLine);
     selectLabel.append(checkbox, metaDiv);
-    topRow.append(selectLabel, renameBtn);
+    topRow.append(selectLabel, topActions);
 
     const bottomRow = document.createElement("div");
     bottomRow.className = "fixture-card-bottom";

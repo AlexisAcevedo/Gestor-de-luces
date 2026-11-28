@@ -21,10 +21,11 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 ## Características Principales
 
-1. Control Fotométrico Completo:
+1. Control Fotométrico Completo y Gestión de Inventario:
    - Encendido y apagado en tiempo real, ajuste de curva de atenuación (10% a 100%) y sondeo de estado.
    - Regulación de Temperatura de Color Correlacionada (CCT) desde 2.200 K (Blanco Cálido Incandescente) hasta 6.500 K (Luz Día Fría).
    - Selección de color RGB con previsualización en vivo e ingreso hexadecimal.
+   - Eliminación de luminarias protegida por un aviso **Deshacer** de 5 segundos y reconciliación automática por dirección MAC al descubrir focos, conservando alias y selección ante cambios de IP por DHCP.
 
 2. Catálogo de Escenas Nativas y Presets Personalizados:
    - Catálogo completo de las 36 escenas de fábrica de WiZ con regulación dinámica de velocidad (10% a 200%).

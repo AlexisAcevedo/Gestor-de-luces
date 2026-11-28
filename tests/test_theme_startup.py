@@ -14,6 +14,7 @@ import pytest
 import webview.util
 
 from wiz_console.adapters.ui_webview.bridge import BlockedJsApi, WebviewBridge
+from wiz_console.adapters.ui_webview.dispatch import JS_API_DISPATCH
 from wiz_console.adapters.ui_webview.http_server import NoCacheBottleServer
 from wiz_console.adapters.wiz.udp_controller import WizUdpController
 from wiz_console.application.service import LightControlService
@@ -114,7 +115,7 @@ def test_create_window_passes_theme_fragment_and_background_color(
     assert call["background_color"] == expected_bg
     assert isinstance(call["js_api"], BlockedJsApi)
     assert len(fake_webview.exposed_functions) == 1
-    assert len(fake_webview.exposed_functions[0]) == 30
+    assert len(fake_webview.exposed_functions[0]) == len(JS_API_DISPATCH) + 1
 
 
 def test_desktop_application_start_uses_no_cache_http_server(

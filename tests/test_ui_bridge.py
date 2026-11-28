@@ -348,3 +348,21 @@ def test_bridge_sanitizes_internal_errors_from_js() -> None:
     assert fit_resp["ok"] is False
     assert "secret" not in fit_resp["error"].lower()
     assert "c:\\" not in fit_resp["error"].lower()
+
+
+async def test_webview_bridge_remove_bulb_over_udp() -> None:
+    """WebviewBridge.remove_bulb removes the bulb and returns the updated inventory."""
+    async with FakeWizBulbServer(mac="a8bb50112299") as server:
+        controller = WizUdpController(probe_candidates=[server.endpoint])
+        service = LightControlService(controller=controller)
+        bridge = WebviewBridge(service=service)
+        try:
+            initial = await asyncio.to_thread(bridge.get_initial_state)
+            assert len(initial["bulbs"]) == 1
+
+            removed = await asyncio.to_thread(bridge.remove_bulb, server.endpoint)
+            assert removed["ok"] is True
+            assert removed["bulbs"] == []
+            assert removed["selected_ips"] == []
+        finally:
+            bridge.shutdown()

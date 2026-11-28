@@ -17,6 +17,9 @@ const TOAST_OK_MS = 2200;
 let okToastEl = null;
 let okToastTimer = null;
 let okToastDismissCb = null;
+let okToastDeadline = 0;
+let okToastRemainingMs = 0;
+let okToastPaused = false;
 
 function syncToastPopover(region, { promote = false } = {}) {
   if (!region) return;
@@ -49,10 +52,27 @@ function dismissToast(el) {
   const region = el ? el.parentNode : null;
   if (el && region) region.removeChild(el);
   if (el === okToastEl) {
+    clearTimeout(okToastTimer);
+    okToastTimer = null;
     okToastEl = null;
     okToastDismissCb = null;
+    okToastRemainingMs = 0;
+    okToastPaused = false;
   }
   syncToastPopover(region);
+}
+
+function scheduleOkToastTimer(targetEl, delayMs, isHandled) {
+  clearTimeout(okToastTimer);
+  okToastRemainingMs = Math.max(250, delayMs);
+  okToastDeadline = Date.now() + okToastRemainingMs;
+  okToastPaused = false;
+  okToastTimer = setTimeout(() => {
+    const cb = !isHandled() ? okToastDismissCb : null;
+    okToastDismissCb = null;
+    dismissToast(targetEl);
+    if (typeof cb === "function") cb();
+  }, okToastRemainingMs);
 }
 
 export function showToast({ kind, message, retry, actionLabel, onAction, durationMs, onDismiss }) {
@@ -71,22 +91,32 @@ export function showToast({ kind, message, retry, actionLabel, onAction, duratio
     const ttl = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : TOAST_OK_MS;
     let handled = false;
     okToastDismissCb = typeof onDismiss === "function" ? onDismiss : null;
-    okToastEl = buildToast("ok", message, null, actionLabel, () => {
+    const toastEl = buildToast("ok", message, null, actionLabel, () => {
       handled = true;
       clearTimeout(okToastTimer);
       okToastDismissCb = null;
       dismissToast(okToastEl);
       if (typeof onAction === "function") onAction();
     });
-    region.appendChild(okToastEl);
+    okToastEl = toastEl;
+    toastEl.addEventListener("focusin", () => {
+      if (okToastEl !== toastEl || handled || okToastPaused) return;
+      okToastPaused = true;
+      clearTimeout(okToastTimer);
+      okToastTimer = null;
+      okToastRemainingMs = Math.max(250, okToastDeadline - Date.now());
+    });
+    toastEl.addEventListener("focusout", (event) => {
+      if (okToastEl !== toastEl || handled || !okToastPaused) return;
+      const nextTarget = event && event.relatedTarget;
+      if (nextTarget && typeof toastEl.contains === "function" && toastEl.contains(nextTarget)) {
+        return;
+      }
+      scheduleOkToastTimer(toastEl, okToastRemainingMs, () => handled);
+    });
+    region.appendChild(toastEl);
     syncToastPopover(region, { promote: true });
-    const targetEl = okToastEl;
-    okToastTimer = setTimeout(() => {
-      const cb = !handled ? okToastDismissCb : null;
-      okToastDismissCb = null;
-      dismissToast(targetEl);
-      if (typeof cb === "function") cb();
-    }, ttl);
+    scheduleOkToastTimer(toastEl, ttl, () => handled);
     return;
   }
 

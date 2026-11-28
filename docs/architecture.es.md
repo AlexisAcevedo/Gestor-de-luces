@@ -250,7 +250,7 @@ $$\text{Ruta: } \%\text{LOCALAPPDATA}\%\backslash\text{WizConsole}\backslash$$
 En el primer arranque tras actualizar desde `GestorDeLuces`, `resolve_default_data_dir()` copia de forma atómica e idempotente `bulbs.json`, `custom_scenes.json` y `settings.json` desde `%LOCALAPPDATA%\GestorDeLuces` (o `~/.gestor_de_luces` fuera de Windows) conservando los originales como respaldo.
 
 Archivos gestionados:
-- `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario, revalidados al cargar mediante `validate_local_endpoint()`).
+- `bulbs.json`: Focos descubiertos o agregados manualmente (IP, MAC, modelo y alias de usuario, revalidados al cargar mediante `validate_local_endpoint()`; `discover_bulbs()` reconcilia cambios de IP por DHCP mediante MAC y `remove_bulb()` elimina registros retirados).
 - `custom_scenes.json`: Presets personalizados creados por el usuario (modo, RGB, CCT, brillo, velocidad, favorito).
 - `settings.json`: Preferencias globales de usuario (`language`: `"en"` o `"es"`, `theme`: `"architectural-stone"` o `"atmospheric-dark"`, y opcional `tray_hint_seen`: `true` una vez mostrado el aviso inicial de bandeja).
 

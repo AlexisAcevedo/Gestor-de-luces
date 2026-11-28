@@ -58,6 +58,7 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
     "get_music_sync_status": BridgeHandlers.get_music_sync_status,
     "get_sleep_timer_status": BridgeLifecycle.get_sleep_timer_status,
     "refresh_states": BridgeHandlers.refresh_states,
+    "remove_bulb": BridgeHandlers.remove_bulb,
     "rename_bulb": BridgeHandlers.rename_bulb,
     "save_custom_scene": BridgeHandlers.save_custom_scene,
     "select_targets": BridgeHandlers.select_targets,

@@ -1,8 +1,9 @@
-"""Inventario de focos: descubrimiento, alta manual, renombrado y refresco de estado."""
+"""Inventario de focos: descubrimiento, alta manual, renombrado, baja y refresco de estado."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from wiz_console.application.service_context import (
     ServiceContext,
@@ -10,6 +11,18 @@ from wiz_console.application.service_context import (
     validate_local_endpoint,
 )
 from wiz_console.domain.models import Bulb
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _normalize_mac(mac: str | None) -> str | None:
+    """Normalize a bulb MAC address, returning None for empty or unknown placeholders."""
+    if not mac:
+        return None
+    cleaned = mac.strip().lower().replace(":", "").replace("-", "")
+    if not cleaned or cleaned == "unknown" or cleaned == "000000000000":
+        return None
+    return cleaned
 
 
 class BulbInventoryService:
@@ -26,15 +39,39 @@ class BulbInventoryService:
         """Obtiene un foco registrado por su direccion IP."""
         return self._ctx.get_bulb(ip)
 
-    async def discover_bulbs(self, wait_time: float = 2.5) -> list[Bulb]:
-        """Ejecuta el descubrimiento en la red local y sincroniza el estado real de cada foco.
+    def _find_by_mac(self, normalized_mac: str, *, exclude_ip: str) -> str | None:
+        for ip, existing in self._ctx.bulbs.items():
+            if ip == exclude_ip:
+                continue
+            if _normalize_mac(existing.mac) == normalized_mac:
+                return ip
+        return None
 
-        Si un foco ya existia en el repositorio local con un nombre personalizado,
-        se preserva dicho nombre para no perder la configuracion del usuario.
-        """
+    async def discover_bulbs(self, wait_time: float = 2.5) -> list[Bulb]:
+        """Discover bulbs on the LAN, reconcile DHCP IP changes by MAC, and sync live states."""
         discovered = await self._ctx.controller.discover(wait_time=wait_time)
+        targets_changed = False
         for bulb in discovered:
             existing = self._ctx.bulbs.get(bulb.ip)
+            norm_mac = _normalize_mac(bulb.mac)
+            if existing is None and norm_mac is not None:
+                old_ip = self._find_by_mac(norm_mac, exclude_ip=bulb.ip)
+                if old_ip is not None:
+                    existing = self._ctx.bulbs.pop(old_ip)
+                    if old_ip in self._ctx.selected_ips:
+                        updated_targets: list[str] = []
+                        for target in self._ctx.selected_ips:
+                            replacement = bulb.ip if target == old_ip else target
+                            if replacement not in updated_targets:
+                                updated_targets.append(replacement)
+                        self._ctx.selected_ips = updated_targets
+                        targets_changed = True
+                    _LOGGER.info(
+                        "Reconciled bulb MAC %s after DHCP IP change: %s -> %s",
+                        norm_mac,
+                        old_ip,
+                        bulb.ip,
+                    )
             if existing is not None and not existing.name.startswith("WiZ Bulb ("):
                 bulb.name = existing.name
             self._ctx.bulbs[bulb.ip] = bulb
@@ -43,6 +80,12 @@ class BulbInventoryService:
 
         if not self._ctx.selected_ips and self._ctx.bulbs:
             self._ctx.selected_ips = list(self._ctx.bulbs.keys())
+            targets_changed = True
+
+        if targets_changed:
+            resolved = self._ctx.get_target_ips()
+            self._ctx.ambilight.update_targets(resolved)
+            self._ctx.music_sync.update_targets(resolved)
 
         self._ctx.persist_bulbs()
         return self._ctx.list_bulbs()
@@ -76,6 +119,20 @@ class BulbInventoryService:
         if bulb is None:
             raise KeyError(f"Bulb with IP '{ip}' is not registered.")
         bulb.name = validate_display_name(new_name, "Bulb")
+        self._ctx.persist_bulbs()
+        return bulb
+
+    def remove_bulb(self, ip: str) -> Bulb:
+        """Remove a registered bulb by IP, update active stream targets, and persist."""
+        cleaned_ip = ip.strip()
+        bulb = self._ctx.bulbs.pop(cleaned_ip, None)
+        if bulb is None:
+            raise KeyError(f"Bulb with IP '{cleaned_ip}' is not registered.")
+        if cleaned_ip in self._ctx.selected_ips:
+            self._ctx.selected_ips = [item for item in self._ctx.selected_ips if item != cleaned_ip]
+            resolved = self._ctx.get_target_ips()
+            self._ctx.ambilight.update_targets(resolved)
+            self._ctx.music_sync.update_targets(resolved)
         self._ctx.persist_bulbs()
         return bulb
 

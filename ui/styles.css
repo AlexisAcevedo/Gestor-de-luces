@@ -450,7 +450,15 @@
     text-overflow: ellipsis;
   }
 
-  .btn-icon-rename {
+  .fixture-card-top-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .btn-icon-rename,
+  .btn-icon-remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -473,7 +481,13 @@
     background-color: var(--surface-2);
   }
 
-  .btn-icon-rename .icon {
+  .btn-icon-remove:hover {
+    color: var(--danger);
+    background-color: var(--surface-2);
+  }
+
+  .btn-icon-rename .icon,
+  .btn-icon-remove .icon {
     width: 13.5px;
     height: 13.5px;
   }
