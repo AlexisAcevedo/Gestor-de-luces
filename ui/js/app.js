@@ -158,6 +158,9 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
 
   const langChanged = typeof envelope.language === "string" ? syncLanguageUi(envelope.language) : false;
   if (typeof envelope.theme === "string") syncThemeUi(envelope.theme);
+  if (typeof envelope.transition_seconds === "number") {
+    appState.transitionSeconds = envelope.transition_seconds;
+  }
   if (typeof envelope.auto_sync === "boolean" && appState.autoSync !== envelope.auto_sync) {
     syncAutoSyncPolling(envelope.auto_sync);
   }
@@ -318,7 +321,10 @@ export function applyBackendEnvelope(envelope, statusText, retry, silent) {
   const streamToggled =
     (hasAmbi && wasAmbiActive !== Boolean(appState.ambilight && appState.ambilight.active)) ||
     (hasMusic && wasMusicActive !== Boolean(appState.musicSync && appState.musicSync.active));
-  if (streamToggled && !bulbsChanged) {
+  if (
+    (streamToggled || typeof envelope.transition_seconds === "number") &&
+    !bulbsChanged
+  ) {
     renderStageHeaderAndControls();
   }
   if (

@@ -266,7 +266,18 @@
             </svg>
             <h2 id="dimming-heading" class="well-title" data-i18n="dimming.title">Brightness</h2>
           </div>
-          <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
+          <div class="well-header-actions">
+            <label class="sr-only" for="transition-seconds-select" data-i18n="dimming.transitionAria">Transition crossfade duration</label>
+            <select id="transition-seconds-select" class="compact-select" aria-label="Transition crossfade duration" data-i18n-aria-label="dimming.transitionAria">
+              <option value="0" data-i18n="dimming.transitionInstant">0s Instant</option>
+              <option value="0.5">0.5s</option>
+              <option value="1">1.0s</option>
+              <option value="2">2.0s</option>
+              <option value="3.5">3.5s</option>
+              <option value="5">5.0s</option>
+            </select>
+            <output class="numeric-readout" id="brightness-output" for="brightness-slider">100%</output>
+          </div>
         </div>
 
         <div class="slider-row">

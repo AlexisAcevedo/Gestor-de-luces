@@ -173,6 +173,14 @@ class LightControlService:
         """Validate and persist opt-in global Windows hotkeys configuration."""
         return self._settings.set_global_hotkeys(enabled, bindings=bindings)
 
+    def get_transition_seconds(self) -> float:
+        """Return configured crossfade duration in seconds (0.0 = instant)."""
+        return self._settings.get_transition_seconds()
+
+    def set_transition_seconds(self, seconds: float) -> float:
+        """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
+        return self._settings.set_transition_seconds(seconds)
+
     def list_bulbs(self) -> list[Bulb]:
         """Devuelve la lista de todos los focos registrados actualmente."""
         return self._inventory.list_bulbs()

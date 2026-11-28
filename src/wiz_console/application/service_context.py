@@ -21,6 +21,10 @@ from wiz_console.application.ambilight_stream import AmbilightStreamManager
 from wiz_console.application.music_stream import MusicSyncStreamManager
 from wiz_console.application.rate_limiter import StreamRateLimiter
 from wiz_console.application.sleep_timer import SleepTimerManager
+from wiz_console.application.transition_engine import (
+    TransitionEngine,
+    normalize_transition_seconds,
+)
 from wiz_console.domain.automation import (
     CircadianConfig,
     ContextAutomationConfig,
@@ -110,6 +114,8 @@ class ServiceContext:
         self.context_monitor = context_monitor
         self.rate_limiter = rate_limiter or StreamRateLimiter()
         self.sleep_timer = sleep_timer or SleepTimerManager()
+        self.transition_engine = TransitionEngine()
+        self.transition_seconds: float = 0.0
         self.screen_sampler = screen_sampler
         self.screen_sampler_factory = screen_sampler_factory
         self.ambilight = ambilight_manager or AmbilightStreamManager(sampler=screen_sampler)
@@ -217,6 +223,13 @@ class ServiceContext:
                 self.session_triggers = SessionTriggersConfig.from_dict(
                     loaded_settings["session_triggers"]
                 ).to_dict()
+            if "transition_seconds" in loaded_settings:
+                try:
+                    self.transition_seconds = normalize_transition_seconds(
+                        loaded_settings["transition_seconds"]
+                    )
+                except ValueError:
+                    self.transition_seconds = 0.0
             if "context_automation" in loaded_settings:
                 try:
                     self.context_automation = ContextAutomationConfig.from_dict(
@@ -327,6 +340,7 @@ class ServiceContext:
                 "wakeup_ramp": dict(self.wakeup_ramp_config),
                 "session_triggers": dict(self.session_triggers),
                 "context_automation": dict(self.context_automation),
+                "transition_seconds": self.transition_seconds,
             }
             if self.tray_hint_seen:
                 payload["tray_hint_seen"] = True
@@ -357,6 +371,7 @@ class ServiceContext:
 
         tasks = []
         for ip, (color, brightness) in frames.items():
+            self.transition_engine.cancel_bulb(ip)
             prepared = self.rate_limiter.prepare_frame(ip, color, brightness)
             if prepared is not None:
                 smoothed_color, smoothed_brightness = prepared
@@ -417,6 +432,7 @@ class ServiceContext:
         self.ambilight.stop()
         self.music_sync.stop()
         self.sleep_timer.cancel()
+        self.transition_engine.cancel_all()
         self.close_audio_sampler()
         self.close_screen_sampler()
         _safe_close(self.controller, "light controller")

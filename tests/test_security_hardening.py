@@ -119,6 +119,7 @@ _JS_API_SURFACE = frozenset(
         "set_session_triggers",
         "set_temperature",
         "set_theme",
+        "set_transition_seconds",
         "set_wakeup_ramp_config",
         "start_ambilight",
         "start_music_sync",

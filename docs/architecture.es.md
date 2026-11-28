@@ -73,6 +73,7 @@ El principio rector del proyecto es el **aislamiento riguroso de las reglas de n
      - `SleepTimerManager`: Gestiona temporizadores no bloqueantes con desvanecimiento lineal progresivo del brillo.
      - `AmbilightStreamManager`: Controla los ciclos periódicos de captura y suavizado de color en pantalla.
      - `MusicSyncStreamManager`: Orquesta el muestreo por WASAPI loopback, el análisis FFT y el mapeo de frecuencias a color.
+     - `TransitionEngine`: Coordina transiciones graduales `ease-in-out` en RGB y Kelvin (`0.0s–5.0s`) con cancelación preventiva por luminaria.
 
 4. **Capa de Adaptadores e Infraestructura (`wiz_console.adapters`)**:
    - Implementa los puertos conectando con el hardware y el sistema operativo:

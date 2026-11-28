@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from wiz_console.application.service_context import ServiceContext
+from wiz_console.application.transition_engine import normalize_transition_seconds
 from wiz_console.domain.scenes import get_builtin_scene
 from wiz_console.domain.value_objects import (
     SUPPORTED_LANGUAGES,
@@ -118,3 +119,13 @@ class SettingsService:
         self._ctx.global_hotkeys = normalized
         self._ctx.persist_settings()
         return self.get_global_hotkeys()
+
+    def get_transition_seconds(self) -> float:
+        """Return configured crossfade duration in seconds (0.0 = instant)."""
+        return float(self._ctx.transition_seconds)
+
+    def set_transition_seconds(self, seconds: float) -> float:
+        """Validate and persist crossfade duration in seconds `[0.0, 5.0]`."""
+        self._ctx.transition_seconds = normalize_transition_seconds(seconds)
+        self._ctx.persist_settings()
+        return float(self._ctx.transition_seconds)

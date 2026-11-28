@@ -153,6 +153,7 @@ export const appState = {
   selectedIps: [],
   zones: [],
   autoSync: false,
+  transitionSeconds: 0,
   scenes: SCENE_CATALOG.slice(),
   favoriteSceneIds: loadFavoriteSceneIds(),
   customScenes: [],

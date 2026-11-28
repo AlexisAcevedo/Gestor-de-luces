@@ -42,6 +42,7 @@ export function createBrowserMockApi() {
     }
   };
   let mockCircadian = { enabled: false, sunrise_hour: 7.0, sunset_hour: 20.0, day_kelvin: 5600, night_kelvin: 2700, day_brightness: 95, night_brightness: 40, interval_seconds: 60 };
+  let mockTransitionSeconds = 0;
   let mockWakeupRamp = { enabled: false, target_hour: 7, target_minute: 0, duration_minutes: 20, start_kelvin: 2200, end_kelvin: 5000, start_brightness: 10, end_brightness: 100, target_ips: [] };
   let mockWakeupStatus = { active: false, progress: 0.0 };
   let mockSessionTriggers = { off_on_lock: false, restore_on_unlock: false, off_on_sleep: false };
@@ -119,6 +120,7 @@ export function createBrowserMockApi() {
       session_triggers: Object.assign({}, mockSessionTriggers),
       context_automation: JSON.parse(JSON.stringify(mockContextAutomation)),
       context_status: { supported: false, active_reason: null, on_air_active: false, foreground_process: null },
+      transition_seconds: mockTransitionSeconds,
       error: null
     });
   }
@@ -459,6 +461,10 @@ export function createBrowserMockApi() {
     },
     set_context_automation: (config) => {
       mockContextAutomation = Object.assign({}, mockContextAutomation, config || {});
+      return buildMockEnvelope();
+    },
+    set_transition_seconds: (seconds) => {
+      mockTransitionSeconds = Math.max(0, Math.min(5, Number(seconds) || 0));
       return buildMockEnvelope();
     }
   };

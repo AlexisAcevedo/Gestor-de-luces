@@ -59,6 +59,8 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
    - Monitor Win32 opcional (`WindowsSessionMonitor`) para apagar las luminarias al bloquear o suspender el equipo y restaurar su color/Kelvin/escena anterior al desbloquear o reactivar.
 9. Perfiles por Aplicación e Indicador Local Al Aire (`v0.7.0`):
    - Reglas opcionales por ejecutable en primer plano (`ContextRule`) e indicador local Al Aire por micrófono o cámara en `ConsentStore` (`OnAirConfig`), con restauración automática al finalizar la llamada o salir de la aplicación.
+10. Transiciones Graduales Configurables (`TransitionEngine`):
+   - Interpolación suave (`ease-in-out`) para cambios de color RGB y Kelvin (`0.0s` instantáneo por defecto o `0.5s–5.0s`) con cancelación preventiva por bombilla y precedencia de flujos continuos.
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).

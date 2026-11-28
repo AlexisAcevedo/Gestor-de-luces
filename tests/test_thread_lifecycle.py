@@ -279,6 +279,9 @@ class _FakeLightControlService:
     def get_theme(self) -> str:
         return "architectural-stone"
 
+    def get_transition_seconds(self) -> float:
+        return 0.0
+
     def stop_ambilight(self) -> None:
         return None
 

@@ -254,6 +254,7 @@ class BridgeLifecycle:
             "session_triggers": self._service.get_session_triggers(),
             "context_automation": self._service.get_context_automation(),
             "context_status": self._service.get_context_automation_status(),
+            "transition_seconds": self._service.get_transition_seconds(),
             "error": error,
         }
 

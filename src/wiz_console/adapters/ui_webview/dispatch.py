@@ -86,6 +86,7 @@ JS_API_DISPATCH: dict[str, Callable[..., Any]] = {
     "set_session_triggers": BridgeHandlers.set_session_triggers,
     "set_temperature": BridgeHandlers.set_temperature,
     "set_theme": BridgeLifecycle.set_theme,
+    "set_transition_seconds": BridgeHandlers.set_transition_seconds,
     "set_wakeup_ramp_config": BridgeHandlers.set_wakeup_ramp_config,
     "start_ambilight": BridgeHandlers.start_ambilight,
     "start_music_sync": BridgeHandlers.start_music_sync,

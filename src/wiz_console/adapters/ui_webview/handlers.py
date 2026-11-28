@@ -516,6 +516,12 @@ class BridgeHandlers:
 
         return self._call(_update)
 
+    def set_transition_seconds(self, seconds: float) -> dict[str, Any]:
+        """Validate and persist crossfade transition duration in seconds `[0.0, 5.0]`."""
+        return self._call(
+            lambda: self._service.set_transition_seconds(_req_float(seconds, field="seconds"))
+        )
+
     def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
         """Start a sunrise wake-up ramp immediately."""
         return self._call(lambda: self._service.trigger_wakeup_ramp(ips=_opt_ips(ips)))

@@ -427,7 +427,10 @@
       "status.wakeupTriggered": "Sunrise wake-up ramp started.",
       "status.wakeupCancelled": "Sunrise wake-up ramp stopped.",
       "status.sessionTriggersSaved": "Windows session trigger settings saved.",
-      "status.contextAutomationSaved": "Context & On-Air rules updated."
+      "status.contextAutomationSaved": "Context & On-Air rules updated.",
+      "dimming.transitionAria": "Transition crossfade duration",
+      "dimming.transitionInstant": "0s Instant",
+      "status.transitionSet": "Transition crossfade set to {seconds}s."
     },
 
     es: {
@@ -846,7 +849,10 @@
       "status.wakeupTriggered": "Rampa de amanecer iniciada.",
       "status.wakeupCancelled": "Rampa de amanecer detenida.",
       "status.sessionTriggersSaved": "Configuración de disparadores de sesión guardada.",
-      "status.contextAutomationSaved": "Reglas contextuales y Al Aire actualizadas."
+      "status.contextAutomationSaved": "Reglas contextuales y Al Aire actualizadas.",
+      "dimming.transitionAria": "Duración de transición gradual",
+      "dimming.transitionInstant": "0s Instantánea",
+      "status.transitionSet": "Transición gradual ajustada a {seconds}s."
     }
   };
 

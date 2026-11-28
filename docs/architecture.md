@@ -74,6 +74,7 @@ The core principle behind this project is **strict isolation of business invaria
      - `SleepTimerManager`: Coordinates non-blocking countdown timers with progressive linear brightness fade-out.
      - `AmbilightStreamManager`: Runs dedicated screen-sampling streaming cycles.
      - `MusicSyncStreamManager`: Orchestrates WASAPI loopback audio sampling, FFT transformation, and color mapping.
+     - `TransitionEngine`: Coordinates configurable ease-in-out RGB and Kelvin crossfade fades (`0.0s–5.0s`) with per-bulb preemption.
 
 4. **Adapters Layer (`wiz_console.adapters`)**:
    - Implements ports with real-world infrastructure:
