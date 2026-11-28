@@ -102,6 +102,18 @@ def _opt_stripped(value: Any, *, field: str) -> str | None:
     return _req_str(value, field=field).strip() or None
 
 
+def _opt_str_mapping(value: Any, *, field: str) -> dict[str, str] | None:
+    """Validate an optional string-to-string mapping received from JavaScript."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be an object mapping strings to strings.")
+    return {
+        _req_str(k, field=f"{field}.key").strip(): _req_str(v, field=f"{field}.value").strip()
+        for k, v in value.items()
+    }
+
+
 class BridgeHandlers:
     """Operaciones de iluminacion invocables desde la vista, agrupadas por capacidad."""
 
@@ -115,6 +127,7 @@ class BridgeHandlers:
         """
 
         async def _init() -> None:
+            self._service.ensure_automation_tasks()
             if not self._service.list_bulbs():
                 await self._service.discover_bulbs(wait_time=1.8)
             else:
@@ -126,12 +139,13 @@ class BridgeHandlers:
         """Escanea la red local en busca de focos Philips WiZ y sincroniza su estado."""
         return self._call(lambda: self._service.discover_bulbs(wait_time=2.0), timeout=15.0)
 
-    def add_manual_bulb(self, ip: str, name: str = "") -> dict[str, Any]:
+    def add_manual_bulb(self, ip: str, name: str = "", protocol: str = "wiz") -> dict[str, Any]:
         """Agrega un foco por direccion IP explicita y verifica su disponibilidad UDP."""
         return self._call(
             lambda: self._service.add_manual_bulb(
                 ip=_req_str(ip, field="ip"),
                 name=_opt_str(name, field="name"),
+                protocol=_opt_str(protocol, field="protocol") or "wiz",
             )
         )
 
@@ -416,6 +430,8 @@ class BridgeHandlers:
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
         min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion Ambilight de pantalla en el bucle de eventos asincrono."""
         return self._call(
@@ -427,6 +443,8 @@ class BridgeHandlers:
                 smoothing_alpha=_req_float(smoothing_alpha, field="smoothing_alpha"),
                 ips=_opt_ips(ips),
                 min_brightness=_req_int(min_brightness, field="min_brightness"),
+                region_map=_opt_str_mapping(region_map, field="region_map"),
+                letterbox_crop=_req_bool(letterbox_crop, field="letterbox_crop"),
             )
         )
 
@@ -448,6 +466,9 @@ class BridgeHandlers:
         brightness: int = 85,
         device_index: int | None = None,
         ips: list[str] | None = None,
+        band_map: dict[str, str] | None = None,
+        beat_boost: bool = True,
+        custom_palette: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Inicia la sincronizacion musical WASAPI Loopback en el bucle asincrono."""
         return self._call(
@@ -459,6 +480,9 @@ class BridgeHandlers:
                 brightness=_req_int(brightness, field="brightness"),
                 device_index=_opt_int(device_index, field="device_index"),
                 ips=_opt_ips(ips),
+                band_map=_opt_str_mapping(band_map, field="band_map"),
+                beat_boost=_req_bool(beat_boost, field="beat_boost"),
+                custom_palette=_opt_str_mapping(custom_palette, field="custom_palette"),
             )
         )
 
@@ -470,6 +494,76 @@ class BridgeHandlers:
         """Obtiene la telemetria espectral (Graves, Medios, Agudos y RMS) en tiempo real."""
         # Sondeo de 250ms de barras espectrales: no reconstruye el menu de la bandeja.
         return self._poll_section("music_sync", self._service.get_music_sync_status)
+
+    # --- Automatizacion circadiana y amanecer ---------------------------------------
+
+    def set_circadian_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist circadian lighting configuration."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_circadian_config(dict(config))
+
+        return self._call(_update)
+
+    def set_wakeup_ramp_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist sunrise wake-up ramp configuration."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_wakeup_ramp_config(dict(config))
+
+        return self._call(_update)
+
+    def set_transition_seconds(self, seconds: float) -> dict[str, Any]:
+        """Validate and persist crossfade transition duration in seconds `[0.0, 5.0]`."""
+        return self._call(
+            lambda: self._service.set_transition_seconds(_req_float(seconds, field="seconds"))
+        )
+
+    def set_local_api_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist opt-in loopback Local HTTP API settings."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_local_api_config(dict(config))
+
+        return self._call(_update)
+
+    def rotate_local_api_token(self) -> dict[str, Any]:
+        """Generate a fresh Bearer token for the Local HTTP API."""
+        return self._call(lambda: self._service.rotate_local_api_token())
+
+    def trigger_wakeup_ramp(self, ips: list[str] | None = None) -> dict[str, Any]:
+        """Start a sunrise wake-up ramp immediately."""
+        return self._call(lambda: self._service.trigger_wakeup_ramp(ips=_opt_ips(ips)))
+
+    def cancel_wakeup_ramp(self) -> dict[str, Any]:
+        """Cancel any active sunrise wake-up ramp."""
+        return self._call(lambda: self._service.cancel_wakeup_ramp())
+
+    def set_session_triggers(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist Windows session lock/sleep trigger preferences."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_session_triggers(dict(config))
+
+        return self._call(_update)
+
+    def set_context_automation(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist foreground profile and On-Air automation settings."""
+
+        def _update() -> None:
+            if not isinstance(config, dict):
+                raise ValueError("config must be an object.")
+            self._service.set_context_automation(dict(config))
+
+        return self._call(_update)
 
     def _poll_section(self, key: str, reader: Any) -> dict[str, Any]:
         """Read a single live-stream status section on the bridge loop for delta polling."""

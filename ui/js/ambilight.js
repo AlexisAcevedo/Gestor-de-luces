@@ -159,6 +159,61 @@ export function renderAmbilightPanel() {
       updateSliderFill(minBriSlider);
     }
   }
+
+  const letterboxCheckbox = document.getElementById("ambilight-letterbox-crop");
+  if (letterboxCheckbox) {
+    letterboxCheckbox.checked = Boolean(ambi.letterbox_crop ?? true);
+  }
+
+  const regionContainer = document.getElementById("ambilight-region-map");
+  if (regionContainer) {
+    const activeEl = document.activeElement;
+    if (activeEl && regionContainer.contains(activeEl)) {
+      return;
+    }
+    const targetIps = appState.selectedIps.length > 0
+      ? appState.selectedIps
+      : appState.bulbs.map((b) => b.ip);
+    const regionMap = (ambi.region_map && typeof ambi.region_map === "object") ? ambi.region_map : {};
+    if (targetIps.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "well-description";
+      empty.textContent = t("ambi.regionMapEmpty");
+      regionContainer.replaceChildren(empty);
+    } else {
+      const REGION_CHOICES = [
+        ["full", "ambi.regionFull"],
+        ["left", "ambi.regionLeft"],
+        ["right", "ambi.regionRight"],
+        ["top", "ambi.regionTop"],
+        ["bottom", "ambi.regionBottom"],
+        ["center", "ambi.regionCenter"]
+      ];
+      const rows = targetIps.map((ip, idx) => {
+        const bulb = appState.bulbs.find((b) => b.ip === ip);
+        const row = document.createElement("div");
+        row.className = "per-bulb-map-row";
+        const label = document.createElement("label");
+        const selectId = `ambilight-region-select-${idx}`;
+        label.setAttribute("for", selectId);
+        label.textContent = bulb ? bulb.name : ip;
+        const select = document.createElement("select");
+        select.id = selectId;
+        select.className = "console-select per-bulb-map-select";
+        select.dataset.ip = ip;
+        REGION_CHOICES.forEach(([val, key]) => {
+          const opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = t(key);
+          select.appendChild(opt);
+        });
+        select.value = REGION_CHOICES.some(([v]) => v === regionMap[ip]) ? regionMap[ip] : "full";
+        row.append(label, select);
+        return row;
+      });
+      regionContainer.replaceChildren(...rows);
+    }
+  }
 }
 
 export function bindAmbilightEvents() {
@@ -169,6 +224,16 @@ export function bindAmbilightEvents() {
     const autoBriCheckbox = document.getElementById("ambilight-auto-brightness");
     const minBriSlider = document.getElementById("ambilight-min-brightness-slider");
     const briSlider = document.getElementById("brightness-slider");
+    const letterboxCheckbox = document.getElementById("ambilight-letterbox-crop");
+    const regionMap = {};
+    const regionContainer = document.getElementById("ambilight-region-map");
+    if (regionContainer) {
+      regionContainer.querySelectorAll("select").forEach((sel) => {
+        if (sel.dataset.ip) {
+          regionMap[sel.dataset.ip] = sel.value || "full";
+        }
+      });
+    }
 
     return {
       monitorIndex: Number(monSelect ? monSelect.value : 1),
@@ -176,7 +241,9 @@ export function bindAmbilightEvents() {
       smoothingAlpha: Number(alphaSlider ? alphaSlider.value : 0.38),
       autoBrightness: Boolean(autoBriCheckbox ? autoBriCheckbox.checked : true),
       minBrightness: clampInt(minBriSlider ? minBriSlider.value : 10, 10, 20),
-      brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100)
+      brightness: clampInt(briSlider ? briSlider.value : 85, 10, 100),
+      regionMap,
+      letterboxCrop: Boolean(letterboxCheckbox ? letterboxCheckbox.checked : true)
     };
   };
 
@@ -191,7 +258,9 @@ export function bindAmbilightEvents() {
           p.brightness,
           p.smoothingAlpha,
           null,
-          p.minBrightness
+          p.minBrightness,
+          p.regionMap,
+          p.letterboxCrop
         ),
       statusMsg
     );
@@ -292,6 +361,33 @@ export function bindAmbilightEvents() {
         startOrUpdateAmbilight(() => t("status.ambiMinBriChanged", { floor: val }));
       } else {
         setStatusMessage(t("status.ambiMinBriChanged", { floor: val }));
+      }
+    });
+  }
+
+  const letterboxCheckbox = document.getElementById("ambilight-letterbox-crop");
+  if (letterboxCheckbox) {
+    letterboxCheckbox.addEventListener("change", () => {
+      const checked = letterboxCheckbox.checked;
+      appState.ambilight.letterbox_crop = checked;
+      if (appState.ambilight.active) {
+        startOrUpdateAmbilight(() =>
+          t(checked ? "status.ambiLetterboxOn" : "status.ambiLetterboxOff")
+        );
+      }
+    });
+  }
+
+  const regionContainer = document.getElementById("ambilight-region-map");
+  if (regionContainer) {
+    regionContainer.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!target || !target.dataset || !target.dataset.ip) return;
+      const nextMap = Object.assign({}, appState.ambilight.region_map || {});
+      nextMap[target.dataset.ip] = target.value || "full";
+      appState.ambilight.region_map = nextMap;
+      if (appState.ambilight.active) {
+        startOrUpdateAmbilight(() => t("status.ambiRegionChanged"));
       }
     });
   }

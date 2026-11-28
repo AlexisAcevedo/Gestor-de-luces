@@ -107,6 +107,11 @@ class WizUdpController:
         self._default_timeout = default_timeout
         self._probe_candidates = list(probe_candidates) if probe_candidates is not None else None
         self._stream_sock: socket.socket | None = None
+        self._last_rssi: dict[str, int] = {}
+
+    def get_last_rssi(self, ip: str) -> int | None:
+        """Return the latest Wi-Fi RSSI observed from `getPilot` for `ip`, if any."""
+        return self._last_rssi.get(ip)
 
     def _get_stream_socket(self) -> socket.socket:
         """Devuelve un socket UDP no bloqueante reutilizable para el flujo continuo."""
@@ -234,6 +239,8 @@ class WizUdpController:
         sys_result = sys_resp["result"]
         mac = _safe_text(sys_result.get("mac"), "unknown")
         module_name = _safe_text(sys_result.get("moduleName"), "ESP01_SHRGB1C_31")
+        raw_fw = sys_result.get("fwVersion")
+        fw_version = _safe_text(raw_fw, "") if raw_fw is not None else None
 
         state = await self.get_state(ip, timeout=timeout)
         return Bulb(
@@ -242,6 +249,8 @@ class WizUdpController:
             module_name=module_name,
             is_online=True,
             state=state if state is not None else LightState(is_on=False),
+            rssi=self._last_rssi.get(ip),
+            fw_version=fw_version or None,
         )
 
     async def get_state(self, ip: str, timeout: float = 1.0) -> LightState | None:
@@ -251,6 +260,9 @@ class WizUdpController:
             return None
 
         pilot = response["result"]
+        raw_rssi = pilot.get("rssi")
+        if isinstance(raw_rssi, int) and not isinstance(raw_rssi, bool):
+            self._last_rssi[ip] = raw_rssi
         is_on = bool(pilot.get("state", False))
         raw_dimming = _safe_int(pilot.get("dimming", 100), 100)
         brightness = max(10, min(100, raw_dimming))

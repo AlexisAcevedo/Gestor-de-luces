@@ -17,16 +17,82 @@ la descomposicion espectral.
 from __future__ import annotations
 
 import math
+import time
+from collections import deque
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from typing import Any
 
 import numpy as np
 
+from wiz_console.domain.music_colors import (
+    DEFAULT_CUSTOM_PALETTE,
+    STANDBY_BRIGHTNESS_FLOOR,
+    VALID_BAND_ASSIGNMENTS,
+    VALID_MUSIC_PALETTES,
+    map_bands_to_color,
+    normalize_custom_palette,
+    standby_color_for_palette,
+)
 from wiz_console.domain.value_objects import Color
 
-VALID_MUSIC_PALETTES = ("spectrum", "club", "chill")
+__all__ = [
+    "BeatDetector",
+    "DEFAULT_CUSTOM_PALETTE",
+    "SILENCE_TIMEOUT_SECONDS",
+    "STANDBY_BRIGHTNESS_FLOOR",
+    "VALID_BAND_ASSIGNMENTS",
+    "VALID_MUSIC_PALETTES",
+    "analyze_pcm_audio_frame",
+    "normalize_custom_palette",
+]
+
 SILENCE_TIMEOUT_SECONDS = 0.16
-STANDBY_BRIGHTNESS_FLOOR = 12
+
+
+class BeatDetector:
+    """Lightweight rolling energy-history beat onset detector with cooldown."""
+
+    def __init__(
+        self,
+        history_len: int = 24,
+        threshold_ratio: float = 1.38,
+        min_energy: float = 0.12,
+        cooldown_seconds: float = 0.14,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._history: deque[float] = deque(maxlen=max(4, int(history_len)))
+        self._threshold_ratio = float(threshold_ratio)
+        self._min_energy = float(min_energy)
+        self._cooldown_seconds = max(0.0, float(cooldown_seconds))
+        self._clock = clock
+        self._last_beat_at: float = -1e9
+
+    def reset(self) -> None:
+        """Clear accumulated energy history."""
+        self._history.clear()
+        self._last_beat_at = -1e9
+
+    def update(self, energy: float) -> tuple[bool, float]:
+        """Feed instantaneous onset energy and return `(beat_detected, intensity)`."""
+        value = max(0.0, float(energy)) if math.isfinite(energy) else 0.0
+        if value <= 1e-4:
+            self._history.append(0.0)
+            return False, 0.0
+
+        now = self._clock()
+        triggered = False
+        if len(self._history) >= 4 and value >= self._min_energy:
+            mean_energy = sum(self._history) / len(self._history)
+            if (
+                mean_energy > 1e-4
+                and value >= mean_energy * self._threshold_ratio
+                and (now - self._last_beat_at) >= self._cooldown_seconds
+            ):
+                triggered = True
+                self._last_beat_at = now
+        self._history.append(value)
+        return triggered, (round(min(1.0, value), 3) if triggered else 0.0)
 
 
 @lru_cache(maxsize=32)
@@ -63,19 +129,12 @@ def _band_rms(spectrum: np.ndarray, band: slice) -> float:
     return float(np.sqrt(np.dot(segment, segment)))
 
 
-def _standby_color_for_palette(palette_mode: str) -> Color:
-    """Devuelve una cromacidad tenue de reposo acorde a la paleta seleccionada.
-
-    Cuando la pista musical hace una pausa o el sistema queda en silencio, mantener
-    un matiz suave evita parpadeos bruscos hacia el negro absoluto mientras el brillo
-    desciende al piso del 12%.
-    """
-    normalized = palette_mode.strip().lower() if isinstance(palette_mode, str) else "spectrum"
-    if normalized == "club":
-        return Color(r=64, g=18, b=52)
-    if normalized == "chill":
-        return Color(r=18, g=52, b=78)
-    return Color(r=56, g=34, b=24)
+def _standby_color_for_palette(
+    palette_mode: str,
+    custom_palette: Mapping[str, str] | None = None,
+) -> Color:
+    """Devuelve una cromacidad tenue de reposo acorde a la paleta seleccionada."""
+    return standby_color_for_palette(palette_mode, custom_palette)
 
 
 def _map_bands_to_color(
@@ -84,50 +143,23 @@ def _map_bands_to_color(
     treble: float,
     rms: float,
     palette_mode: str,
+    custom_palette: Mapping[str, str] | None = None,
 ) -> Color:
-    """Transforma la energia de las tres bandas espectrales en un color RGB saturado.
-
-    Se separa la direccion cromatica (proporcion relativa entre graves, medios y agudos)
-    de la intensidad energetica para que incluso a volumenes moderados los golpes de
-    bombo (Bass), las voces/sintetizadores (Mid) y los platillos (Treble) produzcan
-    colores definidos y no grises apagados.
-    """
-    max_band = max(bass, mid, treble)
-    if max_band <= 1e-4 and rms <= 1e-4:
-        return _standby_color_for_palette(palette_mode)
-
-    inv_max = 1.0 / max(1e-6, max_band)
-    rel_bass = bass * inv_max
-    rel_mid = mid * inv_max
-    rel_treble = treble * inv_max
-    intensity = max(0.45, min(1.0, max(rms, max_band)))
-
-    normalized = palette_mode.strip().lower() if isinstance(palette_mode, str) else "spectrum"
-    if normalized == "club":
-        # Paleta Club: graves en magenta/carmesi, medios en cian electrico y agudos en
-        # violeta/dorado.
-        raw_r = (rel_bass * 1.00 + rel_treble * 0.72 + rel_mid * 0.08) * 255.0
-        raw_g = (rel_mid * 0.92 + rel_treble * 0.35 + rel_bass * 0.05) * 255.0
-        raw_b = (rel_mid * 0.95 + rel_treble * 0.95 + rel_bass * 0.42) * 255.0
-    elif normalized == "chill":
-        # Paleta Chill (Aurora/Oceano): azul profundo en graves, esmeralda/turquesa en medios y
-        # lavanda en agudos.
-        raw_r = (rel_treble * 0.68 + rel_bass * 0.10 + rel_mid * 0.06) * 255.0
-        raw_g = (rel_mid * 0.92 + rel_bass * 0.38 + rel_treble * 0.45) * 255.0
-        raw_b = (rel_bass * 0.95 + rel_treble * 0.98 + rel_mid * 0.68) * 255.0
-    else:
-        # Paleta Spectrum: asignacion directa Graves -> Rojo, Medios -> Verde, Agudos -> Azul.
-        raw_r = (rel_bass * 0.98 + rel_mid * 0.10) * 255.0
-        raw_g = (rel_mid * 0.98 + rel_bass * 0.12 + rel_treble * 0.08) * 255.0
-        raw_b = (rel_treble * 0.98 + rel_mid * 0.18) * 255.0
-
-    r = max(0, min(255, round(raw_r * intensity)))
-    g = max(0, min(255, round(raw_g * intensity)))
-    b = max(0, min(255, round(raw_b * intensity)))
-    return Color(r=r, g=g, b=b)
+    """Transforma la energia de las tres bandas espectrales en un color RGB saturado."""
+    return map_bands_to_color(
+        bass=bass,
+        mid=mid,
+        treble=treble,
+        rms=rms,
+        palette_mode=palette_mode,
+        custom_palette=custom_palette,
+    )
 
 
-def _silence_metrics(palette_mode: str) -> dict[str, Any]:
+def _silence_metrics(
+    palette_mode: str,
+    custom_palette: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     """Devuelve el sobre de silencio absoluto con el piso de brillo de cortesia."""
     return {
         "rms": 0.0,
@@ -135,7 +167,7 @@ def _silence_metrics(palette_mode: str) -> dict[str, Any]:
         "mid": 0.0,
         "treble": 0.0,
         "brightness": STANDBY_BRIGHTNESS_FLOOR,
-        "color": _standby_color_for_palette(palette_mode),
+        "color": _standby_color_for_palette(palette_mode, custom_palette),
     }
 
 
@@ -145,6 +177,7 @@ def analyze_pcm_audio_frame(
     channels: int = 2,
     palette_mode: str = "spectrum",
     sensitivity: float = 1.0,
+    custom_palette: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Analiza una ventana PCM mediante RMS y FFT devolviendo bandas de frecuencia y color.
 
@@ -169,13 +202,13 @@ def analyze_pcm_audio_frame(
         raw_bytes = memoryview(samples).cast("B")
         aligned_len = (len(raw_bytes) // 4) * 4
         if aligned_len == 0:
-            return _silence_metrics(palette_mode)
+            return _silence_metrics(palette_mode, custom_palette)
         arr = np.frombuffer(raw_bytes[:aligned_len], dtype=np.float32)
     else:
         arr = np.asarray(samples)
 
     if arr.size == 0:
-        return _silence_metrics(palette_mode)
+        return _silence_metrics(palette_mode, custom_palette)
 
     # Normalizamos formatos enteros (como PCM int16) al intervalo flotante [-1.0, 1.0].
     if np.issubdtype(arr.dtype, np.integer):
@@ -198,12 +231,12 @@ def analyze_pcm_audio_frame(
 
     mono = np.clip(mono, -1.0, 1.0)
     if mono.size == 0:
-        return _silence_metrics(palette_mode)
+        return _silence_metrics(palette_mode, custom_palette)
 
     # Calculo de energia eficaz (RMS) en el dominio del tiempo.
     raw_rms = float(np.sqrt(np.mean(np.square(mono), dtype=np.float32)))
     if raw_rms < 1e-4:
-        return _silence_metrics(palette_mode)
+        return _silence_metrics(palette_mode, custom_palette)
 
     normalized_rms = min(1.0, (raw_rms / 0.35) * clamped_sensitivity)
     brightness = max(
@@ -236,6 +269,7 @@ def analyze_pcm_audio_frame(
         treble=treble_norm,
         rms=normalized_rms,
         palette_mode=palette_mode,
+        custom_palette=custom_palette,
     )
 
     return {

@@ -6,14 +6,17 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from wiz_console.application.ambilight_stream import VALID_AMBILIGHT_MODES
+from wiz_console.application.ambilight_stream import (
+    VALID_AMBILIGHT_MODES,
+    VALID_AMBILIGHT_REGIONS,
+)
 from wiz_console.application.service_context import ServiceContext
 from wiz_console.application.sleep_timer import (
     AwaitableStatusDict,
     require_finite_float,
     require_int_value,
 )
-from wiz_console.domain.value_objects import Brightness, Color
+from wiz_console.domain.value_objects import Brightness, Color, validate_local_endpoint
 
 
 class AmbilightService:
@@ -44,6 +47,8 @@ class AmbilightService:
         smoothing_alpha: float = 0.38,
         ips: list[str] | None = None,
         min_brightness: int = 10,
+        region_map: dict[str, str] | None = None,
+        letterbox_crop: bool = True,
     ) -> AwaitableStatusDict:
         """Inicia la sincronizacion continua del color de la pantalla con los focos objetivo."""
         parsed_monitor = require_int_value(monitor_index, "monitor_index")
@@ -59,6 +64,19 @@ class AmbilightService:
         parsed_min_brightness = require_int_value(min_brightness, "min_brightness")
         raw_alpha = require_finite_float(smoothing_alpha, "smoothing_alpha")
         parsed_alpha = max(0.05, min(1.0, raw_alpha))
+        cleaned_regions: dict[str, str] = {}
+        if region_map is not None:
+            if not isinstance(region_map, dict):
+                raise ValueError("region_map must be a mapping of bulb IP to screen region.")
+            for raw_ip, raw_region in region_map.items():
+                valid_ip = validate_local_endpoint(str(raw_ip))
+                region = str(raw_region).strip().lower()
+                if region not in VALID_AMBILIGHT_REGIONS:
+                    raise ValueError(
+                        f"Invalid Ambilight region '{raw_region}'. "
+                        f"Expected one of {VALID_AMBILIGHT_REGIONS}."
+                    )
+                cleaned_regions[valid_ip] = region
         target_ips = self._ctx.get_target_ips(ips)
         asyncio.get_running_loop()
 
@@ -77,6 +95,9 @@ class AmbilightService:
                 ips=frame_ips,
             )
 
+        async def _on_bulb_frames(frames: dict[str, tuple[Color, int]]) -> bool:
+            return await self._ctx.stream_bulb_frames(frames)
+
         clamped_min = max(10, min(20, parsed_min_brightness))
         self._ctx.ambilight_prefs = {
             "monitor_index": parsed_monitor,
@@ -85,6 +106,8 @@ class AmbilightService:
             "brightness": validated_brightness,
             "smoothing_alpha": parsed_alpha,
             "min_brightness": clamped_min,
+            "region_map": dict(cleaned_regions),
+            "letterbox_crop": bool(letterbox_crop),
         }
         self._ctx.persist_settings()
 
@@ -92,12 +115,15 @@ class AmbilightService:
             sampler=sampler,
             target_ips=target_ips,
             on_frame=_on_frame,
+            on_bulb_frames=_on_bulb_frames,
             monitor_index=parsed_monitor,
             color_mode=normalized_mode,
             auto_brightness=bool(auto_brightness),
             brightness=validated_brightness,
             smoothing_alpha=parsed_alpha,
             min_brightness=clamped_min,
+            region_map=cleaned_regions,
+            letterbox_crop=bool(letterbox_crop),
         )
 
     def stop_ambilight(self) -> AwaitableStatusDict:

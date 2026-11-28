@@ -17,6 +17,8 @@ _LOGGER = logging.getLogger(__name__)
 _WINDOW_ICON_LOCK = threading.Lock()
 # Maps (hwnd, kind) -> (icon_path, hicon_handle, user32_id)
 _APPLIED_WINDOW_ICONS: dict[tuple[int, int], tuple[str, int, int]] = {}
+# Maps id(window) -> last resolved HWND so disposed WinForms Forms can still release icons.
+_WINDOW_HANDLES: dict[int, int] = {}
 
 #: Unica politica de errores para las llamadas `ctypes` a una DLL de Win32 del paquete.
 #:
@@ -77,7 +79,24 @@ def _resolve_native_hwnd(native_form: Any) -> int | None:
     """Extrae el HWND nativo de 64 bits sin truncar punteros mayores a 0x7FFFFFFF."""
     if native_form is None:
         return None
-    handle = getattr(native_form, "Handle", None)
+    if bool(getattr(native_form, "IsDisposed", False)) or bool(
+        getattr(native_form, "Disposing", False)
+    ):
+        return None
+    if getattr(native_form, "IsHandleCreated", True) is False:
+        return None
+    try:
+        handle = getattr(native_form, "Handle", None)
+    except NATIVE_CALL_ERRORS:
+        _LOGGER.debug("Native form Handle read failed.", exc_info=True)
+        return None
+    # FRONTERA: pythonnet raises CLR System.ObjectDisposedException when reading .Handle
+    # on a Form that disposed between the flag check and property access.
+    except Exception as exc:
+        if type(exc).__name__ == "ObjectDisposedException":
+            _LOGGER.debug("Native form already disposed before Handle read.", exc_info=True)
+            return None
+        raise
     if handle is None:
         return None
     for method_name in ("ToInt64", "ToInt32"):
@@ -251,6 +270,8 @@ def apply_window_icon(
         hwnd = _resolve_native_hwnd(native_form if native_form is not None else window)
         if hwnd is None:
             return False
+        with _WINDOW_ICON_LOCK:
+            _WINDOW_HANDLES[id(window)] = hwnd
         import ctypes
 
         target_user32 = ctypes.windll.user32 if user32 is None else user32
@@ -312,6 +333,10 @@ def release_window_icons(
     try:
         native_form = getattr(window, "native", None)
         hwnd = _resolve_native_hwnd(native_form if native_form is not None else window)
+        with _WINDOW_ICON_LOCK:
+            cached_hwnd = _WINDOW_HANDLES.pop(id(window), None)
+        if hwnd is None:
+            hwnd = cached_hwnd
         if hwnd is None:
             return
         import ctypes

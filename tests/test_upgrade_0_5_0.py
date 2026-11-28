@@ -79,13 +79,18 @@ class _InMemoryRegistry:
 
 
 def test_release_version_and_notes_match_0_5_0() -> None:
-    """Release metadata resolves 0.5.0 and matching curated release notes exist."""
-    assert resolve_app_version() == "0.5.0"
-    notes_path = Path(__file__).resolve().parents[1] / "docs" / "releases" / "0.5.0.md"
+    """Release metadata resolves >= 0.5.0 and matching curated release notes exist."""
+    current = resolve_app_version()
+    parts = tuple(int(part) for part in current.split("."))
+    assert parts >= (0, 5, 0)
+    releases_dir = Path(__file__).resolve().parents[1] / "docs" / "releases"
+    notes_path = releases_dir / "0.5.0.md"
     assert notes_path.is_file()
     content = notes_path.read_text(encoding="utf-8")
     assert "WizConsole-Setup-0.5.0.exe" in content
     assert "WizConsole-portable-0.5.0.zip" in content
+    current_notes = releases_dir / f"{current}.md"
+    assert current_notes.is_file()
 
 
 def test_upgrade_from_v0_4_3_migrates_data_settings_and_autostart(

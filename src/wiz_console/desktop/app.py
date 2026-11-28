@@ -59,6 +59,7 @@ from wiz_console.domain.value_objects import DEFAULT_THEME, normalize_language, 
 from wiz_console.ports.autostart import AutostartManager
 from wiz_console.ports.hotkeys import GlobalHotkeyManager
 from wiz_console.ports.light_control import LightControlServicePort
+from wiz_console.ports.session_monitor import SessionMonitor
 from wiz_console.resources import resolve_app_version
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,6 +121,8 @@ class DesktopApplication:
         guard: SingleInstanceGuard | None = None,
         autostart: AutostartManager | None = None,
         hotkeys: GlobalHotkeyManager | None = None,
+        session_monitor: SessionMonitor | None = None,
+        local_api: Any | None = None,
         webview_module: Any = None,
     ) -> None:
         self._service = service
@@ -133,6 +136,8 @@ class DesktopApplication:
         self._guard = guard
         self._autostart = autostart
         self._hotkeys = hotkeys
+        self._session_monitor = session_monitor
+        self._local_api = local_api
         self._webview_module = webview_module
 
         self._webview: Any = None
@@ -278,6 +283,9 @@ class DesktopApplication:
         if self._hotkeys is not None:
             self._hotkeys.start(self.on_global_hotkey)
             self._sync_hotkeys(force=True)
+        if self._session_monitor is not None:
+            self._session_monitor.start(self.on_session_event)
+        self._sync_local_api()
         if self._tray is not None:
             self._tray.start()
         try:
@@ -305,6 +313,15 @@ class DesktopApplication:
         if callable(release_fn):
             release_fn(self._window)
 
+    def _run_cleanup_step(self, label: str, fn: Callable[[], Any]) -> None:
+        """Execute a shutdown step cleanly so one teardown error never aborts subsequent steps."""
+        try:
+            fn()
+        # FRONTERA: teardown runs after the native GUI loop exits; a disposed WinForms
+        # handle or subsystem error must not skip releasing the mutex, hotkeys, tray, or bridge.
+        except Exception:
+            _LOGGER.exception("Desktop cleanup step '%s' failed.", label)
+
     def cleanup(self) -> None:
         """Libera la instancia unica, la bandeja y el bucle asincrono del puente."""
         # El hilo que reaplica el menu nativo queda aparcado en su Condition: marcarlo como
@@ -313,14 +330,18 @@ class DesktopApplication:
         with self._menu_sync_cond:
             self._is_quitting = True
             self._menu_sync_cond.notify_all()
-        self._release_window_icons()
+        self._run_cleanup_step("window icons", self._release_window_icons)
         if self._guard is not None:
-            self._guard.release()
+            self._run_cleanup_step("single-instance guard", self._guard.release)
         if self._hotkeys is not None:
-            self._hotkeys.stop()
+            self._run_cleanup_step("global hotkeys", self._hotkeys.stop)
+        if self._session_monitor is not None:
+            self._run_cleanup_step("session monitor", self._session_monitor.stop)
+        if self._local_api is not None:
+            self._run_cleanup_step("local HTTP API", self._local_api.stop)
         if self._tray is not None:
-            self._tray.stop()
-        self._bridge.shutdown()
+            self._run_cleanup_step("system tray", self._tray.stop)
+        self._run_cleanup_step("webview bridge", self._bridge.shutdown)
         menu_thread = self._menu_sync_thread
         if (
             menu_thread is not None
@@ -688,9 +709,43 @@ class DesktopApplication:
         if self._tray is not None:
             self._tray.request_refresh()
 
+    def on_session_event(self, event: str) -> None:
+        """Dispatch an OS lock/unlock or sleep/resume trigger cleanly on the host."""
+        with self._state_lock:
+            if self._is_quitting:
+                return
+        result = self._bridge.trigger_session_event(event)
+        if not result.get("ok") and result.get("error"):
+            _LOGGER.warning("Session event '%s' failed: %s", event, result.get("error"))
+        self.notify_ui()
+        if self._tray is not None:
+            self._tray.request_refresh()
+
+    def _sync_local_api(self) -> None:
+        """Start, reconfigure, or stop the opt-in loopback HTTP API based on persisted settings."""
+        if self._local_api is None:
+            return
+        getter = getattr(self._service, "get_local_api_config", None)
+        if not callable(getter):
+            return
+        cfg = getter()
+        enabled = bool(cfg.get("enabled", False))
+        token = str(cfg.get("token", "") or "").strip()
+        port = int(cfg.get("port", 18899))
+        try:
+            if enabled and token:
+                self._local_api.start(port=port, token=token)
+            else:
+                self._local_api.stop()
+        except OSError:
+            _LOGGER.warning(
+                "Unable to bind loopback Local HTTP API on port %s.", port, exc_info=True
+            )
+
     def on_state_changed(self) -> None:
         """Reacciona a una mutacion hecha desde la UI: titulo, bandeja y menu si cambio idioma."""
         self._sync_hotkeys()
+        self._sync_local_api()
         self.sync_theme_titlebar()
         if self._tray is not None:
             self._tray.request_refresh()

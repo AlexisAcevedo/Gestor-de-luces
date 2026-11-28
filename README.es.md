@@ -34,13 +34,13 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 3. Sincronización Ambiental de Pantalla (Ambilight):
    - Muestreo en tiempo real de la pantalla utilizando captura GDI Win32 pura en Python (`mss`).
-   - Modos de muestreo: color `vibrant` ponderado por saturación o color `average` promedio de pantalla, con brillo automático y piso mínimo configurable entre 10% y 20%.
-   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA).
+   - Modos de muestreo: color `vibrant` ponderado por saturación o color `average` promedio de pantalla, con brillo automático, piso mínimo configurable entre 10% y 20%, recorte automático de barras negras de cine (letterbox) y asignación de zona por luminaria (`full`, `left`, `right`, `top`, `bottom`, `center`) sobre una única captura por fotograma.
+   - Streaming continuo a 10 Hz mediante paquetes UDP sin confirmación (fire-and-forget) y suavizado de color por Media Móvil Exponencial (EMA) independiente por foco.
 
 4. Sincronización Musical Reactiva por WASAPI Loopback:
    - Captura de audio del sistema en tiempo real mediante loopback de Windows Audio Session API (WASAPI) (`PyAudioWPatch`).
-   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`.
-   - Mapeo de frecuencias a color con sensibilidad de ganancia configurable y caída suavizada.
+   - Descomposición espectral por Transformada Rápida de Fourier (FFT) en bandas de Bajos, Medios y Agudos mediante `numpy`, junto a un **Detector de Ritmo** (`BeatDetector`) con pulso de brillo al golpe.
+   - Cuatro paletas (`spectrum`, `club`, `chill` y `custom` personalizable en hexadecimal por banda), sensibilidad/suavizado configurables y asignación independiente de banda por luminaria (`full`, `bass`, `mid`, `treble`).
 
 5. Bandeja del Sistema y Ejecución en Segundo Plano:
    - Ejecución silenciosa en el Área de Notificación de Windows mediante un menú nativo
@@ -53,6 +53,20 @@ Centro de control de escritorio para sistemas de iluminación inteligente Philip
 
 6. Temporizador de Apagado Progresivo (Sleep Timer):
    - Cuenta regresiva configurable (1 a 240 minutos) con atenuación progresiva del brillo hasta cero antes del apagado final.
+7. Curva Circadiana y Rampa de Despertar:
+   - Curva horaria opcional de Kelvin y brillo (`CircadianConfig`) más rampa de amanecer programada localmente (`WakeupRampConfig`) sobre bombillas o zonas seleccionadas.
+8. Disparadores de Sesión y Suspensión en Windows:
+   - Monitor Win32 opcional (`WindowsSessionMonitor`) para apagar las luminarias al bloquear o suspender el equipo y restaurar su color/Kelvin/escena anterior al desbloquear o reactivar.
+9. Perfiles por Aplicación e Indicador Local Al Aire (`v0.7.0`):
+   - Reglas opcionales por ejecutable en primer plano (`ContextRule`) e indicador local Al Aire por micrófono o cámara en `ConsentStore` (`OnAirConfig`), con restauración automática al finalizar la llamada o salir de la aplicación.
+10. Transiciones Graduales Configurables (`TransitionEngine`):
+   - Interpolación suave (`ease-in-out`) para cambios de color RGB y Kelvin (`0.0s` instantáneo por defecto o `0.5s–5.0s`) con cancelación preventiva por bombilla y precedencia de flujos continuos.
+11. Detección de Capacidades y Diagnóstico Wi-Fi / Firmware:
+   - Inferencia automática de capacidades ópticas (`BulbCapabilities` mediante `infer_bulb_capabilities`) junto a insignias de intensidad de señal Wi-Fi (`dBm`) y versión de firmware en el cajón de luminarias con adaptación automática de controles RGB.
+12. CLI Completo y API HTTP Local Opcional (`LocalHttpApiServer`):
+   - Selección por `--name` guardado y subcomandos `brightness`, `scene`, `preset` y `zones` en CLI, junto a una API HTTP local opcional en `127.0.0.1` (`Bearer` validado con `hmac.compare_digest`, límite de 16 KiB, desactivada por defecto).
+13. Base Multi-Fabricante LAN (WiZ + Govee LAN, `v0.8.0`):
+   - Enrutamiento multi-protocolo mediante `Bulb.protocol`, `CompositeLightController` (`adapters/registry.py`) y `GoveeLanController` (`adapters/govee/lan_controller.py`, UDP 4003) para unificar luminarias WiZ y Govee en la misma consola local.
 
 7. Consola de Escritorio Bilingüe y Multitema:
    - Interfaz bilingüe nativa en inglés (`en`) y español (`es`) con cambio instantáneo en la UI, título de ventana nativo localizado, bandeja y barra de menú, además de arranque sin destello para tema e idioma (`#theme=<theme>&lang=<lang>`).
